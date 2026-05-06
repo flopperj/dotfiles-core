@@ -1,0 +1,110 @@
+# Claude Code-Specific Supplement
+
+> **Canonical source: [AGENTS.md](./AGENTS.md).** Start there. AGENTS.md holds the editor-agnostic agent behavior — output style, reasoning depth, workflow orchestration, task management, code comments, error handling defaults, PR review drafting rules, and frontend design token requirements. This file holds **only** Claude-Code-runtime-specific supplements: slash commands, skill routing, harness-specific tooling, and PR-creation workflow nuances tied to the `/pr-create-from-commits` skill.
+
+> **Dotfiles structure note**: This file is generated from numbered fragments by `lib-overlays.sh`. The source fragments live in `_shared/claude-md/` (core) and `_shared/claude-md.d/` (overlay). Edit the fragments, not this file directly; regenerate by running `scripts/pre-commit.sh` or `install.sh`.
+
+---
+
+## Agent Routing — Name-Based Invocation
+
+When the user's prompt starts with an agent name, invoke that agent's skill automatically. Strip the agent name prefix and pass the rest as the problem/task.
+
+| Prompt prefix | Skill invoked | What it does |
+|---|---|---|
+| **Aristotle, ...** | `/aristotle-deconstructor` | First-principles deconstruction → Optimus → Cyrus pipeline |
+| **Optimus, ...** | `/optimus-planner` | Detailed execution plan → Cyrus handoff |
+| **Cyrus, ...** | `/cyrus-tdd-engineer` | TDD implementation (Red-Green-Refactor) |
+| **Ranger, ...** | `/ranger-reviewer` | Staff-level PR review (Opus, approval-gated) |
+| **Scout, ...** | `/scout-reviewer` | PR review (Sonnet, approval-gated) |
+| **Swarm, ...** | `/ticket-swarm` | Batch ticket pickup -> team leads -> parallel pipelines -> PRs |
+| **Pickup, ...** | `/ticket-pickup` | Single ticket fetch + classify + route to pipeline |
+| **Retro, ...** | `/swarm-retro` | Analyze last swarm run, find misclassifications, propose heuristic updates |
+| **Auditor, ...** | `/code-auditor` | Complexity audit + auto-route to Scout or Ranger |
+| **Sitrep, ...** | `/briefing` | Situation report: sprint status, PRs, CI, stale reviews, suggested actions |
+| **Obligations, ...** | `/obligations` | Create, view, cancel, and evaluate cross-session obligations |
+| **Sync, ...** | `/dotfiles-sync` | Check for dotfiles updates, preview changes, pull and re-run install.sh |
+| **Doctor, ...** | `/doctor` | Diagnostic health check — validates symlinks, CLI tools, MCP, plugins, agent memory |
+| **Forge, ...** | `/forge` | Five-stage sense-making + build pipeline (grill-me → to-prd → aristotle-deconstructor → optimus-planner → cyrus-tdd-engineer) |
+
+> When the user asks to "review my PR", "check this PR", or "review my changes" without specifying Scout or Ranger by name, invoke `/code-auditor` to let the auditor choose the appropriate reviewer based on code complexity.
+
+
+### Trigger-Based Skill Invocation
+
+These skills are invoked when the user's request matches a trigger phrase (not a name prefix):
+
+| Trigger phrase | Skill invoked | What it does |
+|---|---|---|
+| "deconstruct this to first principles", "strip the assumptions", "think from first principles", "what's really true here" | `/aristotle-deconstructor` | First-principles deconstruction → Optimus → Cyrus pipeline |
+| "plan this out", "create an execution plan", "break this down into steps", "architect this" | `/optimus-planner` | Detailed execution plan → Cyrus handoff |
+| "implement this with TDD", "write tests first", "build this test-first", "add test coverage" | `/cyrus-tdd-engineer` | TDD implementation (Red-Green-Refactor) with 80%+ coverage |
+| "audit this code" | `/code-auditor` | Complexity audit + auto-route to Scout or Ranger |
+| "review this PR thoroughly", "do a staff-level review", "is this ready to merge", "post review comments" | `/ranger-reviewer` | Staff-level PR review (Opus, approval-gated) |
+| "pick up a ticket", "grab the next bug", "what's my next ticket" | `/ticket-pickup` | Single-ticket entry point for the agent pipeline |
+| "fix my bugs", "swarm my tickets", "batch fix bugs", "process my bug queue", "swarm this story" | `/ticket-swarm` | Batch ticket pickup → team leads → parallel pipelines → PRs |
+| "analyze my last swarm", "review swarm results", "what went wrong in the swarm", "improve swarm accuracy" | `/swarm-retro` | Analyze swarm runs for misclassifications and improvement opportunities |
+| "update my dotfiles", "sync dotfiles", "pull latest dotfiles", "are my dotfiles up to date" | `/dotfiles-sync` | Check for dotfiles updates, preview changes, pull and re-run install.sh |
+| "check my setup", "is everything working", "run diagnostics", "validate my dotfiles" | `/doctor` | Diagnostic health check — validates symlinks, CLI tools, MCP, plugins, agent memory |
+| "briefing", "sitrep", "what needs my attention", "catch me up", "morning briefing", "show me my dashboard", "what should I work on", "what's my status" | `/briefing` | Session-start situation report — Jira sprint status, open PRs, CI, suggested actions |
+| "remind me", "watch this", "nudge me", "track this", "show my obligations", "cancel obligation" | `/obligations` | Create, view, cancel, and evaluate cross-session obligations |
+| "create a ticket", "file a bug" | `/create-jira-ticket` | Create Jira tickets (Stories, Bugs, Tasks, Epics) via MCP |
+| "tech spec", "design doc", "design document", "implementation proposal" | `/create-tech-spec` | Generate tech spec with solution approach, estimates, and rollout plan |
+| "mermaid to PNG", "diagram image", "export diagram" | `/mermaid-diagrams` | Convert Mermaid syntax to PNG via mmdc |
+| "Google Doc", "save to Docs" | `/google-docs` | Create, read, and edit Google Docs with markdown conversion |
+| "Google Drive", "upload to Drive" | `/google-drive` | Search, upload, download, and share Google Drive files |
+| "smart compact", "compact with options", "context is getting big, help me compact smartly", "let's compact but I want to pick what to keep" | `/smart-compact` | Smarter /compact — shows a topic menu so you choose what survives the summary |
+| "show me context percentage", "set up my statusline", "I want to see how much context I have left" | `/smart-statusline` | Install a Claude Code statusline showing model, cost, and context usage |
+| "agent stats", "agent metrics", "first-pass rate", "how is the pipeline doing" | `/agent-stats` | Aggregate metrics.jsonl across projects: first-pass rate, classification distribution, health flags |
+| "lessons review", "what have I learned", "show me my lessons", "patterns across projects" | `/lessons-review` | Surface all per-project lessons.md entries in one view; gate promotion to cross-project lessons on user approval |
+| "grill me", "stress-test this plan", "interview me on this design" | `/grill-me` | Interview the user one question at a time until shared understanding is reached on every branch of the design tree |
+| "to-prd", "create a PRD", "write a PRD", "save this as a PRD" | `/to-prd` | Synthesize the current conversation context into a structured PRD saved to `~/.claude/tasks/<project>/prds/<slug>.md` |
+| "forge this", "from idea to PR", "shape this from scratch", "take this from rough idea to built", "let's grill this idea, write it up, and build it" | `/forge` | Five-stage sense-making + build pipeline orchestrating grill-me → to-prd → aristotle-deconstructor → optimus-planner → cyrus-tdd-engineer with two orchestrator gates |
+
+Each skill defines its own orchestration flow, gates, and downstream handoffs. Refer to the skill's SKILL.md for details.
+
+
+### Compound Intent Detection (Skill Chaining)
+
+When the user's request implies multiple skills in sequence, detect the compound intent and chain them automatically with a gate between each stage. Do not wait for the user to manually invoke the second skill — recognize the full intent upfront.
+
+| Intent pattern | Chain | Gate between stages |
+|---|---|---|
+| "create a ticket and implement it", "file a bug and fix it", "create a story and build it" | `/create-jira-ticket` → `/ticket-pickup <new-ticket-ID>` | Show created ticket, confirm before pickup |
+| "create a tech spec and implement it", "write a design doc then build it" | `/create-tech-spec` → feed spec to `/optimus-planner` → `/cyrus-tdd-engineer` | Show spec, confirm before planning |
+| "grill this then build it", "interview me, write a PRD, and ship it", "from rough idea to built", "let's stress-test, capture, challenge, plan, and build" | `/forge` (chains `/grill-me` → `/to-prd` → `/aristotle-deconstructor` → `/optimus-planner` → `/cyrus-tdd-engineer`; the last three are owned by `/aristotle-deconstructor`) | Two `/forge` gates (after grill-me, after to-prd); `/aristotle-deconstructor` owns its three internal gates |
+
+**Rules for chaining:**
+- **Always gate between creation and implementation stages.** The user should see what was created before committing to implementation.
+- **Low-risk chains (test → lint) can auto-proceed** without an explicit gate.
+- **Pass context forward.** The output of stage 1 (ticket ID, spec content, plan content) becomes the input to stage 2. Never lose context between stages.
+- **If the first stage fails, stop.** Do not proceed to the second stage. Surface the failure.
+- **Single-intent requests still use single skills.** "Create a ticket" without implementation intent invokes only `/create-jira-ticket`. The chaining only activates when the user's phrasing implies both creation and follow-through.
+
+### General rules
+
+- **Every stage transition requires user approval** in gated mode. Never auto-chain agents without the user confirming at each gate.
+- **Autonomous mode relaxes gates** — used by ticket-swarm and ticket-pickup when processing batches. Pipeline transitions auto-approve; only triage selection and PR creation require user approval.
+- **Each agent runs as a subagent** via the Agent tool to keep the main context clean.
+- **Name matching is case-insensitive and flexible.** "Aristotle," / "aristotle:" / "ARISTOTLE" all match. The name must appear at the start of the prompt.
+- **Slash commands work too.** Each of the following invokes the corresponding skill directly:
+  - `/aristotle-deconstructor`, `/optimus-planner`, `/cyrus-tdd-engineer`
+  - `/ranger-reviewer`, `/scout-reviewer`, `/code-auditor`
+  - `/ticket-swarm`, `/ticket-pickup`, `/swarm-retro`
+  - `/dotfiles-sync`, `/doctor`
+  - `/briefing`, `/sitrep`, `/pr-create-from-commits`
+  - `/smart-compact`, `/smart-statusline`
+  - `/create-jira-ticket`, `/create-tech-spec`, `/mermaid-diagrams`
+  - `/obligations`, `/google-docs`, `/google-drive`
+  - `/agent-stats`, `/lessons-review`
+  - `/grill-me`, `/to-prd`, `/forge`
+
+---
+
+
+## Frontend Design — Skill Invocation
+
+For ALL UI work — any change touching components, styles, layout, or visual properties — **always invoke the `frontend-design` skill** before implementing. This ensures design quality, token usage, and design system alignment are enforced from the start.
+
+> Token-usage rules (design system token matching) live in [AGENTS.md → Frontend Design — Token Requirements](./AGENTS.md#frontend-design--token-requirements).
+

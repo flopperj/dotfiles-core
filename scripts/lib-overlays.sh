@@ -28,8 +28,6 @@ concat_fragments() {
 
     local tmp
     tmp="$(mktemp)"
-    # shellcheck disable=SC2064
-    trap "rm -f '$tmp'" RETURN
 
     # Core fragments — lexical sort, .md only.
     while IFS= read -r -d '' frag; do
@@ -47,12 +45,12 @@ concat_fragments() {
     fi
 
     # Only write if content differs (idempotency).
-    if [ -f "$target" ]; then
-        if cmp -s "$tmp" "$target"; then
-            return 0
-        fi
+    if [ -f "$target" ] && cmp -s "$tmp" "$target"; then
+        rm -f "$tmp"
+        return 0
     fi
     cp "$tmp" "$target"
+    rm -f "$tmp"
 }
 
 # apply_overlay_fragment <target_file> <fragment_file> <sentinel_name>
