@@ -2,14 +2,13 @@
 # Each line (non-comment) is matched case-insensitively with word-boundary
 # anchors against all files in the repo (excluding .git/ and the test fixture).
 #
-# Word-boundary definition: [^a-zA-Z0-9_-] on each side (BSD grep-portable).
-# This means:
+# Word-boundary definition: [^a-zA-Z0-9] on each side (alphanumeric only).
+# Underscore (_) and hyphen (-) are treated as non-word chars, so:
 #   - "intuit" matches but "intuitive" / "intuition" do NOT.
-#   - "@intuit.com" matches because "@" is not in [a-zA-Z0-9_-].
-#   - "build.intuit.com" matches because "." is not in [a-zA-Z0-9_-].
-#   - "DAST-Orch" matches because "-" IS in [a-zA-Z0-9_-], but the full
-#     token "DAST-Orch" contains "-" internally — the match anchors on the
-#     surrounding characters, not the internal ones.
+#   - "intuit_client_secrets" DOES match (underscore is not a word char).
+#   - "your-intuit-username" DOES match (hyphen is not a word char).
+#   - "@intuit.com" matches because "@" is not alphanumeric.
+#   - "build.intuit.com" matches because "." is not alphanumeric.
 
 mailchimp
 intuit

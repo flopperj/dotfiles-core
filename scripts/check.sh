@@ -177,7 +177,7 @@ run_check() {
         elif [ -n "$ju_claude" ]; then
             echo "  OK:     JENKINS_USER is set (claude.json)"
         else
-            echo "  WARN:   JENKINS_USER not set — add to ~/.zshrc: export JENKINS_USER=\"your-intuit-username\""
+            echo "  WARN:   JENKINS_USER not set — add to ~/.zshrc: export JENKINS_USER=\"<your-username>\""
         fi
 
         jt_shell="${JENKINS_TOKEN:-}"

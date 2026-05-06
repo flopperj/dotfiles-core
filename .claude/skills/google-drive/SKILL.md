@@ -13,7 +13,7 @@ user-invocable: true
 ```bash
 gcloud auth application-default login \
   --scopes="https://www.googleapis.com/auth/cloud-platform,https://www.googleapis.com/auth/documents,https://www.googleapis.com/auth/drive" \
-  --client-id-file=/workspace/google-cloud-sdk/intuit_client_secrets.json \
+  --client-id-file=/workspace/google-cloud-sdk/<your-org>_client_secrets.json \
   --set-quota-project=rsg-api-auth-dev
 ```
 

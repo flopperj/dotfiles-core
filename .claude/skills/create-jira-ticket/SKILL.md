@@ -10,8 +10,8 @@ Create Jira issues via MCP. All Jira operations are best-effort per CLAUDE.md.
 
 **MCP server selection:**
 1. **Primary: Atlassian MCP plugin** (`plugin-atlassian-atlassian`) — use `createJiraIssue`, `searchJiraIssuesUsingJql`, `getJiraIssue`, `getTransitionsForJiraIssue`, `transitionJiraIssue` tool names.
-<!-- BEGIN DAST-ORCH-FALLBACK -->
-<!-- END DAST-ORCH-FALLBACK -->
+<!-- BEGIN COMPANY-EXTENSION -->
+<!-- END COMPANY-EXTENSION -->
 
 Try the Atlassian plugin first. If both fail, inform the user and continue without Jira.
 
@@ -114,8 +114,8 @@ Use `createJiraIssue` with:
 }
 ```
 
-<!-- BEGIN DAST-ORCH-EXAMPLES -->
-<!-- END DAST-ORCH-EXAMPLES -->
+<!-- BEGIN COMPANY-EXAMPLES -->
+<!-- END COMPANY-EXAMPLES -->
 
 **Required fields**: `projectKey`, `issueType`, `summary`.
 
