@@ -6,23 +6,99 @@ Universal Claude Code agent pipeline framework.
 
 `dotfiles-core` is a public, opinionated framework for Claude Code. It ships 30+ workflow skills, 5 reasoning agents (Aristotle / Optimus / Cyrus / Ranger / Scout), shared role-guards and responsibility-boundary docs, tested installer, and full-history leakage checking — everything needed to run a production-grade AI-assisted engineering workflow from a standalone install or as the foundation of a company/personal overlay.
 
+## Prerequisites
+
+- **Claude Code CLI** (`claude` command on `$PATH`). Install: `curl -fsSL https://claude.ai/install.sh | bash`, or visit [claude.ai/install](https://claude.ai/install). The installer can do this for you if `claude` isn't found.
+- **bash 3.2+** (macOS default; Linux default).
+- **git 2.x+** with submodule support.
+- **macOS or Linux**. Windows isn't tested; WSL likely works but is unverified.
+- Optional, only for some skills/tooling: `bats` (running tests), `shellcheck` (linting), `gh` (used by `/pr-create-from-commits` and similar).
+
 ## Quickstart
 
-If you have your own overlay repo (recommended for company-specific customization):
+There are two equally-supported install paths. Pick whichever matches your use case.
+
+### Option 1 — Standalone install
+
+Use this when you want to run `dotfiles-core` directly without building your own overlay. Good for evaluating, learning the framework, or using it as-is.
+
+```bash
+git clone https://github.com/flopperj/dotfiles-core.git ~/dotfiles-core
+cd ~/dotfiles-core && bash install.sh
+```
+
+### Option 2 — Overlay install
+
+Use this when you want to layer your own customizations (aliases, personal skills, machine-specific MCP config, secrets handling) on top of `dotfiles-core`. The overlay owns *your* customizations; `dotfiles-core` is consumed via git submodule and updates independently. See [How to create your own overlay](#how-to-create-your-own-overlay) below for the one-time setup.
 
 ```bash
 git clone --recurse-submodules https://github.com/<you>/<your-overlay>.git ~/dotfiles
 cd ~/dotfiles && bash install.sh
 ```
 
-To use dotfiles-core standalone (no overlay):
+The `--recurse-submodules` flag is **required** for overlay installs — without it, the `dotfiles-core` submodule is empty and the installer halts with a clear error. If you forgot:
 
 ```bash
-git clone https://github.com/<you>/dotfiles-core.git ~/dotfiles-core
-cd ~/dotfiles-core && bash install.sh
+cd ~/dotfiles
+git submodule update --init --recursive
+bash install.sh
 ```
 
-After install, restart Claude Code. The full agent pipeline is available.
+## What the installer does
+
+Both install paths create symlinks under `~/.claude/`:
+
+- `~/.claude/skills/<each-skill>/` → skills inside the cloned repo (or, for overlay installs, into the submodule for universal skills and into the overlay for overlay-specific ones).
+- `~/.claude/agents/<each-agent>.md` → reasoning agent files.
+- `~/.claude/_shared/` → shared role-guards and responsibility-boundary docs.
+- `~/.claude/CLAUDE.md` and `~/.claude/AGENTS.md` → rendered from numbered fragments at install time.
+
+The installer is **idempotent** — re-run it any time. It detects existing symlinks, prompts before overwriting non-symlink files, and reports what changed.
+
+## Verify the install
+
+```bash
+bash install.sh --check     # reports symlink health without modifying anything
+```
+
+Then restart Claude Code, run `claude`, and try a slash command:
+
+```
+/forge
+```
+
+If `/forge` (and other commands like `/briefing`, `/doctor`, `/code-auditor`) appear in the slash-command menu, the install succeeded.
+
+## First steps
+
+Once installed, try one of these to see the framework in action:
+
+- **`/forge`** — five-stage pipeline from rough idea to built and tested code.
+- **`/grill-me <plan>`** — relentless interview to stress-test a design.
+- **`/code-auditor`** — complexity-aware code review on your current branch.
+- **`/doctor`** — full health check of the install.
+- **`/briefing`** — session-start situation report (works best with Jira/GitHub configured).
+
+## Troubleshooting
+
+- **`install.sh` says "dotfiles-core installer not found"** (overlay path) → run `git submodule update --init --recursive` from the overlay root, then re-run `bash install.sh`.
+- **Slash commands don't appear** → restart Claude Code. The CLI loads skills at session start, not while a session is running.
+- **`make test` fails with `DOTFILES_DIR not set`** → use `make test`, not raw `bats`. The Makefile injects `DOTFILES_DIR` for the test environment.
+- **Pre-commit hook rejects a commit citing leakage** → check `scripts/leakage-tokens.txt`. The check is intentional; if your commit references a forbidden token, rename it.
+- **Symlink collision warning** → `install.sh` backs up existing non-symlink files to `<file>.bak.<timestamp>` before linking. Inspect and delete the backup once you're sure.
+
+## Uninstall
+
+```bash
+bash install.sh --check     # list what was installed
+# Then manually remove the symlinks under ~/.claude/ that point into your clone:
+find ~/.claude -maxdepth 3 -type l -lname "*dotfiles-core*" -delete
+# Or, more aggressively (removes all dotfiles-core-managed symlinks):
+rm ~/.claude/{CLAUDE,AGENTS,DoD}.md
+rm -rf ~/.claude/{_shared,skills,agents}
+# Finally, drop the clone itself:
+rm -rf ~/dotfiles-core   # or your overlay directory
+```
 
 ## Architecture — three-repo model
 
@@ -49,15 +125,79 @@ After install, restart Claude Code. The full agent pipeline is available.
 
 Universal improvements land in core. Overlays adopt them via explicit submodule pointer-bump commits. Company secrets and private tooling never touch core.
 
-## How to fork as your overlay
+## How to create your own overlay
 
-1. Create a new private repo (your overlay).
-2. Add dotfiles-core as a submodule:
+An overlay is your personal or company-specific repo that consumes `dotfiles-core` as a git submodule and adds whatever else you need.
+
+### One-time setup
+
+1. **Create a new repo** on your GitHub (private or public — your call). Clone it locally:
+
    ```bash
-   git submodule add https://github.com/<you>/dotfiles-core.git .claude/dotfiles-core
+   git clone https://github.com/<you>/<your-overlay>.git ~/dotfiles
+   cd ~/dotfiles
    ```
-3. Write your own `install.sh` that calls `core/install.sh` and then installs overlay-specific content. See `lib-overlays.sh` in `scripts/` for the overlay-fragment registration system.
-4. To improve a universal skill: edit in dotfiles-core, push, then bump the submodule pointer in your overlay and commit.
+
+2. **Add `dotfiles-core` as a submodule** at `.claude/dotfiles-core/`:
+
+   ```bash
+   git submodule add https://github.com/flopperj/dotfiles-core.git .claude/dotfiles-core
+   ```
+
+3. **Author a thin `install.sh` orchestrator** that delegates to core, then runs your overlay-specific steps:
+
+   ```bash
+   cat > install.sh <<'EOF'
+   #!/usr/bin/env bash
+   set -euo pipefail
+   DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+   # 1. Run dotfiles-core installer (universal skills, agents, _shared/)
+   bash "$DOTFILES_DIR/.claude/dotfiles-core/install.sh" "$@"
+
+   # 2. Run your overlay-specific install steps
+   if [ -f "$DOTFILES_DIR/scripts/install-overlay.sh" ]; then
+     source "$DOTFILES_DIR/scripts/install-overlay.sh"
+   fi
+
+   echo "Done."
+   EOF
+   chmod +x install.sh
+   ```
+
+4. **Add overlay-specific content** alongside the submodule. Examples:
+   - `.aliases.local` — shell aliases for your environment
+   - `.claude/skills/<your-skill>/` — overlay-only skills (not in core)
+   - `.claude/skill-fragments/<core-skill>/` + `.claude/overlay-fragments.yaml` — inject overlay-specific content into core skills via the [`lib-overlays.sh`](scripts/lib-overlays.sh) fragment system
+   - `scripts/install-overlay.sh` — your overlay-specific install steps (Cursor mirroring, MCP server registration, machine-detection, etc.)
+
+5. **Commit, push, install**:
+
+   ```bash
+   git add -A && git commit -m "Initial overlay setup"
+   git push -u origin main
+   bash install.sh
+   ```
+
+### Day-2: improving a universal skill
+
+When you want to improve a skill that lives in `dotfiles-core`:
+
+1. Edit the skill **inside the submodule** (use `/core-edit <skill>` in Claude Code — it scripts the cd-into-submodule, edit, commit, push, and pointer-bump dance):
+2. Or do it manually:
+   ```bash
+   cd ~/dotfiles/.claude/dotfiles-core
+   git checkout main
+   # edit the skill, run tests, commit, push to dotfiles-core
+   git push
+   cd ~/dotfiles
+   git add .claude/dotfiles-core
+   git commit -m "chore(submodule): bump dotfiles-core to <new SHA>"
+   git push
+   bash install.sh
+   ```
+
+The submodule SHA pin is intentional — your overlay records exactly which version of `dotfiles-core` it consumes. Pull updates from upstream `dotfiles-core` whenever you choose, not automatically.
 
 ## Skills — 30+ universal workflow skills
 
