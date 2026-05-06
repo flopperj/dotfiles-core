@@ -39,10 +39,11 @@ FOUND=0
 
 for token in "${TOKENS[@]}"; do
     # Word-boundary pattern: character preceding/following the token must NOT
-    # be in [a-zA-Z0-9_-]. We anchor by prepending/appending the boundary
-    # class. For tokens containing special regex chars (. @ -), we escape them.
+    # be an alphanumeric. Underscore (_) and hyphen (-) are NOT word chars here
+    # so that "<token>_suffix" and "prefix-<token>" forms are caught.
+    # For tokens containing special regex chars (. @ -), we escape them.
     escaped_token="$(printf '%s' "$token" | sed 's/[.[\*^${}()+?|]/\\&/g')"
-    pattern="(^|[^a-zA-Z0-9_-])${escaped_token}([^a-zA-Z0-9_-]|$)"
+    pattern="(^|[^a-zA-Z0-9])${escaped_token}([^a-zA-Z0-9]|$)"
 
     # Use find to enumerate files, excluding .git/ and the leakage test fixture.
     while IFS= read -r -d '' file; do

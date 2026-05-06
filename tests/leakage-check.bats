@@ -124,6 +124,21 @@ _check_file() {
 }
 
 # ---------------------------------------------------------------------------
+# 5b. Word-boundary: underscore and hyphen after token are NOT word chars
+#     (H2 regression: old regex [^a-zA-Z0-9_-] let these slip through)
+# ---------------------------------------------------------------------------
+
+@test "word boundary: 'intuit_x' DOES match 'intuit' (underscore is not a word char)" {
+    _check_file "intuit_client_secrets.json"
+    [ "$status" -ne 0 ]
+}
+
+@test "word boundary: 'intuit-x' DOES match 'intuit' (hyphen is not a word char)" {
+    _check_file "your-intuit-username"
+    [ "$status" -ne 0 ]
+}
+
+# ---------------------------------------------------------------------------
 # 6. Tokens inside code blocks, frontmatter, comments still caught
 # ---------------------------------------------------------------------------
 
@@ -191,4 +206,15 @@ Content here.'
     echo "clean content only" > "$SCRATCH/clean.txt"
     run bash "$CORE_DIR/scripts/check-no-leakage.sh" "$SCRATCH"
     [ "$status" -eq 0 ]
+}
+
+# ---------------------------------------------------------------------------
+# 5c. Word-boundary: DAST-Orch-fallback sentinel name form is caught
+#     (H2 regression: token list included DAST-Orch; sentinel names like
+#     DAST-Orch-fallback must still match because hyphen is not a word char)
+# ---------------------------------------------------------------------------
+
+@test "word boundary: 'DAST-Orch-fallback' DOES match 'DAST-Orch' (hyphen is not a word char)" {
+    _check_file "<!-- BEGIN OVERLAY-FRAGMENT: DAST-Orch-fallback -->"
+    [ "$status" -ne 0 ]
 }
