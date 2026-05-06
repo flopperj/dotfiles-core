@@ -1,12 +1,31 @@
-.PHONY: test lint check-leakage all
+.PHONY: test lint check-leakage gen-docs gen-boundaries gen-role-guards gen all
+
+DOTFILES_DIR := $(shell realpath .)
+
+# Discover all *.bats files in tests/ (no LLM tests in core)
+TEST_FILES := $(wildcard tests/*.bats)
 
 all: lint check-leakage test
 
-test:
-	bats tests/
+test:                                   ## Run all bats tests
+	DOTFILES_DIR=$(DOTFILES_DIR) bats $(TEST_FILES)
 
-lint:
+lint:                                   ## Run shellcheck on all scripts
 	shellcheck scripts/*.sh
 
-check-leakage:
+check-leakage:                          ## Scan for company-specific tokens
 	bash scripts/check-no-leakage.sh .
+
+lint-agents:                            ## Run agent/skill structural linter
+	bash scripts/lint-agents.sh
+
+gen-docs:                               ## Regenerate README tables from skill/agent directory
+	bash scripts/docs-gen.sh
+
+gen-boundaries:                         ## Regenerate responsibility boundary tables in SKILL.md files
+	bash scripts/boundaries-gen.sh
+
+gen-role-guards:                        ## Regenerate role-guard blocks in agent files
+	bash scripts/role-guard-gen.sh
+
+gen: gen-docs gen-boundaries gen-role-guards   ## Run all generators
