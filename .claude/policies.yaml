@@ -1,0 +1,244 @@
+# ~/.claude/policies.yaml
+# Declarative policies for the /briefing skill.
+#
+# How this works:
+#   - The /briefing skill reads this file at invocation and evaluates each
+#     active policy against the Jira and GitHub data it has already fetched.
+#   - Policies matched as true appear in the briefing output, grouped by
+#     priority (urgent, action_needed, awareness).
+#   - These defaults are also hardcoded in the briefing skill itself, so the
+#     briefing works correctly even if this file is missing or deleted.
+#
+# Disabling a default policy:
+#   To turn off a built-in policy without removing it, include it here with
+#   enabled: false:
+#
+#     policies:
+#       - name: stale-pr-alert
+#         enabled: false  # I triage this manually
+#
+# Project-scoped overrides:
+#   Create a .claude/policies.yaml in any git repo to layer project-specific
+#   policies on top of these globals. Project policies override global ones
+#   that share the same `name`; all others from both files remain active.
+#
+# Format reference: see Phase 3 in the awareness-obligation-layer plan, or
+# read the schema comments below for each field.
+#
+# version: controls format compatibility. Only version: 1 is currently
+# supported. The briefing skill will warn if it encounters an unknown version.
+
+version: 1
+
+policies:
+
+  # ---------------------------------------------------------------------------
+  # PR Health
+  # ---------------------------------------------------------------------------
+
+  - name: stale-pr-alert
+    description: Flag PRs with no review activity
+    source: github
+    condition:
+      type: pr_age
+      threshold: 48h
+      state: open
+      review_status: pending  # no reviews yet
+    action: notify
+    # {number}, {title}, {age} are interpolated from the matched PR
+    message: "PR #{number} ({title}) has been waiting for review for {age}"
+    suggestion: "Type: Ranger, review PR #{number}"
+    priority: action_needed
+
+  - name: failing-ci-alert
+    description: Flag PRs with failing CI checks
+    source: github
+    condition:
+      type: pr_ci
+      status: failure
+    action: notify
+    # {failed_checks} is a comma-separated list of failed check names
+    message: "PR #{number} ({title}) has failing CI: {failed_checks}"
+    suggestion: "Type: Cyrus, fix CI on PR #{number}"
+    priority: urgent
+
+  - name: changes-requested-alert
+    description: Flag PRs with unaddressed change requests
+    source: github
+    condition:
+      type: pr_review_decision
+      decision: changes_requested
+      unaddressed_age: 24h
+    action: notify
+    message: "PR #{number} has unaddressed changes requested {age} ago"
+    suggestion: "Type: gh pr diff {number}"
+    priority: urgent
+
+  - name: draft-pr-promotion
+    description: Suggest promoting draft PRs when CI passes
+    source: github
+    condition:
+      type: pr_draft
+      ci_status: success
+      age: 24h  # don't suggest promotion on brand-new drafts
+    action: suggest
+    message: "Draft PR #{number} ({title}) has passing CI — consider promoting"
+    suggestion: "Type: gh pr ready {number}"
+    priority: awareness
+
+  - name: unresolved-threads-alert
+    description: Flag PRs with unresolved review threads (blocks merge)
+    source: github
+    condition:
+      type: pr_review_threads
+      status: unresolved
+      min_count: 1  # alert if at least 1 unresolved thread
+    action: notify
+    # {unresolved_count} is the number of unresolved threads on this PR
+    message: "PR #{number} ({title}) has {unresolved_count} unresolved review thread(s)"
+    suggestion: "Type: gh pr view {number} --web"
+    priority: action_needed
+
+  - name: mentions-alert
+    description: Flag PRs where the user is @mentioned in comments
+    source: github
+    condition:
+      type: pr_mentions
+      exclude_own_prs: true  # don't alert on self-mentions in own PRs
+    action: notify
+    # {author} is the PR author (not the commenter — we don't have commenter from search)
+    message: "@mentioned in PR #{number} by @{author}: {title}"
+    suggestion: "Type: gh pr view {number} --web"
+    priority: action_needed
+
+  # ---------------------------------------------------------------------------
+  # Calendar
+  # ---------------------------------------------------------------------------
+
+  - name: imminent-meeting-alert
+    description: Flag meetings starting within 30 minutes
+    source: calendar
+    condition:
+      type: event_start_within
+      threshold: 30m
+      status: confirmed
+    action: notify
+    # {title} is the event summary, {start_time} is the formatted start time, {minutes_until} is minutes remaining
+    message: "Meeting in {minutes_until}m: {title} at {start_time}"
+    suggestion: "Join: {meeting_link}"
+    priority: urgent
+
+  - name: calendar-conflict-alert
+    description: Flag overlapping calendar events
+    source: calendar
+    condition:
+      type: event_overlap
+      min_overlap: 1m  # any overlap counts
+    action: notify
+    # {title_1} and {title_2} are the overlapping event summaries, {time_range} is the overlap window
+    message: "Calendar conflict: {title_1} and {title_2} overlap at {time_range}"
+    suggestion: "Resolve in Google Calendar"
+    priority: urgent
+
+  - name: tentative-event-reminder
+    description: Remind user to RSVP to tentative events
+    source: calendar
+    condition:
+      type: event_response_status
+      status: tentative
+      event_start_within: 4h  # only nag for events starting within 4 hours
+    action: suggest
+    # {title} is the event summary, {start_time} is the formatted start time
+    message: "Tentative: {title} at {start_time} — RSVP needed"
+    suggestion: "Accept or decline in Google Calendar"
+    priority: action_needed
+
+  # ---------------------------------------------------------------------------
+  # Slack / Comms
+  # ---------------------------------------------------------------------------
+
+  - name: slack-dm-alert
+    description: Flag unread DMs from overnight
+    source: slack
+    condition:
+      type: dm_received
+      lookback: 16h
+      min_count: 1
+    action: notify
+    # {count} is the number of unread DMs, {senders} is a comma-separated list of sender names
+    message: "{count} unread DM(s) from {senders}"
+    suggestion: "Open Slack DMs"
+    priority: action_needed
+
+  - name: slack-mention-alert
+    description: Flag @mentions in channels from overnight
+    source: slack
+    condition:
+      type: channel_mention
+      lookback: 16h
+      min_count: 1
+    action: notify
+    # {count} is the number of mentions, {channels} is a comma-separated list of channel names
+    message: "{count} @mention(s) in {channels}"
+    suggestion: "Review mentions in Slack"
+    priority: action_needed
+
+  # ---------------------------------------------------------------------------
+  # Jira Health
+  # ---------------------------------------------------------------------------
+
+  - name: sprint-unstarted-tickets
+    description: Flag tickets sitting in To Do too long
+    source: jira
+    condition:
+      type: jql
+      query: "assignee = currentUser() AND sprint in openSprints() AND status = 'To Do' AND created <= -72h"
+    action: suggest
+    # {count} is the number of matching tickets
+    message: "{count} sprint ticket(s) haven't been started in 3+ days"
+    suggestion: "Type: Swarm, pick up my unstarted tickets"
+    priority: action_needed
+
+  - name: in-progress-no-branch
+    description: Flag In Progress tickets with no linked code
+    source: jira
+    condition:
+      type: jql_cross_reference
+      jql: "assignee = currentUser() AND status = 'In Progress'"
+      cross_reference: github_branch  # checks if ticket key appears in any open branch
+      expected: exists
+      actual: missing
+    action: notify
+    # {key} is the Jira ticket key (e.g. MC-1234), {summary} is the title
+    message: "{key}: {summary} is In Progress but has no linked branch"
+    suggestion: "Type: Pickup {key}"
+    priority: action_needed
+
+  - name: done-without-pr
+    description: Flag tickets marked Done without a merged PR
+    source: jira
+    condition:
+      type: jql_cross_reference
+      jql: "assignee = currentUser() AND status = 'Done' AND updated >= -7d"
+      cross_reference: github_pr_merged
+      expected: exists
+      actual: missing
+    action: notify
+    message: "{key}: {summary} is Done but no merged PR found"
+    priority: awareness
+
+  # ---------------------------------------------------------------------------
+  # Review Obligations
+  # ---------------------------------------------------------------------------
+
+  - name: pending-review-request
+    description: Flag PRs where others are waiting on the user's review
+    source: github
+    condition:
+      type: review_requested
+      age: 24h
+    action: notify
+    # {author} is the PR author's GitHub handle
+    message: "PR #{number} by @{author} needs your review (requested {age} ago)"
+    suggestion: "Type: Scout, review PR #{number}"
+    priority: action_needed
