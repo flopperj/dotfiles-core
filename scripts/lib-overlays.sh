@@ -86,20 +86,19 @@ apply_overlay_fragment() {
         return 1
     fi
 
-    local fragment_content
-    fragment_content="$(cat "$fragment")"
-
     local tmp
     tmp="$(mktemp)"
-    # shellcheck disable=SC2064
-    trap "rm -f '$tmp'" RETURN
 
     # Use awk to replace content between sentinels.
-    # State machine: copying=1 (default), inside=0 (between sentinels).
-    awk -v begin="$begin_sentinel" -v end="$end_sentinel" -v content="$fragment_content" '
+    # Pass the fragment path via ENVIRON to avoid awk -v newline limitation.
+    # State machine: inside=0 (default), 1 when between sentinels.
+    FRAG_FILE="$fragment" \
+    awk -v begin="$begin_sentinel" -v end="$end_sentinel" '
         $0 == begin {
             print
-            print content
+            frag = ENVIRON["FRAG_FILE"]
+            while ((getline line < frag) > 0) print line
+            close(frag)
             inside = 1
             next
         }
@@ -114,6 +113,7 @@ apply_overlay_fragment() {
     if ! cmp -s "$tmp" "$target"; then
         cp "$tmp" "$target"
     fi
+    rm -f "$tmp"
 }
 
 # apply_manifest <manifest_path>

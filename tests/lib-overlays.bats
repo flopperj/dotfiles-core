@@ -153,6 +153,24 @@ EOF
     [ "$status" -ne 0 ]
 }
 
+@test "apply_overlay_fragment: injects multiline fragment correctly" {
+    _load_lib
+    cat > "$SCRATCH/target.md" <<'EOF'
+Before
+<!-- BEGIN OVERLAY-FRAGMENT: multi-ext -->
+<!-- END OVERLAY-FRAGMENT: multi-ext -->
+After
+EOF
+    printf 'LINE ONE\nLINE TWO\nLINE THREE\n' > "$SCRATCH/multi-fragment.md"
+    apply_overlay_fragment "$SCRATCH/target.md" "$SCRATCH/multi-fragment.md" "multi-ext"
+    grep -q 'LINE ONE'   "$SCRATCH/target.md"
+    grep -q 'LINE TWO'   "$SCRATCH/target.md"
+    grep -q 'LINE THREE' "$SCRATCH/target.md"
+    # Before and After lines still present
+    grep -q 'Before' "$SCRATCH/target.md"
+    grep -q 'After'  "$SCRATCH/target.md"
+}
+
 # ---------------------------------------------------------------------------
 # 3. apply_manifest — manifest parsing and application
 # ---------------------------------------------------------------------------
