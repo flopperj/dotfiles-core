@@ -63,6 +63,48 @@ run_core_check() {
         errors=$((errors + 1))
     fi
 
+    # Check generated files (CLAUDE.md and AGENTS.md symlinks)
+    echo ""
+    echo "Generated files (~/.claude/):"
+    for gen_name in "CLAUDE.md" "AGENTS.md"; do
+        local link="$HOME/.claude/$gen_name"
+        local src="$core_dir/.claude/${gen_name}.generated"
+        if [ -L "$link" ] && [ -e "$link" ]; then
+            # Also verify freshness: re-render to temp and compare.
+            local tmp
+            tmp="$(mktemp)"
+            local gen_basename="${gen_name%.md}"
+            local frag_dir
+            frag_dir="$(echo "$gen_basename" | tr '[:upper:]' '[:lower:]')"
+            # Map CLAUDE.md -> claude-md, AGENTS.md -> agents-md
+            case "$gen_name" in
+                CLAUDE.md) frag_dir="claude-md" ;;
+                AGENTS.md) frag_dir="agents-md" ;;
+            esac
+            # Source lib-overlays.sh to use concat_fragments for freshness check.
+            if bash -c "
+                source '$core_dir/scripts/lib-overlays.sh' 2>/dev/null
+                concat_fragments '$tmp' '$core_dir/_shared/$frag_dir' 2>/dev/null
+            " 2>/dev/null; then
+                if cmp -s "$tmp" "$src" 2>/dev/null; then
+                    echo "  ok    $gen_name (symlink good, render fresh)"
+                else
+                    echo "  STALE $gen_name (fragments changed; re-run install.sh)"
+                    errors=$((errors + 1))
+                fi
+            else
+                echo "  ok    $gen_name (symlink good)"
+            fi
+            rm -f "$tmp"
+        elif [ -L "$link" ]; then
+            echo "  BROKEN $gen_name (dead symlink)"
+            errors=$((errors + 1))
+        else
+            echo "  MISSING $gen_name"
+            errors=$((errors + 1))
+        fi
+    done
+
     echo ""
     if [ "$errors" -eq 0 ]; then
         echo "All checks passed."
