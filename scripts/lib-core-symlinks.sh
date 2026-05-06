@@ -91,4 +91,22 @@ install_core_symlinks() {
         _link_dir "$skill_dir" "$HOME/.claude/skills/$dirname"
         echo "  Linked skill: $dirname"
     done
+
+    # --- Generated CLAUDE.md and AGENTS.md ---
+    # Symlink the core-only rendered views so ~/.claude/CLAUDE.md and
+    # ~/.claude/AGENTS.md are always up-to-date with the latest fragments.
+    # The overlay installer may later re-point these symlinks at its own
+    # overlay-rendered versions — that is intentional.
+    local claude_gen="$core_dir/.claude/CLAUDE.md.generated"
+    local agents_gen="$core_dir/.claude/AGENTS.md.generated"
+
+    if [ -f "$claude_gen" ]; then
+        _link_file "$claude_gen" "$HOME/.claude/CLAUDE.md"
+        echo "  Linked CLAUDE.md -> CLAUDE.md.generated"
+    fi
+
+    if [ -f "$agents_gen" ]; then
+        _link_file "$agents_gen" "$HOME/.claude/AGENTS.md"
+        echo "  Linked AGENTS.md -> AGENTS.md.generated"
+    fi
 }
