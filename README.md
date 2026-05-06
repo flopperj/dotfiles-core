@@ -18,12 +18,14 @@ Universal Claude Code agent pipeline framework.
 
 There are two equally-supported install paths. Pick whichever matches your use case.
 
+> **A note on URLs.** This repo is mirrored to multiple Git hosts. Replace `<repo-url>` in the commands below with the URL of whichever mirror you have access to — for example, an internal Git host inside your company, or a public GitHub mirror. The installer behaves identically regardless of source.
+
 ### Option 1 — Standalone install
 
 Use this when you want to run `dotfiles-core` directly without building your own overlay. Good for evaluating, learning the framework, or using it as-is.
 
 ```bash
-git clone https://github.com/flopperj/dotfiles-core.git ~/dotfiles-core
+git clone <repo-url> ~/dotfiles-core
 cd ~/dotfiles-core && bash install.sh
 ```
 
@@ -138,10 +140,10 @@ An overlay is your personal or company-specific repo that consumes `dotfiles-cor
    cd ~/dotfiles
    ```
 
-2. **Add `dotfiles-core` as a submodule** at `.claude/dotfiles-core/`:
+2. **Add `dotfiles-core` as a submodule** at `.claude/dotfiles-core/` (replace `<repo-url>` with whichever mirror you use — see [the URL note](#quickstart) above):
 
    ```bash
-   git submodule add https://github.com/flopperj/dotfiles-core.git .claude/dotfiles-core
+   git submodule add <repo-url> .claude/dotfiles-core
    ```
 
 3. **Author a thin `install.sh` orchestrator** that delegates to core, then runs your overlay-specific steps:
