@@ -82,8 +82,8 @@ block the pipeline on a Jira failure.
    - Linked issues (blockers, duplicates, related)
    - Attachments (note URLs for reference)
 
-<!-- BEGIN COMPANY-EXTENSION: ticket-pickup-jira-fallback -->
-<!-- END COMPANY-EXTENSION: ticket-pickup-jira-fallback -->
+<!-- BEGIN OVERLAY-FRAGMENT: ticket-pickup-jira-fallback -->
+<!-- END OVERLAY-FRAGMENT: ticket-pickup-jira-fallback -->
 
 ---
 

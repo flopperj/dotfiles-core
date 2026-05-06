@@ -99,8 +99,8 @@ searchJiraIssuesUsingJql(
 )
 ```
 
-<!-- BEGIN COMPANY-EXTENSION: ticket-swarm-jira-fallback -->
-<!-- END COMPANY-EXTENSION: ticket-swarm-jira-fallback -->
+<!-- BEGIN OVERLAY-FRAGMENT: ticket-swarm-jira-fallback -->
+<!-- END OVERLAY-FRAGMENT: ticket-swarm-jira-fallback -->
 
 If no tickets are found, inform the user and suggest broadening the query.
 
