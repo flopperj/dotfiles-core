@@ -192,7 +192,61 @@ _run_install_with_mock_claude() {
 }
 
 # ---------------------------------------------------------------------------
-# 7. lib-plugins.sh reads overlay's .claude/plugins.txt when root plugins.txt absent
+# 7. Empty plugins.txt is a no-op: exits 0 and invokes claude zero times
+# ---------------------------------------------------------------------------
+
+@test "_install_cli_and_plugins exits 0 and records no calls when plugins.txt is empty" {
+    _plant_claude_stub
+    mkdir -p "$SCRATCH/empty-plugins"
+    # Zero-byte file — no plugins declared.
+    : > "$SCRATCH/empty-plugins/plugins.txt"
+
+    # shellcheck source=/dev/null
+    source "$CORE_DIR/scripts/lib-plugins.sh"
+    SCRATCH="$SCRATCH" PATH="$SCRATCH/bin:$PATH" \
+        run _install_cli_and_plugins "$SCRATCH/empty-plugins"
+
+    [ "$status" -eq 0 ]
+    [ ! -f "$SCRATCH/claude-calls.log" ]
+}
+
+@test "_install_cli_and_plugins exits 0 and records no calls when plugins.txt has only blank lines and comments" {
+    _plant_claude_stub
+    mkdir -p "$SCRATCH/comment-only-plugins"
+    printf '# this is a comment\n\n# another comment\n\n' \
+        > "$SCRATCH/comment-only-plugins/plugins.txt"
+
+    # shellcheck source=/dev/null
+    source "$CORE_DIR/scripts/lib-plugins.sh"
+    SCRATCH="$SCRATCH" PATH="$SCRATCH/bin:$PATH" \
+        run _install_cli_and_plugins "$SCRATCH/comment-only-plugins"
+
+    [ "$status" -eq 0 ]
+    [ ! -f "$SCRATCH/claude-calls.log" ]
+}
+
+# ---------------------------------------------------------------------------
+# 8. Dual-path precedence: root plugins.txt wins over .claude/plugins.txt
+# ---------------------------------------------------------------------------
+
+@test "_install_cli_and_plugins uses root plugins.txt when both root and .claude/plugins.txt exist" {
+    _plant_claude_stub
+    mkdir -p "$SCRATCH/both-paths/.claude"
+    echo "root-plugin@root-registry" > "$SCRATCH/both-paths/plugins.txt"
+    echo "dotclaude-plugin@dotclaude-registry" > "$SCRATCH/both-paths/.claude/plugins.txt"
+
+    # shellcheck source=/dev/null
+    source "$CORE_DIR/scripts/lib-plugins.sh"
+    SCRATCH="$SCRATCH" PATH="$SCRATCH/bin:$PATH" \
+        _install_cli_and_plugins "$SCRATCH/both-paths"
+
+    grep -q "plugin install root-plugin@root-registry" "$SCRATCH/claude-calls.log"
+    # Exactly one install call recorded — the root plugin, not the .claude one.
+    [ "$(wc -l < "$SCRATCH/claude-calls.log")" -eq 1 ]
+}
+
+# ---------------------------------------------------------------------------
+# 9. lib-plugins.sh reads overlay's .claude/plugins.txt when root plugins.txt absent
 # ---------------------------------------------------------------------------
 
 @test "_install_cli_and_plugins falls back to .claude/plugins.txt when root plugins.txt absent" {
