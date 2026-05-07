@@ -34,13 +34,25 @@ Capture the full output and present it to the user.
 
 ### Step 3 — Plugin sync check
 
-Compare `plugins.txt` in the dotfiles repo against `~/.claude/settings.json` `enabledPlugins`:
-1. Read `<dotfiles>/.claude/plugins.txt` — these are the declared plugins.
-2. Read `~/.claude/settings.json` and extract the `enabledPlugins` keys.
-3. Report:
-   - Plugins in `plugins.txt` but not enabled in settings → "Not installed"
-   - Plugins enabled in settings but not in `plugins.txt` → "Not tracked"
+Compare the **union** of declared plugins against `~/.claude/settings.json` `enabledPlugins`. Declared plugins come from two sources:
+
+- `<core>/plugins.txt` (universal plugins shipped by dotfiles-core; in overlay installs the path is `<dotfiles>/.claude/dotfiles-core/plugins.txt`)
+- `<dotfiles>/.claude/plugins.txt` (overlay-specific plugins; only present in overlay installs)
+
+Procedure:
+1. Resolve the core path:
+   - If `<dotfiles>/.claude/dotfiles-core/plugins.txt` exists → use it (overlay install).
+   - Else if `<dotfiles>/plugins.txt` exists → use it (standalone core install).
+   - Else → no core plugins to declare.
+2. Read overlay's `<dotfiles>/.claude/plugins.txt` if present.
+3. Build the declared-plugins set as the **union** of both files (skip blank lines and `#`-prefixed comments).
+4. Read `~/.claude/settings.json` and extract the `enabledPlugins` keys.
+5. Report:
+   - Plugins in declared-set but not enabled in settings → "Not installed"
+   - Plugins enabled in settings but not in declared-set → "Not tracked"
    - Plugins in both → "OK"
+
+When listing OK plugins, annotate the source: `frontend-design@claude-plugins-official (core)`, `mcds-web-plugin@devassist-plugins-registry (overlay)`. This makes it obvious which file to edit if the user wants to remove or change a plugin.
 
 ### Step 4 — Settings template drift check
 
