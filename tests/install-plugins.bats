@@ -157,33 +157,36 @@ _run_install_with_mock_claude() {
 
 # ---------------------------------------------------------------------------
 # 6. plugins.txt-absent graceful path: exits 0 and emits "Skipping" message
+#
+# Uses a scratch copy of the core dir so no live-repo file is ever moved or
+# mutated. teardown() cleans up $SCRATCH automatically, making these tests
+# safe under SIGKILL / CI timeout.
 # ---------------------------------------------------------------------------
 
 @test "install exits 0 and skips plugins when plugins.txt is absent" {
     _plant_claude_stub
-    # Temporarily rename plugins.txt so it appears absent to the installer.
-    mv "$CORE_DIR/plugins.txt" "$CORE_DIR/plugins.txt.disabled"
+    # Build a scratch tree with plugins.txt absent (no file created).
+    mkdir -p "$SCRATCH/fake-core/scripts"
+    cp "$CORE_DIR/scripts/lib-plugins.sh" "$SCRATCH/fake-core/scripts/lib-plugins.sh"
 
-    SCRATCH="$SCRATCH" PATH="$SCRATCH/bin:$PATH" HOME="$SCRATCH/home" \
-        run bash "$CORE_DIR/install.sh"
-    local exit_status="$status"
-    local captured_output="$output"
+    # shellcheck source=/dev/null
+    source "$CORE_DIR/scripts/lib-plugins.sh"
+    SCRATCH="$SCRATCH" PATH="$SCRATCH/bin:$PATH" \
+        run _install_cli_and_plugins "$SCRATCH/fake-core"
 
-    # Restore before any assertion so teardown doesn't corrupt the repo.
-    mv "$CORE_DIR/plugins.txt.disabled" "$CORE_DIR/plugins.txt"
-
-    [ "$exit_status" -eq 0 ]
-    echo "$captured_output" | grep -qi "skipping"
+    [ "$status" -eq 0 ]
+    echo "$output" | grep -qi "skipping"
 }
 
 @test "install records no plugin calls when plugins.txt is absent" {
     _plant_claude_stub
-    mv "$CORE_DIR/plugins.txt" "$CORE_DIR/plugins.txt.disabled"
+    mkdir -p "$SCRATCH/fake-core"
+    # No plugins.txt in fake-core — absence is the condition under test.
 
-    SCRATCH="$SCRATCH" PATH="$SCRATCH/bin:$PATH" HOME="$SCRATCH/home" \
-        run bash "$CORE_DIR/install.sh"
-
-    mv "$CORE_DIR/plugins.txt.disabled" "$CORE_DIR/plugins.txt"
+    # shellcheck source=/dev/null
+    source "$CORE_DIR/scripts/lib-plugins.sh"
+    SCRATCH="$SCRATCH" PATH="$SCRATCH/bin:$PATH" \
+        _install_cli_and_plugins "$SCRATCH/fake-core"
 
     [ ! -f "$SCRATCH/claude-calls.log" ]
 }
