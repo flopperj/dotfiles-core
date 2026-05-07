@@ -1,0 +1,5 @@
+# dotfiles-core ships these universal Anthropic-official plugins.
+# Overlays may layer additional plugins via their own plugins.txt;
+# both lists are union-installed at install time.
+frontend-design@claude-plugins-official
+playwright@claude-plugins-official
