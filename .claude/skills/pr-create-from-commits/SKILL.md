@@ -48,6 +48,8 @@ Ask all missing questions in a single message — don't interrupt later steps wi
 2. Check the status field. If already In Progress/Verify/Blocked/Closed: show `ℹ️ Ticket {TICKET} is: {status} (no status change needed)` and continue.
 3. Call `getTransitionsForJiraIssue`, find an "In Progress" transition (look for: "In Progress", "Start Progress", "Start Work"), then call `transitionJiraIssue`. Show `✅ Moved {TICKET} to In Progress`.
 
+For company-specific Jira fallback, consult `## Jira fallback (DAST-Orch MCP)` in `~/.claude/overlay-context.md`. If that file is absent, proceed with the primary tool only.
+
 <!-- BEGIN OVERLAY-FRAGMENT: pr-create-jira-fallback -->
 <!-- END OVERLAY-FRAGMENT: pr-create-jira-fallback -->
 

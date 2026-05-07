@@ -33,6 +33,9 @@ The four-stage flow is **Gather → Enrich → Compose → Present**:
 Run all four Jira queries in parallel using the primary MCP tool. If the primary fails, retry each with the fallback tool. If both fail, skip Jira and note the degradation.
 
 **Primary tool:** `mcp__claude_ai_Atlassian__searchJiraIssuesUsingJql`
+
+For company-specific Jira fallback, consult `## Jira fallback (DAST-Orch MCP)` in `~/.claude/overlay-context.md`. If that file is absent, proceed with the primary tool only.
+
 <!-- BEGIN OVERLAY-FRAGMENT: briefing-jira-fallback-tool -->
 <!-- END OVERLAY-FRAGMENT: briefing-jira-fallback-tool -->
 

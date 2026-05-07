@@ -190,7 +190,7 @@ The evaluation loop is called by both `/obligations check` and the `/briefing` s
 
 4. **Evaluate the condition:**
    - `gh_query` — run the `gh` CLI command, parse JSON output, check predicate against result
-   - `jql` — run via MCP: primary `mcp__claude_ai_Atlassian__searchJiraIssuesUsingJql`<!-- BEGIN OVERLAY-FRAGMENT: obligations-jql-fallback-tool --> <!-- END OVERLAY-FRAGMENT: obligations-jql-fallback-tool -->; check predicate against `result_count`
+   - `jql` — run via MCP: primary `mcp__claude_ai_Atlassian__searchJiraIssuesUsingJql`<!-- BEGIN OVERLAY-FRAGMENT: obligations-jql-fallback-tool --> <!-- END OVERLAY-FRAGMENT: obligations-jql-fallback-tool -->; check predicate against `result_count`. For company-specific Jira fallback tool name, consult `## Jira fallback (DAST-Orch MCP)` in `~/.claude/overlay-context.md`. If that file is absent, proceed with the primary tool only.
    - `compound` — evaluate all sub-conditions; all must be true for the obligation to fire
    - `time` — check if `condition.after` < now
 
