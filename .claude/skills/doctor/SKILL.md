@@ -98,7 +98,7 @@ If `~/.claude.json` contains an `mcpServers.jenkins-mcp` entry:
 5. Report:
    - All OK: `INFO: Jenkins MCP configured and prerequisites present`
    - Missing `uv`: `WARN: Jenkins MCP configured but uv not found — install with: curl -LsSf https://astral.sh/uv/install.sh | sh`
-   - Missing directory: `WARN: Jenkins MCP directory not found at {path}<!-- BEGIN OVERLAY-FRAGMENT: doctor-jenkins-clone-url --> <!-- END OVERLAY-FRAGMENT: doctor-jenkins-clone-url -->`
+   - Missing directory: `WARN: Jenkins MCP directory not found at {path}<!-- BEGIN OVERLAY-FRAGMENT: doctor-jenkins-clone-url --> <!-- END OVERLAY-FRAGMENT: doctor-jenkins-clone-url -->`. For the company-specific clone target, consult `## Jenkins MCP clone URL` in `~/.claude/overlay-context.md`. If that file is absent, proceed with the primary log message only.
    - Missing credentials: `WARN: Jenkins MCP missing JENKINS_USER or JENKINS_TOKEN (not found in ~/.claude.json env block or shell environment)`
    - Missing Cursor config: `INFO: Jenkins MCP not configured in ~/.cursor/mcp.json — Cursor agents will not have Jenkins access`
 
