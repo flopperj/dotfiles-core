@@ -68,6 +68,8 @@ When the reviewer is the author of the code, the highest risk is over-rewarding 
 
 The bias is structural, not situational — it applies on every self-review, not just the rough ones.
 
+The checks above catch **under-investment** (gaps the author can see if prompted). To also catch **misdirected investment** (gaps invisible because the misdirection feels like the work), apply the Hostile-Read Anchors prompts from `rubric.md §8` for every axis scored ≥ 4, and run the Contract Enforcement Audit from `rubric.md §9` to map every documented contract to its enforcer.
+
 ## Confidence guidance
 
 Lower confidence when the review lacks:
