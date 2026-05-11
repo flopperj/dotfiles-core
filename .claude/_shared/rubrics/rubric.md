@@ -121,6 +121,80 @@ Validation is consistent and repeatable through tests, linting, dry-runs, or CI.
 ### 5
 Validation is excellent and aligned with risk. Fast feedback protects the system without excessive process.
 
+## 8. Hostile-Read Anchors
+
+The bias-check in `evidence-patterns.md` catches under-investment — gaps that are visible to the author. It does not catch **misdirected investment** — gaps that are invisible because the misdirection feels like the work. The hostile-read anchors close that gap by forcing evidence-anchored answers for every confident score.
+
+### When to apply
+
+For every axis scored **≥ 4**, answer the prompts that apply. Each answer is **1–2 sentences anchored to a specific file, line, or code path** — not abstract self-doubt.
+
+Honest answers that surface real gaps lower the score by 0.5–1 point. That is the design. If a hostile-read answer does not change the score, say why in one sentence (e.g., "weakest claim is X, but the gap is documented and bounded — no score change").
+
+### The three prompts
+
+**Prompt A — applied to every axis ≥ 4:**
+> *What is the weakest claim I am making here, and what specific evidence would falsify it?*
+
+The answer must name a file or behavior. "It feels solid" is not an answer.
+
+**Prompt B — applied to every axis ≥ 4 on a metric the author personally invested in:**
+> *Is my investment measuring what I think it's measuring, or am I counting the work-product instead of the user-visible behavior?*
+
+Examples of misdirected investment to watch for: a lint script that runs on changed lines only (counts compliance, not coverage); a "comprehensive check" that audits a fraction of the installed surface (counts presence, not completeness); a "migration complete" claim that left sentinels behind (counts the PR, not the system state).
+
+**Prompt C — applied to every axis ≥ 4 where validation or enforcement is claimed:**
+> *Where does the documented contract diverge from the enforced contract? Walk the code path, not the narrative.*
+
+The answer must trace at least one path from the documented promise (README, SKILL.md, CHANGELOG, commit message) to the line of code that enforces it. If the trace ends at a partial enforcement, that is a LEAKY contract — record it in the Contract Enforcement Audit (§9).
+
+### Output requirement
+
+The answers appear in the final report under a new section titled **"Hostile-read answers"**, immediately after the Scorecard table. Each answer is anchored to a specific evidence artifact (file:line, command output, commit SHA).
+
+*Illustration (synthetic):* A repo claims "all config files are validated on commit." Prompt A answer: "Weakest claim is completeness — `pre-commit.sh:44-71` only validates `*.json`; `*.yaml` files are unchecked. This would fail if a bad YAML was introduced." One sentence, file + line, falsifiable.
+
+## 9. Contract Enforcement Audit
+
+This is a cross-axis check. It does not replace any of the 7 axes; it scores **the gap between what the repo's documented contracts promise and what the executed code enforces.** The most common staff-trap is a system whose narrative runs one rigor-level ahead of its enforcement — this check catches that gap.
+
+### Procedure
+
+1. **Inventory documented contracts.** Scan README, SKILL.md files, CHANGELOG.md, and recent commit messages for claims about what the system enforces. Examples of claim language: "comprehensive check", "bilateral lint", "drift guard", "no half-render", "structural linter", "migration complete", "validates every installed surface". Each claim is a contract.
+2. **Map each contract to its enforcer.** Name the file and approximate line range that implements the check. If no enforcer exists, record the enforcer as `(none — decorative)`.
+3. **Score the gap per contract:**
+   - **TIGHT** — the code enforces every case the contract describes. No known bypass.
+   - **LEAKY** — the code enforces the common case but has known or likely bypasses (partial coverage, substring matching where structural matching is implied, only-changed-lines mode where "full lint" is claimed, fresh-install paths where "every install" is claimed).
+   - **DECORATIVE** — the contract is documented but the enforcement is symbolic (commented-out code, a rule listed in a doc with no script behind it, a sentinel pattern that the runtime never reads).
+4. **Score the axis impact.** Identify which of the 7 axes each contract belongs to (most enforcement claims map to validation or operational safety; documentation claims map to docs; architectural claims may map to architecture or maintainability).
+
+### Output requirement
+
+Include the following table in the final report under a section titled **"Contract Enforcement Audit"**, immediately after the Hostile-Read Answers section:
+
+```
+| Contract (claim text or paraphrase) | Source (file:line or commit) | Enforcer (file:line) | Status | Axis affected |
+|---|---|---|---|---|
+```
+
+Every contract in the inventory appears in the table. Empty cells are not allowed — if the enforcer is `(none)`, that is itself the finding.
+
+### Axis cap rule
+
+**Any contract that is LEAKY or DECORATIVE caps the affected axis at 4, regardless of other evidence.** This applies even if the axis's other dimensions would justify 5. Record the cap explicitly in the Scorecard rationale:
+
+> "validation: capped at 4 — `check.sh:32-58` enforces ~25% of installed surface (LEAKY)"
+
+The cap is the mechanism that makes the audit load-bearing. Without it, the table is a comment block; with it, the evaluator cannot claim 5 on an axis whose contract is unenforced.
+
+### Interaction with existing verdict overrides
+
+The axis cap from this section stacks with the existing verdict overrides above:
+
+- A LEAKY validation contract caps validation at 4 (this section).
+- An axis ≤ 2 still caps the verdict at **solid senior** (existing override rule).
+- The axis cap from this section is applied **before** computing the weighted total — so the doubling of portability/safety reflects the capped score.
+
 ## Computing the weighted total
 
 Multiply the **portability** and **operational safety** scores by 2 before summing. The other five categories sum at face value.
