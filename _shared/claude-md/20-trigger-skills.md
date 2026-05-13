@@ -28,6 +28,7 @@ These skills are invoked when the user's request matches a trigger phrase (not a
 | "grill me", "stress-test this plan", "interview me on this design" | `/grill-me` | Interview the user one question at a time until shared understanding is reached on every branch of the design tree |
 | "to-prd", "create a PRD", "write a PRD", "save this as a PRD" | `/to-prd` | Synthesize the current conversation context into a structured PRD saved to `~/.claude/tasks/<project>/prds/<slug>.md` |
 | "forge this", "from idea to PR", "shape this from scratch", "take this from rough idea to built", "let's grill this idea, write it up, and build it" | `/forge` | Five-stage sense-making + build pipeline orchestrating grill-me → to-prd → aristotle-deconstructor → optimus-planner → cyrus-tdd-engineer with two orchestrator gates |
+| "park this session", "park work for a fresh session", "hand off this task", "checkpoint this session" | `/handoff` | Park the current session — capture typed rejections + next intent for the next session on this branch |
 
 Each skill defines its own orchestration flow, gates, and downstream handoffs. Refer to the skill's SKILL.md for details.
 
