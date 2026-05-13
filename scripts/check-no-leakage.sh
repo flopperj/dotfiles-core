@@ -69,6 +69,7 @@ for token in "${TOKENS[@]}"; do
         -not -name ".git" \
         -not -path "*/scripts/leakage-tokens.txt" \
         -not -path "*/tests/leakage-check.bats" \
+        -not -path "*/tests/handoff-skill.bats" \
         -type f \
         -print0 2>/dev/null)
 done

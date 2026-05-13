@@ -225,6 +225,38 @@ archive:
 
 ---
 
+## Paired handoff obligation
+
+The `/handoff` skill optionally creates a paired obligation as part of its
+write flow. The obligation is a normal entry written via the standard
+create flow (above) — there is no special call path. A typical paired
+obligation watches the PR or branch for external motion:
+
+```yaml
+  - id: ob-YYYYMMDD-NNN
+    name: handoff-watch-<task-key>
+    created_by: handoff
+    condition:
+      type: gh_query
+      query: gh pr list --head <task-key> --json reviewDecision,state
+      predicate: state == "MERGED" OR reviewDecision == "APPROVED" OR reviewDecision == "CHANGES_REQUESTED"
+    action:
+      type: notify
+      message: "Open handoff for <task-key> — external motion detected. Resume the session?"
+    gate: notify
+    expiry:
+      type: date
+      value: "+14d"
+    cooldown: 24h
+    max_fires: 3
+```
+
+If the user declines the paired obligation, `/handoff` writes the handoff
+artifact and exits without creating any obligation. The pairing is
+strictly opt-in.
+
+---
+
 ## Future Enhancement — RemoteTrigger
 
 This section documents a planned Phase 2 integration. Do not implement it yet.

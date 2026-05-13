@@ -163,6 +163,47 @@ All Jira operations are best-effort.
 
 ---
 
+## Step 2.6: Handoff context check
+
+After hierarchy detection (Step 2.5), check whether an open handoff exists for the branch associated with this ticket.
+
+### Resolve the candidate branch
+
+Two paths:
+
+1. If the ticket-pickup branch resolution (Step 5.5) has already determined the branch (matched existing or about-to-create) → use that branch name.
+2. Else, derive a candidate branch from the ticket key: `git branch --list "*<ticket-key>*"` — use the match if exactly one result.
+3. If no candidate branch resolves → skip Step 2.6 silently.
+
+### Check for a handoff artifact
+
+Resolve `<project>` as `basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"`. Slug-safe the candidate branch (replace `/` with `-`) to form `<task-key>`.
+
+Check `~/.claude/tasks/<project>/handoff/<task-key>.md`. If absent → skip.
+
+### Fold into enrichment brief
+
+If present, run a lightweight version of the read flow (same predicate evaluation, same partitioning as the handoff read half) and append to the enrichment bundle:
+
+```
+Open handoff for this branch:
+  Last intent: <intent>
+  Holding rejections (gate the pipeline): <N>
+    [<kind>] <claim>
+    ...
+  Surfaced rejections (ground shifted, reconsider): <M>
+    [<kind>] <claim>
+    ...
+```
+
+### Complexity nudge
+
+If `N >= 3` (three or more holding rejections), nudge the complexity classification up one tier (Simple→Medium, Medium→Complex). Add a one-line rationale: *"Handoff has 3+ holding rejections — empirically this ticket is harder than its scope suggests."*
+
+This enrichment is **non-blocking**: if the handoff file is malformed or the read fails, log it and continue.
+
+---
+
 ## Step 3: Enrich with codebase context
 
 Launch an explore subagent to search the codebase for references from the

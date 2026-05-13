@@ -32,6 +32,7 @@ When the user's request implies multiple skills in sequence, detect the compound
   - `/obligations`, `/google-docs`, `/google-drive`
   - `/agent-stats`, `/lessons-review`
   - `/grill-me`, `/to-prd`, `/forge`
+  - `/handoff`
 
 ---
 
