@@ -32,6 +32,9 @@ _seed_core_agent_memory() {
 
             if [ "$filename" = "MEMORY.md" ]; then
                 if [ ! -f "$target_file" ] || [ "$RESEED" = true ]; then
+                    if [ "$RESEED" = true ] && [ -f "$target_file" ]; then
+                        _backup_collision "$target_file"
+                    fi
                     cp "$seed_file" "$target_file"
                     if [ "$RESEED" = true ]; then
                         echo "    Reseeded $agent_name/MEMORY.md"
@@ -48,6 +51,9 @@ _seed_core_agent_memory() {
                 fi
             else
                 if [ ! -f "$target_file" ] || [ "$RESEED" = true ]; then
+                    if [ "$RESEED" = true ] && [ -f "$target_file" ]; then
+                        _backup_collision "$target_file"
+                    fi
                     cp "$seed_file" "$target_file"
                     if [ "$RESEED" = true ]; then
                         echo "    Reseeded $agent_name/$filename"
