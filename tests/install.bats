@@ -132,6 +132,27 @@ teardown() {
     ! grep -q "existing content" "$SCRATCH/home/.claude/agent-memory/cyrus-tdd-engineer/MEMORY.md"
 }
 
+@test "install --reseed backs up pre-reseed content to timestamped .bak file" {
+    # Operational-safety contract: --reseed destroys agent-accumulated content,
+    # so it must preserve the prior file in a timestamped backup. Without this,
+    # a user invoking --reseed silently loses customized memory.
+    local target_dir="$SCRATCH/home/.claude/agent-memory/cyrus-tdd-engineer"
+    local target="$target_dir/MEMORY.md"
+    mkdir -p "$target_dir"
+    echo "CUSTOM_LINE_DO_NOT_OVERWRITE" > "$target"
+
+    _run_install "--reseed"
+
+    # Live target was overwritten (asserted by sibling test)
+    # AND a backup containing the custom line must exist
+    local backup_count
+    backup_count="$(find "$target_dir" -maxdepth 1 -name 'MEMORY.md.bak.*' 2>/dev/null | wc -l)"
+    [ "$backup_count" -ge 1 ]
+    local backup_file
+    backup_file="$(find "$target_dir" -maxdepth 1 -name 'MEMORY.md.bak.*' 2>/dev/null | head -1)"
+    grep -q "CUSTOM_LINE_DO_NOT_OVERWRITE" "$backup_file"
+}
+
 # ---------------------------------------------------------------------------
 # 7. Agent symlink targets are live (not broken)
 # ---------------------------------------------------------------------------
