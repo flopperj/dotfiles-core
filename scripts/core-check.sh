@@ -68,34 +68,35 @@ run_core_check() {
     echo "Generated files (~/.claude/):"
     for gen_name in "CLAUDE.md" "AGENTS.md"; do
         local link="$HOME/.claude/$gen_name"
-        local src="$core_dir/.claude/${gen_name}.generated"
         if [ -L "$link" ] && [ -e "$link" ]; then
-            # Also verify freshness: re-render to temp and compare.
-            local tmp
-            tmp="$(mktemp)"
-            local gen_basename="${gen_name%.md}"
-            local frag_dir
-            frag_dir="$(echo "$gen_basename" | tr '[:upper:]' '[:lower:]')"
-            # Map CLAUDE.md -> claude-md, AGENTS.md -> agents-md
-            case "$gen_name" in
-                CLAUDE.md) frag_dir="claude-md" ;;
-                AGENTS.md) frag_dir="agents-md" ;;
-            esac
-            # Source lib-overlays.sh to use concat_fragments for freshness check.
-            if bash -c "
-                source '$core_dir/scripts/lib-overlays.sh' 2>/dev/null
-                concat_fragments '$tmp' '$core_dir/_shared/$frag_dir' 2>/dev/null
-            " 2>/dev/null; then
-                if cmp -s "$tmp" "$src" 2>/dev/null; then
-                    echo "  ok    $gen_name (symlink good, render fresh)"
-                else
-                    echo "  STALE $gen_name (fragments changed; re-run install.sh)"
-                    errors=$((errors + 1))
-                fi
+            local src
+            src="$(readlink "$link")"
+            local core_src="$core_dir/.claude/${gen_name}.generated"
+            if [ "$src" != "$core_src" ]; then
+                echo "  ok    $gen_name (symlink points outside core — overlay-managed; skipping freshness check)"
             else
-                echo "  ok    $gen_name (symlink good)"
+                local tmp
+                tmp="$(mktemp)"
+                local frag_dir
+                case "$gen_name" in
+                    CLAUDE.md) frag_dir="claude-md" ;;
+                    AGENTS.md) frag_dir="agents-md" ;;
+                esac
+                if bash -c "
+                    source '$core_dir/scripts/lib-overlays.sh' 2>/dev/null
+                    concat_fragments '$tmp' '$core_dir/_shared/$frag_dir' 2>/dev/null
+                " 2>/dev/null; then
+                    if cmp -s "$tmp" "$src" 2>/dev/null; then
+                        echo "  ok    $gen_name (symlink good, render fresh)"
+                    else
+                        echo "  STALE $gen_name (fragments changed; re-run install.sh)"
+                        errors=$((errors + 1))
+                    fi
+                else
+                    echo "  ok    $gen_name (symlink good)"
+                fi
+                rm -f "$tmp"
             fi
-            rm -f "$tmp"
         elif [ -L "$link" ]; then
             echo "  BROKEN $gen_name (dead symlink)"
             errors=$((errors + 1))
