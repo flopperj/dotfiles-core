@@ -194,3 +194,37 @@ teardown() {
     _run_install
     [ "$status" -eq 0 ]
 }
+
+# ---------------------------------------------------------------------------
+# 10. _backup_collision: counter-suffix prevents silent overwrite
+# ---------------------------------------------------------------------------
+@test "_backup_collision with same suffix counter-suffix produces distinct .bak files" {
+    # Source the library directly — unit test on _backup_collision alone.
+    # CORE_DIR is set by setup(). _BACKUP_SUFFIX_OVERRIDE pins the base suffix
+    # so the test is deterministic and fast (no wall-clock dependency).
+    local target="$SCRATCH/target_file.txt"
+
+    # First collision
+    echo "first" > "$target"
+    (
+        export _BACKUP_SUFFIX_OVERRIDE="forced"
+        source "$CORE_DIR/scripts/lib-core-symlinks.sh"
+        _backup_collision "$target"
+    )
+
+    # Recreate target for second collision
+    echo "second" > "$target"
+    (
+        export _BACKUP_SUFFIX_OVERRIDE="forced"
+        source "$CORE_DIR/scripts/lib-core-symlinks.sh"
+        _backup_collision "$target"
+    )
+
+    # .bak.forced must exist and contain "first" (not silently overwritten)
+    [ -f "${target}.bak.forced" ]
+    grep -q "first" "${target}.bak.forced"
+
+    # .bak.forced.1 must exist and contain "second"
+    [ -f "${target}.bak.forced.1" ]
+    grep -q "second" "${target}.bak.forced.1"
+}

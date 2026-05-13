@@ -14,12 +14,19 @@ _clean_stale_symlinks() {
     done
 }
 
-# Move a colliding non-symlink file/dir to a timestamped .bak.
-# Tests can override suffix via _BACKUP_SUFFIX_OVERRIDE.
+# Move a colliding non-symlink file/dir to a .bak with a counter suffix so
+# repeated calls on the same target in the same second never overwrite a prior
+# backup.  Tests can pin the base suffix via _BACKUP_SUFFIX_OVERRIDE.
+# Shape: <path>.bak.<suffix>  then  <path>.bak.<suffix>.1  .2  ... until free.
 _backup_collision() {
     local path="$1"
-    local suffix="${_BACKUP_SUFFIX_OVERRIDE:-$(date +%s)}"
-    local backup="${path}.bak.${suffix}"
+    local base_suffix="${_BACKUP_SUFFIX_OVERRIDE:-$(date +%s)}"
+    local backup="${path}.bak.${base_suffix}"
+    local counter=1
+    while [ -e "$backup" ]; do
+        backup="${path}.bak.${base_suffix}.${counter}"
+        counter=$((counter + 1))
+    done
     if ! mv "$path" "$backup"; then
         echo "  ERROR: failed to back up $path to $backup" >&2
         return 1
