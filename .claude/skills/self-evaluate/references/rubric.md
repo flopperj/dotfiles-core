@@ -1,0 +1,1 @@
+../../../_shared/rubrics/rubric.md
