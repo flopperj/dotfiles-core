@@ -17,6 +17,12 @@ setup() {
     SCRATCH="$(mktemp -d)"
     export SCRATCH
     mkdir -p "$SCRATCH/home"
+
+    # Prevent _install_precommit_hook from writing to the real .git/hooks/ during
+    # install.sh invocations in this test file. The dedicated
+    # tests/install-precommit-hook.bats exercises that function in full isolation
+    # using its own SCRATCH fixture core — it does NOT set this variable.
+    export _SKIP_PRECOMMIT_INSTALL=1
 }
 
 teardown() {
@@ -227,4 +233,39 @@ teardown() {
     # .bak.forced.1 must exist and contain "second"
     [ -f "${target}.bak.forced.1" ]
     grep -q "second" "${target}.bak.forced.1"
+}
+
+# ---------------------------------------------------------------------------
+# 11. Pre-commit hook isolation — install.bats must not mutate real .git/hooks/
+# ---------------------------------------------------------------------------
+
+@test "install does not write to real .git/hooks/ when _SKIP_PRECOMMIT_INSTALL is set" {
+    # _SKIP_PRECOMMIT_INSTALL is exported in setup() for all tests in this file.
+    # This explicit assertion documents the contract and catches any regression
+    # where setup() stops exporting the bypass.
+    local real_hook="$CORE_DIR/.git/hooks/pre-commit"
+
+    # Snapshot: capture whether hook exists and, if so, its link target or mtime.
+    local before_state
+    if [ -L "$real_hook" ]; then
+        before_state="symlink:$(readlink "$real_hook")"
+    elif [ -f "$real_hook" ]; then
+        before_state="file:$(stat -f '%m' "$real_hook" 2>/dev/null || stat -c '%Y' "$real_hook")"
+    else
+        before_state="absent"
+    fi
+
+    _run_install
+
+    # Snapshot: state after install
+    local after_state
+    if [ -L "$real_hook" ]; then
+        after_state="symlink:$(readlink "$real_hook")"
+    elif [ -f "$real_hook" ]; then
+        after_state="file:$(stat -f '%m' "$real_hook" 2>/dev/null || stat -c '%Y' "$real_hook")"
+    else
+        after_state="absent"
+    fi
+
+    [ "$before_state" = "$after_state" ]
 }

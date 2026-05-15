@@ -2,6 +2,9 @@
 # lib-core-symlinks.sh — symlink management for dotfiles-core.
 # Sourced by install.sh; CORE_DIR and HOME are set by the orchestrator.
 
+# shellcheck source=scripts/_lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
+
 # Remove symlinks in a target directory whose targets no longer exist.
 _clean_stale_symlinks() {
     local dir="$1"
@@ -60,6 +63,47 @@ _link_dir() {
     ln -s "$src" "$dst"
 }
 
+# Install scripts/pre-commit.sh as a symlink at .git/hooks/pre-commit.
+# Skips when .git is a file (submodule worktree — hook management belongs to the
+# parent repo in that case). Idempotent: removes a pre-existing symlink before
+# re-creating it so a re-run after a core_dir path change stays correct.
+# Usage: _install_precommit_hook <core_dir>
+_install_precommit_hook() {
+    local core_dir="$1"
+    local git_entry="$core_dir/.git"
+    local hook_src="$core_dir/scripts/pre-commit.sh"
+    local hook_dst="$core_dir/.git/hooks/pre-commit"
+
+    # Test-isolation bypass: tests/install.bats sets this to prevent writing to
+    # the real .git/hooks/ directory during install.sh integration tests. The
+    # dedicated tests/install-precommit-hook.bats does NOT set this — it tests
+    # this function in proper isolation using a scratch fixture core.
+    if [ -n "${_SKIP_PRECOMMIT_INSTALL:-}" ]; then
+        return 0
+    fi
+
+    # Skip submodule worktrees where .git is a file, not a directory.
+    if [ ! -d "$git_entry" ]; then
+        return 0
+    fi
+
+    mkdir -p "$core_dir/.git/hooks"
+
+    # Remove existing symlink so the link target stays current.
+    # If a regular file exists (husky, lefthook, hand-written hook), back it up
+    # before symlinking — mirrors the _link_file pattern.
+    if [ -L "$hook_dst" ]; then
+        rm "$hook_dst"
+    elif [ -f "$hook_dst" ]; then
+        echo "  WARNING: existing pre-commit hook at $hook_dst — backing up."
+        _backup_collision "$hook_dst"
+    fi
+
+    ln -s "$hook_src" "$hook_dst"
+    chmod +x "$hook_dst"
+    echo "  Installed pre-commit hook -> scripts/pre-commit.sh"
+}
+
 # Create all dotfiles-core symlinks in $HOME.
 # Usage: install_core_symlinks <core_dir>
 install_core_symlinks() {
@@ -91,13 +135,12 @@ install_core_symlinks() {
     _clean_stale_symlinks "$HOME/.claude/skills"
 
     local skill_dir
-    for skill_dir in "$core_dir/.claude/skills/"/*/; do
-        [ -d "$skill_dir" ] || continue
+    while IFS= read -r skill_dir; do
         local dirname
         dirname="$(basename "$skill_dir")"
         _link_dir "$skill_dir" "$HOME/.claude/skills/$dirname"
         echo "  Linked skill: $dirname"
-    done
+    done < <(_iter_core_skill_dirs "$core_dir")
 
     # --- Generated CLAUDE.md and AGENTS.md ---
     # Symlink the core-only rendered views so ~/.claude/CLAUDE.md and

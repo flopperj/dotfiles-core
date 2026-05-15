@@ -52,3 +52,16 @@ _replace_between_sentinels() {
 
     mv "$tmp" "$file"
 }
+
+# Iterate over skill directories inside a core repo.
+# Emits one absolute directory path per line; non-directory entries are skipped.
+#
+# Usage: while IFS= read -r skill_dir; do … done < <(_iter_core_skill_dirs "$core_dir")
+_iter_core_skill_dirs() {
+    local core_dir="$1"
+    local d
+    for d in "$core_dir/.claude/skills"/*/; do
+        [ -d "$d" ] || continue
+        printf '%s\n' "$d"
+    done
+}

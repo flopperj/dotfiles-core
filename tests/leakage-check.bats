@@ -218,3 +218,33 @@ Content here.'
     _check_file "<!-- BEGIN OVERLAY-FRAGMENT: DAST-Orch-fallback -->"
     [ "$status" -ne 0 ]
 }
+
+# ---------------------------------------------------------------------------
+# 10. Consult-instruction allowlist (PROVISIONAL — Step 4)
+#     A line matching the consult-instruction grammar is exempt even when it
+#     contains a denylist token in the section name.
+# ---------------------------------------------------------------------------
+
+@test "consult-instruction grammar line with denylist token is NOT flagged" {
+    # A well-formed consult-instruction. The section name contains DAST-Orch,
+    # which is a denylist token — but the line matches the grammar and must be
+    # exempt. PROVISIONAL: superseded by check-consult-grammar.sh in Cohort 2.
+    _check_file "For Jira fallback, consult \`## Jira fallback (DAST-Orch MCP)\` in \`~/.claude/overlay-context.md\`. If that file is absent, proceed with the primary tool only."
+    [ "$status" -eq 0 ]
+}
+
+@test "prose-form denylist token is still caught even with allowlist active" {
+    # Free prose mentioning a denylist token is NOT a consult-instruction.
+    # The allowlist must not exempt it.
+    _check_file "Use the DAST-Orch MCP server directly for Jira queries."
+    [ "$status" -ne 0 ]
+}
+
+@test "mixed-line conjunction with prose leakage is still caught" {
+    # A line that contains both a consult-instruction and additional prose
+    # referencing a denylist token in free text should still be caught.
+    # The allowlist exempts well-formed consult-instruction lines only; a line
+    # that leaks DAST-Orch outside of a backtick section name is not exempt.
+    _check_file "Use DAST-Orch or consult \`## Jira fallback\` in \`~/.claude/overlay-context.md\`."
+    [ "$status" -ne 0 ]
+}

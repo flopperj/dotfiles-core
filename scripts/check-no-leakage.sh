@@ -15,6 +15,7 @@
 #   .git/                         — version control internals
 #   scripts/leakage-tokens.txt    — canonical token list (defines forbidden words, not a leak)
 #   tests/leakage-check.bats      — test fixture legitimately contains tokens
+#   PROTOCOL.md                   — protocol meta-doc names tokens by design (same reason as leakage-tokens.txt)
 
 set -euo pipefail
 
@@ -35,6 +36,17 @@ if [ "${#TOKENS[@]}" -eq 0 ]; then
     exit 0
 fi
 
+# PROVISIONAL — superseded by check-consult-grammar.sh in Cohort 2.
+# See PROTOCOL.md § "Enforcement evolution" for the migration path.
+#
+# The consult-instruction sub-string is stripped from each line before token
+# scanning. The grammar is: consult `## <section-name>` in `~/.claude/overlay-context.md`
+# Stripping (not line-skipping) ensures free-prose tokens on the same line are
+# still caught. Only the section-name portion — which may contain denylist tokens
+# for legitimate reasons — is removed from consideration.
+# shellcheck disable=SC2016  # sed script — single quotes are intentional; no shell expansion wanted
+CONSULT_INSTRUCTION_SED='s/consult `## [^`]*` in `~\/.claude\/overlay-context.md`//g'
+
 FOUND=0
 
 for token in "${TOKENS[@]}"; do
@@ -53,7 +65,9 @@ for token in "${TOKENS[@]}"; do
         # flagged as "Dyalog APL transfer"). grep -qI '' exits 0 for files with
         # no null bytes (safe to grep as text) and exits 1 for true binaries.
         if grep -qI '' "$file" 2>/dev/null; then
-            matches="$(grep -inE "$pattern" "$file" 2>/dev/null || true)"
+            # Strip consult-instruction sub-strings before token scanning (PROVISIONAL allowlist).
+            matches="$(sed "$CONSULT_INSTRUCTION_SED" "$file" 2>/dev/null \
+                | grep -inE "$pattern" 2>/dev/null || true)"
             if [ -n "$matches" ]; then
                 FOUND=1
                 echo "=== LEAKAGE FOUND in $file ===" >&2
@@ -70,6 +84,7 @@ for token in "${TOKENS[@]}"; do
         -not -path "*/scripts/leakage-tokens.txt" \
         -not -path "*/tests/leakage-check.bats" \
         -not -path "*/tests/handoff-skill.bats" \
+        -not -path "*/PROTOCOL.md" \
         -type f \
         -print0 2>/dev/null)
 done
