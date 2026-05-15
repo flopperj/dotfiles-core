@@ -2,6 +2,9 @@
 # core-check.sh — report symlink health for dotfiles-core install.
 # Sourced by install.sh when --check is passed; CORE_DIR and HOME are set by caller.
 
+# shellcheck source=scripts/_lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
+
 run_core_check() {
     local core_dir="$1"
     local errors=0
@@ -33,8 +36,7 @@ run_core_check() {
     echo ""
     echo "Skills (~/.claude/skills/):"
     local skill_dir
-    for skill_dir in "$core_dir/.claude/skills/"/*/; do
-        [ -d "$skill_dir" ] || continue
+    while IFS= read -r skill_dir; do
         local dirname
         dirname="$(basename "$skill_dir")"
         local link="$HOME/.claude/skills/$dirname"
@@ -47,7 +49,7 @@ run_core_check() {
             echo "  MISSING $dirname"
             errors=$((errors + 1))
         fi
-    done
+    done < <(_iter_core_skill_dirs "$core_dir")
 
     # Check _shared
     echo ""

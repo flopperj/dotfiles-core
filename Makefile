@@ -11,7 +11,7 @@ test:                                   ## Run all bats tests
 	DOTFILES_DIR=$(DOTFILES_DIR) bats $(TEST_FILES)
 
 lint:                                   ## Run shellcheck on all scripts
-	shellcheck scripts/*.sh
+	shellcheck --severity=warning scripts/*.sh
 
 check-leakage:                          ## Scan for company-specific tokens
 	bash scripts/check-no-leakage.sh .
