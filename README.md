@@ -235,6 +235,7 @@ The submodule SHA pin is intentional — your overlay records exactly which vers
 | `/ranger-reviewer` | Staff-level PR review with confidence scoring (Opus-tier) |
 | `/review-context` | Generate a per-project llms.txt for reviewer context |
 | `/scout-reviewer` | PR review with parallel analysis and confidence scoring (Sonnet-tier) |
+| `/self-evaluate` | Self-evaluate the dotfiles repo (overlay or core) for health and engineering quality |
 | `/smart-compact` | Topic-aware /compact — choose what survives the context summary |
 | `/smart-statusline` | Terminal statusline: model, cost, context usage bar |
 | `/swarm-retro` | Analyze swarm runs for misclassifications and improvement opportunities |
