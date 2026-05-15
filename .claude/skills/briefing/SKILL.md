@@ -34,7 +34,7 @@ Run all four Jira queries in parallel using the primary MCP tool. If the primary
 
 **Primary tool:** `mcp__claude_ai_Atlassian__searchJiraIssuesUsingJql`
 
-For company-specific Jira fallback, consult `## Jira fallback (DAST-Orch MCP)` in `~/.claude/overlay-context.md`. If that file is absent, proceed with the primary tool only.
+For company-specific Jira fallback, consult `## Jira fallback` in `~/.claude/overlay-context.md`. If that file is absent, proceed with the primary tool only.
 
 <!-- BEGIN OVERLAY-FRAGMENT: briefing-jira-fallback-tool -->
 <!-- END OVERLAY-FRAGMENT: briefing-jira-fallback-tool -->

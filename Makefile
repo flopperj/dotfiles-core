@@ -5,7 +5,7 @@ DOTFILES_DIR := $(shell realpath .)
 # Discover all *.bats files in tests/ (no LLM tests in core)
 TEST_FILES := $(wildcard tests/*.bats)
 
-all: lint check-leakage test
+all: lint check-leakage check-consult-grammar test
 
 test:                                   ## Run all bats tests
 	DOTFILES_DIR=$(DOTFILES_DIR) bats $(TEST_FILES)
@@ -15,6 +15,9 @@ lint:                                   ## Run shellcheck on all scripts
 
 check-leakage:                          ## Scan for company-specific tokens
 	bash scripts/check-no-leakage.sh .
+
+check-consult-grammar:                  ## Positive grammar check for consult-instructions
+	bash scripts/check-consult-grammar.sh .
 
 lint-agents:                            ## Run agent/skill structural linter
 	bash scripts/lint-agents.sh
