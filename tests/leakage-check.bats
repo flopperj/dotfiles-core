@@ -78,10 +78,6 @@ _check_file() {
     [ "$status" -ne 0 ]
 }
 
-@test "catches 'DAST-Orch' (exact case)" {
-    _check_file "Use DAST-Orch as the fallback MCP."
-    [ "$status" -ne 0 ]
-}
 
 # ---------------------------------------------------------------------------
 # 4. Case-insensitive matching
@@ -102,10 +98,6 @@ _check_file() {
     [ "$status" -ne 0 ]
 }
 
-@test "catches 'DAST-ORCH' (uppercase variant)" {
-    _check_file "DAST-ORCH server"
-    [ "$status" -ne 0 ]
-}
 
 # ---------------------------------------------------------------------------
 # 5. Word-boundary: false positives do NOT trigger
@@ -209,42 +201,16 @@ Content here.'
 }
 
 # ---------------------------------------------------------------------------
-# 5c. Word-boundary: DAST-Orch-fallback sentinel name form is caught
-#     (H2 regression: token list included DAST-Orch; sentinel names like
-#     DAST-Orch-fallback must still match because hyphen is not a word char)
+# 10. D3 — DAST-Orch removed from denylist (Cohort 2)
+#     Grammar check is now primary enforcement; denylist is belt-and-suspenders
+#     for other tokens only. DAST-Orch is no longer forbidden by the denylist.
 # ---------------------------------------------------------------------------
 
-@test "word boundary: 'DAST-Orch-fallback' DOES match 'DAST-Orch' (hyphen is not a word char)" {
-    _check_file "<!-- BEGIN OVERLAY-FRAGMENT: DAST-Orch-fallback -->"
-    [ "$status" -ne 0 ]
-}
-
-# ---------------------------------------------------------------------------
-# 10. Consult-instruction allowlist (PROVISIONAL — Step 4)
-#     A line matching the consult-instruction grammar is exempt even when it
-#     contains a denylist token in the section name.
-# ---------------------------------------------------------------------------
-
-@test "consult-instruction grammar line with denylist token is NOT flagged" {
-    # A well-formed consult-instruction. The section name contains DAST-Orch,
-    # which is a denylist token — but the line matches the grammar and must be
-    # exempt. PROVISIONAL: superseded by check-consult-grammar.sh in Cohort 2.
-    _check_file "For Jira fallback, consult \`## Jira fallback (DAST-Orch MCP)\` in \`~/.claude/overlay-context.md\`. If that file is absent, proceed with the primary tool only."
-    [ "$status" -eq 0 ]
-}
-
-@test "prose-form denylist token is still caught even with allowlist active" {
-    # Free prose mentioning a denylist token is NOT a consult-instruction.
-    # The allowlist must not exempt it.
+@test "DAST-Orch free-prose mention is NOT flagged (removed from denylist in Cohort 2)" {
+    # DAST-Orch was removed from leakage-tokens.txt in Cohort 2.
+    # Grammar check (check-consult-grammar.sh) is now the primary enforcement
+    # for consult-instruction section names. Free-prose DAST-Orch is no longer
+    # a leakage signal for the denylist check.
     _check_file "Use the DAST-Orch MCP server directly for Jira queries."
-    [ "$status" -ne 0 ]
-}
-
-@test "mixed-line conjunction with prose leakage is still caught" {
-    # A line that contains both a consult-instruction and additional prose
-    # referencing a denylist token in free text should still be caught.
-    # The allowlist exempts well-formed consult-instruction lines only; a line
-    # that leaks DAST-Orch outside of a backtick section name is not exempt.
-    _check_file "Use DAST-Orch or consult \`## Jira fallback\` in \`~/.claude/overlay-context.md\`."
-    [ "$status" -ne 0 ]
+    [ "$status" -eq 0 ]
 }

@@ -1,5 +1,5 @@
 ---
-protocol-version: v1
+protocol-version: v2
 ---
 # Consult-Instruction Protocol
 
@@ -61,10 +61,19 @@ Rule: `## <Capability>` (good) vs `## <Provider> MCP server` (bad).
 
 | Current name | Post-Cohort-2 name | Status | Notes |
 |---|---|---|---|
-| `## Jira fallback (DAST-Orch MCP)` | `## Jira fallback` | rename in Cohort 2 | Provider suffix dropped; capability retained |
+| `## Jira fallback (DAST-Orch MCP)` | `## Jira fallback` | renamed in Cohort 2 | Provider suffix dropped; capability retained |
 | `## Jenkins MCP clone URL` | `## Jenkins MCP clone URL` | no change | Already capability-named (the capability is "where to clone Jenkins MCP") |
 
-The machine-readable canonical list lives at `scripts/consult-vocabulary.txt` (added in Cohort 2, Step 9).
+The machine-readable canonical list lives at `scripts/consult-vocabulary.txt`.
+
+**Audit 2026-05-14:** Confirmed these are the only two consult-instruction sections in core. Both capability-named. Command used: `grep -hoE "consult \`## [^\`]+\`" .claude/skills/*/SKILL.md | sort -u`.
+
+**Capability-naming rule:** A section name is capability-named when it describes
+what the consulting skill *decides* or *falls back to*, not which MCP server or
+provider supplies the data. Examples:
+- `## Jira fallback` — correct (capability)
+- `## Jenkins MCP clone URL` — correct (the capability is "where to clone Jenkins MCP"; the URL is the decision output)
+- `## DAST-Orch MCP server` — incorrect (provider name, not capability)
 
 **Shared iteration helper:** `scripts/lib-core-symlinks.sh` and `scripts/core-check.sh`
 both iterate over `.claude/skills/*/` subdirectories. Decision (Step 3): a shared
@@ -85,23 +94,14 @@ structurally weak). For consult-instructions specifically, the section name
 `## Jira fallback (DAST-Orch MCP)` contains `DAST-Orch`, a denylist token, which
 causes false positives.
 
-### Cohort 1 (denylist + allowlist exemption — PROVISIONAL)
+### Cohort 1 (denylist + allowlist exemption — SUPERSEDED)
 
 A PROVISIONAL allowlist exemption was added to `check-no-leakage.sh` (Step 4):
 any line matching the consult-instruction grammar (`consult \`## …\`` in
-`~/.claude/overlay-context.md`) is excluded from token scanning.
+`~/.claude/overlay-context.md`) was excluded from token scanning.
 
-This is a band-aid. The allowlist does not validate that the section name is
-in the controlled vocabulary — it simply stops the false-positive noise while
-Cohort 2 builds positive enforcement. The comment in `check-no-leakage.sh` reads:
-
-```bash
-# PROVISIONAL — superseded by check-consult-grammar.sh in Cohort 2.
-# See PROTOCOL.md § "Enforcement evolution" for the migration path.
-```
-
-The PROVISIONAL allowlist is removed in the same commit that ships Cohort 2's
-grammar check (Step 10).
+This was a band-aid while Cohort 2 built positive enforcement. The allowlist
+and the `DAST-Orch` token have both been removed in Cohort 2.
 
 ### Cohort 2 (positive grammar — canonical)
 
@@ -110,14 +110,16 @@ with positive grammar enforcement for consult-instructions:
 
 - Every consult-instruction in every core SKILL.md must reference a section name
   listed in `scripts/consult-vocabulary.txt`.
-- Any reference to `overlay-context.md` that is not a valid backticked `## Section`
-  form is a grammar violation.
+- Any line with the word `consult` + `overlay-context.md` that is not in the
+  valid backtick form is a grammar violation.
 - Empty vocabulary is a fatal configuration error (exit code 2).
 - Wired into `make all` and `scripts/pre-commit.sh`.
 
-After Cohort 2, the denylist (`leakage-tokens.txt`) may be kept (narrowed, as
-belt-and-suspenders for free-prose leakage) or deleted. The decision is recorded
-at gate D3 during Step 10.
+**D3 decision (Cohort 2):** `leakage-tokens.txt` is kept as belt-and-suspenders
+for free-prose leakage of other company-specific tokens (`mailchimp`, `intuit`,
+`turbotax`, `quickbooks`, `cg-tax`, `build.intuit.com`, `@intuit.com`,
+`@mailchimp.com`). `DAST-Orch` has been removed from the denylist; grammar
+check is its primary enforcement. The PROVISIONAL allowlist sed-pipe is removed.
 
 ## Why denylist is structurally weak
 

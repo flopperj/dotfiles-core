@@ -82,7 +82,7 @@ block the pipeline on a Jira failure.
    - Linked issues (blockers, duplicates, related)
    - Attachments (note URLs for reference)
 
-For company-specific Jira fallback, consult `## Jira fallback (DAST-Orch MCP)` in `~/.claude/overlay-context.md`. If that file is absent, proceed with the primary tool only.
+For company-specific Jira fallback, consult `## Jira fallback` in `~/.claude/overlay-context.md`. If that file is absent, proceed with the primary tool only.
 
 <!-- BEGIN OVERLAY-FRAGMENT: ticket-pickup-jira-fallback -->
 <!-- END OVERLAY-FRAGMENT: ticket-pickup-jira-fallback -->

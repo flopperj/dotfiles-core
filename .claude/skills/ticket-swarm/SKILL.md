@@ -99,7 +99,7 @@ searchJiraIssuesUsingJql(
 )
 ```
 
-For company-specific Jira fallback, consult `## Jira fallback (DAST-Orch MCP)` in `~/.claude/overlay-context.md`. If that file is absent, proceed with the primary tool only.
+For company-specific Jira fallback, consult `## Jira fallback` in `~/.claude/overlay-context.md`. If that file is absent, proceed with the primary tool only.
 
 <!-- BEGIN OVERLAY-FRAGMENT: ticket-swarm-jira-fallback -->
 <!-- END OVERLAY-FRAGMENT: ticket-swarm-jira-fallback -->

@@ -22,8 +22,8 @@ PROTOCOL_FILE="$CORE_DIR/PROTOCOL.md"
     grep -q "^protocol-version:" "$PROTOCOL_FILE"
 }
 
-@test "PROTOCOL.md frontmatter specifies version v1" {
-    grep -q "^protocol-version: v1" "$PROTOCOL_FILE"
+@test "PROTOCOL.md frontmatter specifies version v2" {
+    grep -q "^protocol-version: v2" "$PROTOCOL_FILE"
 }
 
 # ---------------------------------------------------------------------------
