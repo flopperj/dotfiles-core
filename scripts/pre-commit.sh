@@ -14,6 +14,7 @@ set -euo pipefail
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 
 bash "$REPO_ROOT/scripts/check-no-leakage.sh" "$REPO_ROOT"
+bash "$REPO_ROOT/scripts/check-consult-grammar.sh" "$REPO_ROOT"
 
 # Render core-only view of CLAUDE.md and AGENTS.md from fragments.
 # shellcheck source=scripts/lib-overlays.sh

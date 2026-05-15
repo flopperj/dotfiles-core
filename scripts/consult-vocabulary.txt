@@ -1,0 +1,10 @@
+# Controlled vocabulary for consult-instructions in dotfiles-core.
+# Source of truth — every consult-instruction in a core SKILL.md must
+# reference a section name listed here. See PROTOCOL.md for grammar.
+#
+# Format: one "## Section Name" per line. Lines beginning with "#" are comments.
+# Section names must describe the runtime decision the consulting skill makes,
+# not the tool or server that provides the data. See PROTOCOL.md § "Controlled vocabulary".
+
+## Jira fallback
+## Jenkins MCP clone URL
