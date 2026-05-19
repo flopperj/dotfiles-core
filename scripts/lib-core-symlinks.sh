@@ -142,6 +142,21 @@ install_core_symlinks() {
         echo "  Linked skill: $dirname"
     done < <(_iter_core_skill_dirs "$core_dir")
 
+    # --- Hooks ---
+    if [ -d "$core_dir/.claude/hooks" ]; then
+        mkdir -p "$HOME/.claude/hooks"
+        _clean_stale_symlinks "$HOME/.claude/hooks"
+
+        local hook_file
+        for hook_file in "$core_dir/.claude/hooks/"*; do
+            [ -f "$hook_file" ] || continue
+            local hook_name
+            hook_name="$(basename "$hook_file")"
+            _link_file "$hook_file" "$HOME/.claude/hooks/$hook_name"
+            echo "  Linked hook: $hook_name"
+        done
+    fi
+
     # --- Generated CLAUDE.md and AGENTS.md ---
     # Symlink the core-only rendered views so ~/.claude/CLAUDE.md and
     # ~/.claude/AGENTS.md are always up-to-date with the latest fragments.
