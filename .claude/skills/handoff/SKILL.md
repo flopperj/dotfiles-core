@@ -172,11 +172,32 @@ Each rule is a **warning** that surfaces to the user during the write flow, not 
 
 ## G. Read half — session-start auto-trigger
 
-The read half is **not** user-invocable. It runs as part of the session-start ritual, before any user message is processed.
+The read half is **not** user-invocable. It runs at session start (including after `/clear`), before any user message is processed, via the `SessionStart` hook in `~/.claude/settings.json`.
 
 **Trigger:** On every new session, resolve `<project>` and `<task-key>` via the same git convention as the write half (Section A), then check `~/.claude/tasks/<project>/handoff/<task-key>.md`. If present, run the read flow (Section H) and prepend the surfaced result to the first agent response.
 
-The mechanism for hooking session start is the same used by `briefing` and `obligations` — both already run at session start.
+**Implementation:** [`.claude/hooks/handoff-read.py`](../../hooks/handoff-read.py), installed by `install.sh` as a symlink at `~/.claude/hooks/handoff-read.py`. The script reads the JSON hook payload from stdin (for `cwd`), executes the read flow, and prints the Section I surface block to stdout — Claude Code captures stdout as session context.
+
+**Required `~/.claude/settings.json` entry.** Overlays may ship this in their `.claude/settings.json.template` for fresh-install convenience, but `lib-mcp-config.sh` only copies the template when `~/.claude/settings.json` does not already exist, so pre-existing installs (including any overlay's main user) must add the block manually:
+
+```json
+"hooks": {
+  "SessionStart": [
+    {
+      "matcher": "startup|resume|clear",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "~/.claude/hooks/handoff-read.py",
+          "timeout": 5
+        }
+      ]
+    }
+  ]
+}
+```
+
+The matcher deliberately omits `compact` — surfacing a handoff mid-task is intrusive. The script no-ops silently when not in a git repo, on detached HEAD, or when no handoff file exists for the current branch.
 
 ---
 
