@@ -142,6 +142,16 @@ install_core_symlinks() {
         echo "  Linked skill: $dirname"
     done < <(_iter_core_skill_dirs "$core_dir")
 
+    # Top-level skill files (e.g. shared fragments referenced from multiple SKILL.md)
+    local skill_file
+    for skill_file in "$core_dir/.claude/skills/"*.md; do
+        [ -f "$skill_file" ] || continue
+        local skill_filename
+        skill_filename="$(basename "$skill_file")"
+        _link_file "$skill_file" "$HOME/.claude/skills/$skill_filename"
+        echo "  Linked skill file: $skill_filename"
+    done
+
     # --- Hooks ---
     if [ -d "$core_dir/.claude/hooks" ]; then
         mkdir -p "$HOME/.claude/hooks"
