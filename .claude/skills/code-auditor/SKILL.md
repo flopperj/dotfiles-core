@@ -171,6 +171,32 @@ Launch the selected reviewer skill (`/scout-reviewer` or
 context, skip Step 4. Just produce the audit report (Step 3 with option
 `a` auto-selected).
 
+### Routing handoff cues
+
+The downstream reviewer (Scout or Ranger) is responsible for four
+disciplines that the auditor does NOT re-implement:
+
+1. **Verify findings before drafting comments.** The reviewer's
+   confidence score is self-assessment; the reviewer orchestrator traces
+   each finding to the code before drafting. See `../review-discipline-shared.md` § VERIFY-THEN-DRAFT.
+2. **Stress-test findings for senior-staff bar-fit.** After verification,
+   the reviewer orchestrator demotes or drops findings that nick rather
+   than bend the codebase, that the author cannot act on, or whose
+   severity tier is indefensible — surfacing the per-finding verdicts
+   above the gate menu. See `../review-discipline-shared.md` § FINDINGS-CRITIQUE.
+3. **Calibrate tone to author seniority.** Default is "staff-level
+   explanatory"; the reviewer offers peer / minimal alternatives at draft
+   time based on PR author signal. See `../review-discipline-shared.md` § TONE-CALIBRATION.
+4. **Respect GitHub anchor constraints.** Multi-line comments must sit
+   in the diff and in the same hunk; the reviewer pre-flights against
+   `gh pr diff` before posting. See `../review-discipline-shared.md` § ANCHOR-CONSTRAINTS.
+
+When presenting the routing recommendation (Step 3), the auditor can
+reference these by name — e.g. *"Routing to Ranger; he will verify each
+finding, demote any that don't pass the senior-staff bar, and offer a tone choice when drafting."* The
+auditor does not perform the verification, bar-fit critique, tone selection, or anchor
+check itself.
+
 ## Gate rules
 
 - **Never auto-route in gated mode.** Present the recommendation and
