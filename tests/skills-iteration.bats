@@ -87,13 +87,17 @@ teardown() {
 # ---------------------------------------------------------------------------
 
 @test "lib-core-symlinks.sh skills glob has no doubled slash" {
-    # The bug was: "$core_dir/.claude/skills/"/*/ — trailing quote before star
-    # Fixed form:  "$core_dir/.claude/skills"/*/ — quote ends at the path boundary
-    # Also accept the helper pattern (while IFS=... _iter_core_skill_dirs)
+    # The bug was a DIRECTORY glob: "$core_dir/.claude/skills/"/*/ — the trailing
+    # slash inside the quotes, followed by /*/, yielded a doubled slash (.../skills//foo/).
+    # Fixed form:  "$core_dir/.claude/skills"/*/ — quote ends at the path boundary,
+    # or the helper (while IFS=... _iter_core_skill_dirs).
     local symlinks_sh="$CORE_DIR/scripts/lib-core-symlinks.sh"
     [ -f "$symlinks_sh" ]
-    # Reject the old pattern with a trailing slash before the closing quote
-    ! grep -qE '"\$core_dir/\.claude/skills/"' "$symlinks_sh"
+    # Reject only the directory-glob bug shape: the quoted prefix ending in
+    # skills/" immediately followed by a directory glob (/, *, then /). A benign
+    # FILE glob like "$core_dir/.claude/skills/"*.md is correct (single slash,
+    # no doubled separator) and must NOT trip this guard.
+    ! grep -qE '"\$core_dir/\.claude/skills/"/?\*?/' "$symlinks_sh"
 }
 
 # ---------------------------------------------------------------------------
@@ -103,5 +107,7 @@ teardown() {
 @test "core-check.sh skills glob has no doubled slash" {
     local check_sh="$CORE_DIR/scripts/core-check.sh"
     [ -f "$check_sh" ]
-    ! grep -qE '"\$core_dir/\.claude/skills/"' "$check_sh"
+    # Same directory-glob bug shape as the lib-core-symlinks test above; a benign
+    # file glob (skills/"*.md) is correct and must not trip this guard.
+    ! grep -qE '"\$core_dir/\.claude/skills/"/?\*?/' "$check_sh"
 }
