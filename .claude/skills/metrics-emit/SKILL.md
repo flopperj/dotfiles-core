@@ -103,6 +103,30 @@ them. Swarm-retro can use either depending on the question being answered.
 
 ---
 
+### `agent_truncated`
+
+Emitted by **pipeline skills** (aristotle-deconstructor, optimus-planner, cyrus-tdd-engineer, scout-reviewer, ranger-reviewer) when a reasoning subagent's final response is missing the `<<task-complete>>` sentinel — i.e. suspected `maxTurns` truncation. See `~/.claude/_shared/agent-turn-cap-warning.md` for the detection rule and halt/skip behavior.
+
+```json
+{
+  "timestamp": "2026-05-27T10:00:00Z",
+  "event_type": "agent_truncated",
+  "agent": "cyrus-tdd-engineer",
+  "project": "my-repo",
+  "ticket": "PROJ-1234",
+  "data": {
+    "max_turns": 100,
+    "detection": "missing_completion_sentinel",
+    "context": "swarm",
+    "parent_skill": "ticket-swarm"
+  }
+}
+```
+
+`context` values: `swarm` (called from ticket-swarm), `pipeline` (called from a non-swarm skill chain), `standalone` (called directly without a parent skill). `parent_skill` is optional.
+
+---
+
 ### `swarm_complete`
 
 Emitted by **ticket-swarm** after the run log is written.
