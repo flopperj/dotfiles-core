@@ -4,6 +4,20 @@ description: "Batch-process Jira tickets with parallel agent pipelines. Use when
 user-invocable: true
 ---
 
+## Audience for Jira comments
+
+Jira comments posted by this skill are read by everyone on the ticket — PMs, designers,
+QA engineers, junior engineers, and the engineer who's actually doing the work. Write
+them in plain language. Avoid agent-internal vocabulary (no "Optimus", "Cyrus", "Ranger",
+"Scout", "pipeline", "team-lead", "sentinel", "max turns", "cap hit"). Describe **what
+just happened** and **what comes next** in concrete actions, not labels. Keep them short —
+these are Jira comments, not status pages.
+
+Voice: write the assistant's comments in first person (e.g., "Picked this one up.",
+"Had to stop on this one.") — not third person ("Automated assistant has…"). The 🤖
+prefix is the machine-marker; the first-person voice keeps the comments readable as a
+brief status update rather than a system notification.
+
 # Ticket Swarm
 
 Harvest a batch of Jira tickets, triage them in parallel, group by domain
@@ -351,7 +365,7 @@ after pipeline launch. Do not defer this to later steps. Do not skip it.
 For each ticket:
 1. Call `getTransitionsForJiraIssue` to find the "In Progress" transition ID
 2. Call `transitionJiraIssue` with the transition ID
-3. Add a comment: `🤖 Swarm pipeline launched. Complexity: {classification}. Branch: {branch-name}.`
+3. Add a comment: `🤖 Picked this one up. {action_phrase}` — use the same `{action_phrase}` mapping as ticket-pickup Step 7.3 (Simple → going straight to implementing, Medium → planning then implementing, Complex → strategic analysis then planning then implementing). Branch detail is omitted here; it appears on the PR link when work is submitted.
 
 **Verify:** After all transitions, confirm each ticket's status changed by
 checking the response. If a transition fails (no valid transition, Jira
@@ -483,10 +497,10 @@ After all pipelines complete (or are aborted):
 
 For each ticket with a created PR:
 - Transition to "In Review" if available.
-- Add comment: `🤖 Fix submitted: PR #{number}. Branch: {branch-name}. Pipeline: {classification}.`
+- Add comment: `🤖 Submitted PR #{number} for review. The ticket's in In Review — it's yours from here.`
 
 For blocked/aborted tickets:
-- Add comment: `🤖 Swarm pipeline did not complete. Reason: {reason}. Manual investigation needed.`
+- Add comment: `🤖 Had to stop on this one. What happened: {reason}. I've left the ticket in its current state — worth a human look to decide what's next.`
 - Leave status unchanged.
 
 ---
