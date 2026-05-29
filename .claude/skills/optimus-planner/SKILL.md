@@ -341,6 +341,10 @@ Omit empty subsections (e.g., if no blockers, skip that heading).
 
 In autonomous/swarm mode, after writing the plan file, report its path back to the swarm orchestrator so it can be included in the swarm run log for cross-referencing by `/swarm-retro`.
 
+## Truncation handling
+
+When this skill invokes Optimus via the `Agent` tool, the orchestrator must verify the returned response contains the `<<task-complete>>` sentinel before consuming its output. See `~/.claude/_shared/agent-turn-cap-warning.md` for the detection rule, halt/skip behavior, and the `agent_truncated` metric to emit. A truncated Optimus plan is especially dangerous because Cyrus consumes it directly — partial section coverage means partial implementation.
+
 ## Maintenance
 
 If you discover something during this task that would improve this skill, propose the change and ask me to confirm before saving it.

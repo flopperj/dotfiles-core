@@ -220,6 +220,10 @@ waves, and aggregate final results.
 - **Forward swarm flags.** When `swarm_mode` and `execution_mode` are
   present, pass them through to every downstream skill invocation.
 
+## Truncation handling
+
+When this skill invokes Aristotle, Optimus, or Cyrus via the `Agent` tool, the orchestrator must verify the returned response contains the `<<task-complete>>` sentinel before consuming its output. See `~/.claude/_shared/agent-turn-cap-warning.md` for the detection rule, halt/skip behavior, and the `agent_truncated` metric to emit. Aristotle-truncation is especially load-bearing here — a truncated Implementation Handoff section silently corrupts Optimus's brief.
+
 ## Maintenance
 
 If you discover something during this task that would improve this skill,

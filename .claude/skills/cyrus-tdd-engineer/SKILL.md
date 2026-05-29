@@ -320,6 +320,10 @@ Implementation complete. What next?
 - **Enforce boundaries.** You are the orchestrator — if Cyrus drifts into
   planning or reviewing, flag it.
 
+## Truncation handling
+
+When this skill invokes Cyrus via the `Agent` tool, the orchestrator must verify the returned response contains the `<<task-complete>>` sentinel before consuming its output. See `~/.claude/_shared/agent-turn-cap-warning.md` for the detection rule, halt/skip behavior, and the `agent_truncated` metric to emit. Cyrus has the highest `maxTurns` (100) and the most realistic chance of hitting the cap on a complex ticket — sentinel verification is especially important here.
+
 ## Maintenance
 
 If you discover something during this task that would improve this skill,
