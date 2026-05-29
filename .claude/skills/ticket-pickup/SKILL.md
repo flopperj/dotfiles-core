@@ -5,6 +5,20 @@ user-invocable: true
 # parity-ignore: work on PROJ-1234
 ---
 
+## Audience for Jira comments
+
+Jira comments posted by this skill are read by everyone on the ticket — PMs, designers,
+QA engineers, junior engineers, and the engineer who's actually doing the work. Write
+them in plain language. Avoid agent-internal vocabulary (no "Optimus", "Cyrus", "Ranger",
+"Scout", "pipeline", "team-lead", "sentinel", "max turns", "cap hit"). Describe **what
+just happened** and **what comes next** in concrete actions, not labels. Keep them short —
+these are Jira comments, not status pages.
+
+Voice: write the assistant's comments in first person (e.g., "Picked this one up.",
+"Had to stop on this one.") — not third person ("Automated assistant has…"). The 🤖
+prefix is the machine-marker; the first-person voice keeps the comments readable as a
+brief status update rather than a system notification.
+
 # Ticket Pickup
 
 Fetch a single Jira ticket, enrich it with codebase context, classify
@@ -157,7 +171,7 @@ If the user picks `swarm` (or autonomous mode auto-selects it):
    provided child tickets directly.
 3. Transition the parent Story to "In Progress" if available.
 4. Add a comment to the parent Story:
-   `🤖 Story decomposed into swarm. Sub-tickets being processed: {list}.`
+   `🤖 Starting on this Story's sub-tickets in parallel: {list}. Each one will post its own updates as it goes.`
 
 All Jira operations are best-effort.
 
@@ -416,7 +430,11 @@ launching the pipeline. Do not defer this. Do not skip it.
 
 1. Call `getTransitionsForJiraIssue` to find the "In Progress" transition ID.
 2. Call `transitionJiraIssue` with the transition ID.
-3. Add a comment: `🤖 Picked up by agent pipeline. Complexity: {classification}. Pipeline: {pipeline}.`
+3. Add a comment: `🤖 Picked this one up. {action_phrase}` — where `{action_phrase}` is one of:
+   - For Simple tickets: `Going straight to implementing.`
+   - For Medium tickets: `Planning the work first, then implementing.`
+   - For Complex tickets: `Doing some strategic analysis first, then planning, then implementing.`
+   Use the phrase matching the classification from Step 4. If classification is uncertain, omit the action phrase entirely (the comment still reads sanely as "🤖 Picked this one up.").
 
 **Verify:** Confirm the transition succeeded by checking the response.
 If it fails (no valid transition, Jira unavailable), log the failure
