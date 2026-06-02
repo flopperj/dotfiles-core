@@ -4,7 +4,7 @@ description: "Use this agent when new code needs to be written using Test-Driven
 model: sonnet
 color: cyan
 memory: user
-maxTurns: 100
+maxTurns: 300
 ---
 
 > **Skill**: [`/cyrus-tdd-engineer`](../skills/cyrus-tdd-engineer/SKILL.md)
