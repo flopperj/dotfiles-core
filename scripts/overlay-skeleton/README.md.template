@@ -1,0 +1,9 @@
+# {{OVERLAY_NAME}}
+
+A dotfiles overlay on [dotfiles-core]({{CORE_URL}}),
+consumed as a git submodule at `.claude/dotfiles-core/`.
+
+## Install
+
+    git clone --recurse-submodules <this-repo-url> ~/dotfiles
+    cd ~/dotfiles && bash install.sh

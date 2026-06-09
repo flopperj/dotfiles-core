@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Overlay-specific install steps run after dotfiles-core's installer.
+# Example: Cursor mirroring, MCP server registration, machine detection.
+# Sourced by install.sh; harmless if empty.

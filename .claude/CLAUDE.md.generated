@@ -46,6 +46,7 @@ These skills are invoked when the user's request matches a trigger phrase (not a
 | "analyze my last swarm", "review swarm results", "what went wrong in the swarm", "improve swarm accuracy" | `/swarm-retro` | Analyze swarm runs for misclassifications and improvement opportunities |
 | "update my dotfiles", "sync dotfiles", "pull latest dotfiles", "are my dotfiles up to date" | `/dotfiles-sync` | Check for dotfiles updates, preview changes, pull and re-run install.sh |
 | "check my setup", "is everything working", "run diagnostics", "validate my dotfiles" | `/doctor` | Diagnostic health check — validates symlinks, CLI tools, MCP, plugins, agent memory |
+| "create an overlay", "scaffold an overlay", "set up a new overlay", "add an overlay skill", "configure my overlay", "add an overlay fragment" | `/overlay-init` | Scaffold a new dotfiles-core overlay or extend an existing one (add skill / fragment / context section) |
 | "briefing", "sitrep", "what needs my attention", "catch me up", "morning briefing", "show me my dashboard", "what should I work on", "what's my status" | `/briefing` | Session-start situation report — Jira sprint status, open PRs, CI, suggested actions |
 | "remind me", "watch this", "nudge me", "track this", "show my obligations", "cancel obligation" | `/obligations` | Create, view, cancel, and evaluate cross-session obligations |
 | "create a ticket", "file a bug" | `/create-jira-ticket` | Create Jira tickets (Stories, Bugs, Tasks, Epics) via MCP |
