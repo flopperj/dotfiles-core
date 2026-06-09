@@ -51,7 +51,11 @@ setup() {
     git config --global protocol.file.allow always
 
     BARE="$SCRATCH/fake-core.git"
-    git init --bare "$BARE" -q
+    # -b main pins HEAD to match the push target (HEAD:main below); without it,
+    # git uses init.defaultBranch which defaults to "master" on Ubuntu CI,
+    # making the bare repo's HEAD point at an empty branch and causing
+    # "fatal: unable to checkout submodule" when git submodule add runs.
+    git init --bare "$BARE" -q -b main
     local work="$SCRATCH/seed"
     git clone "$BARE" "$work" -q
     echo "core" > "$work/marker"
