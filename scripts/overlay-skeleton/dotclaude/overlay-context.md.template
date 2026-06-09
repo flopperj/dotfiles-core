@@ -1,0 +1,4 @@
+# Overlay context
+
+Runtime context that core skills read when operating in this overlay.
+Add sections with: /overlay-init add-context <Section>
