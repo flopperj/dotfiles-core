@@ -36,7 +36,11 @@ fi
 
 # Read section entries only: lines that start with "## " (two hashes + space).
 # Comment lines (single # followed by space or end of line) are skipped.
-mapfile -t VOCAB_SECTIONS < <(grep '^## ' "$VOCAB_FILE")
+# Note: avoid `mapfile`/`readarray` (bash 4+); this repo targets macOS bash 3.2.
+VOCAB_SECTIONS=()
+while IFS= read -r _line; do
+    VOCAB_SECTIONS+=("$_line")
+done < <(grep '^## ' "$VOCAB_FILE")
 
 if [ "${#VOCAB_SECTIONS[@]}" -eq 0 ]; then
     echo "ERROR: vocabulary file is empty (no section entries found): $VOCAB_FILE" >&2
