@@ -29,7 +29,12 @@ if [ ! -f "$TOKENS_FILE" ]; then
 fi
 
 # Build a list of tokens from the file, skipping blank lines and comments.
-mapfile -t TOKENS < <(grep -v '^\s*#' "$TOKENS_FILE" | grep -v '^\s*$')
+# Note: avoid `mapfile`/`readarray` — they require bash 4+, but this repo
+# targets macOS's stock bash 3.2. A while-read loop is portable.
+TOKENS=()
+while IFS= read -r _line; do
+    TOKENS+=("$_line")
+done < <(grep -v '^\s*#' "$TOKENS_FILE" | grep -v '^\s*$')
 
 if [ "${#TOKENS[@]}" -eq 0 ]; then
     echo "WARNING: leakage-tokens.txt is empty; nothing to check." >&2
