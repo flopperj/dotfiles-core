@@ -2,6 +2,18 @@
 
 > **How to update:** The pre-commit hook (`scripts/pre-commit.sh`) is auto-installed by `install.sh`. It runs a fast leakage check (`scripts/check-no-leakage.sh`) and re-renders the generated `CLAUDE.md.generated` and `AGENTS.md.generated` files on every commit. Full test/lint suite (`make all`) runs in CI. If you bypass the hook or work in a context where hooks cannot run, keep this file current manually. Each release heading links to the diff on the public mirror.
 
+## v1.10.0 — 2026-06-09 (performance-review)
+
+### Added
+
+- `/performance-review` skill (`.claude/skills/performance-review/SKILL.md`) — a company-agnostic engine that drafts an honest, evidence-backed performance self-review into a Google Doc with every Jira ticket / PR / repo hyperlinked. Two modes (year-end retrospective verdict; mid-year forward-looking checkpoint) and calibrates the rating recommendation to the user's role/level and stated audience. Reads company specifics (fiscal calendar, Jira cloudId, GitHub host, template doc, rating ladder) from `~/.claude/performance-review.yaml`, with built-in defaults if absent — same core/overlay split as `policies.yaml` for `/briefing`.
+- `references/honesty-bar.md` — the eight rules (verify every ticket, shipped-vs-built language, honest metrics, audience-altitude jargon stripping, initiative-vs-ownership, level-calibrated self-rating, promotion angle, section consistency) plus the pre-submit audit checklist that make a self-review survive calibration scrutiny.
+- `references/evidence-engine.md`, `references/google-docs-linking.md`, `references/config-defaults.md` — the exact Jira/GitHub gathering commands, the Docs-API run-coalescing / link-bleed gotchas, and the YAML schema with graceful fallbacks.
+
+### Fixed
+
+- `scripts/check-no-leakage.sh`, `scripts/check-consult-grammar.sh` — replaced `mapfile` (a bash 4+ builtin) with portable `while-read` loops. `mapfile` crashed under the repo's target macOS stock bash 3.2, which blocked every commit since both hooks run from `scripts/pre-commit.sh`.
+
 ## v1.9.0 — 2026-06-09 (overlay tooling)
 
 ### Added
