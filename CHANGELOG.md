@@ -2,7 +2,7 @@
 
 > **How to update:** The pre-commit hook (`scripts/pre-commit.sh`) is auto-installed by `install.sh`. It runs a fast leakage check (`scripts/check-no-leakage.sh`) and re-renders the generated `CLAUDE.md.generated` and `AGENTS.md.generated` files on every commit. Full test/lint suite (`make all`) runs in CI. If you bypass the hook or work in a context where hooks cannot run, keep this file current manually. Each release heading links to the diff on the public mirror.
 
-## Unreleased — v1.9.0 (overlay tooling)
+## v1.9.0 — 2026-06-09 (overlay tooling)
 
 ### Added
 
