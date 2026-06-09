@@ -225,8 +225,8 @@ EOF
     [ "$status" -eq 0 ]
 }
 
-@test "apply_manifest: missing manifest file exits non-zero" {
+@test "apply_manifest: missing manifest file is an optional no-op (exit 0)" {
     _load_lib
     run apply_manifest "$SCRATCH/no-manifest.yaml"
-    [ "$status" -ne 0 ]
+    [ "$status" -eq 0 ]
 }
