@@ -138,7 +138,34 @@ Universal improvements land in core. Overlays adopt them via explicit submodule 
 
 An overlay is your personal or company-specific repo that consumes `dotfiles-core` as a git submodule and adds whatever else you need.
 
-### One-time setup
+### One-time setup — primary path (recommended)
+
+Run `/overlay-init` in Claude Code, or invoke the engine directly:
+
+```bash
+bash ~/.claude/dotfiles-core/scripts/new-overlay.sh ~/dotfiles [overlay-name] [--core-url <url>]
+```
+
+The engine creates the full skeleton (including `install.sh`, `.claude/overlay-fragments.yaml`, `.claude/overlay-context.md`, `.gitignore`, `README.md`, and `scripts/install-overlay.sh`), wires `dotfiles-core` as a git submodule at `.claude/dotfiles-core/`, runs `git init`, stages everything (no commit), and runs `bash install.sh --check` as a smoke test.
+
+Flags:
+- `overlay-name` (optional second positional arg) — defaults to the basename of the target directory.
+- `--force` — allow scaffolding into a non-empty target (overwrites existing skeleton files).
+- `--core-url <url>` — override the submodule URL. **Required** when the `dotfiles-core` origin is a local path (the engine refuses to bake a local path into `.gitmodules`).
+
+After the engine finishes, review the staged skeleton, then commit and push:
+
+```bash
+cd ~/dotfiles
+git remote add origin https://github.com/<you>/<your-overlay>.git
+git commit -m "Initial overlay setup"
+git push -u origin main
+bash install.sh
+```
+
+### One-time setup — manual fallback
+
+If you prefer to wire things by hand:
 
 1. **Create a new repo** on your GitHub (private or public — your call). Clone it locally:
 
@@ -153,26 +180,14 @@ An overlay is your personal or company-specific repo that consumes `dotfiles-cor
    git submodule add <repo-url> .claude/dotfiles-core
    ```
 
-3. **Author a thin `install.sh` orchestrator** that delegates to core, then runs your overlay-specific steps:
+3. **Copy the `install.sh` orchestrator** from the shipped skeleton fixture (strip the `.template` suffix):
 
    ```bash
-   cat > install.sh <<'EOF'
-   #!/usr/bin/env bash
-   set -euo pipefail
-   DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-   # 1. Run dotfiles-core installer (universal skills, agents, _shared/)
-   bash "$DOTFILES_DIR/.claude/dotfiles-core/install.sh" "$@"
-
-   # 2. Run your overlay-specific install steps
-   if [ -f "$DOTFILES_DIR/scripts/install-overlay.sh" ]; then
-     source "$DOTFILES_DIR/scripts/install-overlay.sh"
-   fi
-
-   echo "Done."
-   EOF
+   cp .claude/dotfiles-core/scripts/overlay-skeleton/install.sh.template install.sh
    chmod +x install.sh
    ```
+
+   The fixture is the single source of truth for the orchestrator — copying it avoids drift between documentation and the actual file.
 
 4. **Add overlay-specific content** alongside the submodule. Examples:
    - `.aliases.local` — shell aliases for your environment
@@ -231,6 +246,7 @@ The submodule SHA pin is intentional — your overlay records exactly which vers
 | `/metrics-emit` | Library skill — structured metrics event schema for pipeline skills |
 | `/obligations` | Cross-session reminders: create, view, cancel, and evaluate |
 | `/optimus-planner` | Detailed execution plan before implementation begins |
+| `/overlay-init` | Scaffold a new overlay or extend an existing one (add skill / fragment / context section) |
 | `/pr-create-from-commits` | Create a PR from recent commits with template auto-detection |
 | `/ranger-reviewer` | Staff-level PR review with confidence scoring (Opus-tier) |
 | `/review-context` | Generate a per-project llms.txt for reviewer context |

@@ -129,9 +129,11 @@ apply_overlay_fragment() {
 apply_manifest() {
     local manifest="$1"
 
+    # Absent manifest is an optional no-op — symmetric with concat_fragments'
+    # optional overlay_dir contract. A present-but-malformed manifest, or a
+    # declared fragment whose source is missing, still errors below.
     if [ ! -f "$manifest" ]; then
-        echo "apply_manifest: manifest not found: $manifest" >&2
-        return 1
+        return 0
     fi
 
     # Parse YAML with awk. Only handles the simple list schema above.
