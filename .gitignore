@@ -48,3 +48,6 @@ yarn-error.log*
 # Test artifacts
 /tmp/
 *.tmp
+
+# Claude Code runtime artifacts
+.claude/scheduled_tasks.lock
