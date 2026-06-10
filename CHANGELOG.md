@@ -2,6 +2,21 @@
 
 > **How to update:** The pre-commit hook (`scripts/pre-commit.sh`) is auto-installed by `install.sh`. It runs a fast leakage check (`scripts/check-no-leakage.sh`) and re-renders the generated `CLAUDE.md.generated` and `AGENTS.md.generated` files on every commit. Full test/lint suite (`make all`) runs in CI. If you bypass the hook or work in a context where hooks cannot run, keep this file current manually. Each release heading links to the diff on the public mirror.
 
+## v1.11.0 — 2026-06-10 (review heuristics)
+
+### Added
+
+- `.claude/skills/code-auditor/references/review-heuristics.md` — canonical, narrowly-scoped reference for a few test/review heuristics shared by Scout, Ranger, and Cyrus: the four lies of a green diff (test asserts a mock was called not the result; dead code wired in nowhere; placeholder behind a type contract; type/contract error the happy-mock hides), the "test only code you own" filter, scope-feedback-to-the-diff, mechanical-invariant enforcement, and re-evaluating harness complexity on model upgrades. Distilled from Anthropic/OpenAI/Huntley harness research (via the `crodrigues3/harness` evaluator) and re-expressed for this kit's stack and idiom; provenance noted in the doc header.
+
+### Changed
+
+- `.claude/agents/ranger-reviewer.md`, `.claude/agents/scout-reviewer.md` — the Testing checklist now carries a one-line-per-archetype summary of the four lies of a green diff, framed as **correctness** findings (so they survive confidence filtering rather than being dropped as coverage nits), each pointing at the canonical reference.
+- `.claude/agents/cyrus-tdd-engineer.md` — new "Test Only Code You Own" section after the Mocking Decision, reconciled with the 80% coverage threshold (wrapper pass-through lines don't earn their keep), cross-linked to the mocking tree, self-verification checklist, and the canonical reference.
+- `.claude/skills/code-auditor/SKILL.md` — routing-handoff section now points reviewers at the shared `review-heuristics.md` (the auditor routes, it does not apply them).
+- `.claude/agents/aristotle-deconstructor.md`, `.claude/agents/optimus-planner.md` — pinned `model: claude-fable-5` (was the `opus` alias). Fable 5 is positioned for "the hardest and longest-running tasks," which fits the two deepest-reasoning, least-latency-sensitive agents: first-principles deconstruction (Aristotle) and execution planning (Optimus), where plan quality gates everything downstream. These are explicit pins, not aliases, because Fable is not an `opus`/`sonnet` alias target — the accepted tradeoff is that these two no longer auto-upgrade and must be re-pointed manually on future model releases. Ranger, Cyrus, and Scout stay on their `opus`/`sonnet` aliases.
+- `.claude/_shared/model-tiers.md` — refreshed the stale "Expected alias resolution" block (was dated 2026-04-20, `opus → claude-opus-4-7`) to 2026-06-10 reality verified against the `/model` picker: `opus → claude-opus-4-8`, `sonnet → claude-sonnet-4-6`, `haiku → claude-haiku-4-5`. Moved Aristotle and Optimus to a pinned `claude-fable-5` tier in the assignment table with rationale + an explicit pin-tradeoff note (auto-upgrade lost, revisit each release), and documented Fable 5 under "Non-aliased tiers" as a selectable tier reached only by pin or session override. No Mythos tier exists in the picker; none was added.
+- `.claude/skills/doctor/SKILL.md` — Step 6c no longer hardcodes a model version (it pointed at `claude-opus-4-7`) and now understands pinned-ID tiers: it validates aliased agents against the alias and pinned agents against the exact ID the doc marks `(pinned)`, treating a matching pin as intentional rather than drift.
+
 ## v1.10.0 — 2026-06-09 (performance-review)
 
 ### Added
