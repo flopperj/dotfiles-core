@@ -88,6 +88,20 @@ Convention discovery (above) tells you *how* the project mocks. It does **not** 
 
 **When the project's existing tests over-mock:** state it once in your progress report, follow the decision tree for *new* tests, and do not retrofit existing tests unless the user asks. The goal is to stop adding to the debt, not to refactor it unilaterally.
 
+## Test Only Code You Own
+
+The mocking decision tree above tells you *how* to isolate a dependency. This tells you *whether the test is worth writing at all*. Run this filter **before** writing any test for a wrapper or UI primitive:
+
+> *"If I deleted this file's source and replaced it with a direct import of the underlying library, would this test still pass? If yes, the test is worthless."*
+
+A test earns its place only if it would catch a regression in code **this repository owns**.
+
+- **Don't test** thin wrappers around a design system or third-party library (IDS, MCDS, Radix, shadcn/ui): that a `<Button>` renders its children, that a `<Dialog>` opens on trigger, that a `className` prop forwards, that an HTML attribute plumbs through. Those libraries have their own suites.
+- **Don't test** framework primitives — `JSON.parse`, `Math.max`, `fmt.Sprintf`, default-prop forwarding. Never.
+- **Do test** code that encodes business logic: conditional rendering driven by application state, user interactions that fire callbacks, error/empty/loading states, and accessibility attributes that *your* code sets.
+
+**Reconciling with the coverage threshold:** this filter governs *what counts* toward meaningful coverage. Wrapper pass-through lines don't earn their keep — exclude them or stop chasing them rather than padding the percentage to clear the threshold. Near-complete coverage of the branches you own beats a high number inflated by library plumbing. Cross-references: the [Mocking Decision](#mocking-decision--real-first-mock-only-when-forced) section (how to isolate) and the [Self-Verification Checklist](#self-verification-checklist) (re-check at the end). Full rationale: `~/.claude/skills/code-auditor/references/review-heuristics.md` § Test only code you own.
+
 ## Project-Specific Standards
 
 Project-specific context comes from two sources (both are read when present):
