@@ -161,6 +161,7 @@ Apply these universal criteria plus any project-specific criteria from the proje
 - New code has corresponding tests following project conventions
 - Tests cover both happy paths and error paths
 - Test framework and patterns match the project's existing tests
+- **The four lies of a green diff** — score these as **correctness** findings, not coverage nits, so they clear the ≥80 filter: (1) test asserts a mock *was called* but never the actual result; (2) dead code — new symbol tested in isolation, no call site wires it in (grep call sites); (3) placeholder behind an interface (`pass` / `return null` / `throw new Error('TODO')`) satisfying a type contract while doing nothing; (4) mock always supplies a well-formed value, but a production path passes `undefined`/wrong shape and throws. Full catalog + catch-it moves: `~/.claude/skills/code-auditor/references/review-heuristics.md` § The four lies of a green diff.
 
 #### Git & PR Hygiene
 - Commit messages are clear and follow project conventions
