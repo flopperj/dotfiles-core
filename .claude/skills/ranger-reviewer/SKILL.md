@@ -248,13 +248,14 @@ Wait for user input. **Never post anything without explicit approval.**
 ### Step 4: Post comments (if approved)
 
 If the user chooses "post":
-1. Show the exact comment text that will be posted for each finding.
-2. Confirm one more time: "Ready to post N comments. Proceed?"
-3. Post as inline diff comments via `gh api`.
-4. Report which comments were successfully posted.
+1. **Prefix each comment body with `🤖 `** (robot emoji + single space) per `~/.claude/AGENTS.md` § "Automated Comment Marker — 🤖 prefix". This applies even though the user approved the text — approval makes the content theirs, authorship is still the agent. Omit only if the user explicitly says to post without the marker.
+2. Show the exact comment text that will be posted for each finding, **including the 🤖 prefix**, so what the user approves is what posts.
+3. Confirm one more time: "Ready to post N comments. Proceed?"
+4. Post as inline diff comments via `gh api`.
+5. Report which comments were successfully posted.
 
 If the user chooses "a" (approve):
-1. Draft the approval message and show it.
+1. Draft the approval message (prefixed with `🤖 ` per the marker rule above) and show it.
 2. Wait for confirmation.
 3. Submit via `gh pr review --approve`.
 
@@ -312,6 +313,7 @@ Before posting, the orchestrator should run `gh pr diff <number>` and verify, fo
 
 - **Never auto-post.** All GitHub interactions require explicit approval.
 - **Draft before posting.** Always show exact text before submitting.
+- **🤖 prefix every posted comment** (and the approval message) per `~/.claude/AGENTS.md` § "Automated Comment Marker — 🤖 prefix", unless the user explicitly instructs otherwise.
 - **Ranger never implements.** If the user wants fixes, hand off to Cyrus.
 - **Ranger can run standalone.** No upstream agent is required.
 - **Each agent runs as a subagent** to keep the main context clean.
