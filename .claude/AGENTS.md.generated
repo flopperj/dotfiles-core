@@ -180,6 +180,22 @@ When posting inline review comments to GitHub PRs via the API (`pulls/{number}/r
 - PR-level notes (semver labels, CI status, general observations) go in the review `body`, not as inline comments on arbitrary files.
 - This applies to all agents: Ranger, Scout, code-auditor, and any manual `gh api` review calls.
 
+## Automated Comment Marker — 🤖 prefix
+
+Every comment an agent posts on my behalf — **Jira and GitHub alike** — is prefixed with the 🤖 robot emoji so the reader can tell at a glance that a machine authored it. This holds even when I approved the exact text (e.g. a Scout/Ranger PR comment I confirmed at the draft gate): approval makes the *content* mine, but the *authorship* is still the agent, and the marker reflects that.
+
+**The rule:** any comment body an agent submits to an external system (Jira issue comments, GitHub PR review comments, GitHub inline/diff comments, GitHub general PR comments, GitHub issue comments) **must begin with `🤖 `** — the emoji followed by a single space, before the comment text.
+
+**Scope — what this covers:**
+
+- Autonomous status pings (`/ticket-pickup`, `/ticket-swarm` Jira updates) — already do this; the marker is now canonical here.
+- Approval-gated PR comments (`/scout-reviewer`, `/ranger-reviewer`, `/code-auditor`) — the draft I approve and the posted text both carry the prefix. Show the 🤖 in the draft preview so what I approve is what posts.
+- Any manual `gh api` / `gh pr comment` / Jira-MCP comment an agent issues during a task.
+
+**The one carve-out — "unless instructed":** if I explicitly tell the agent to post in my own voice without the marker (e.g. "post this comment as me, no robot prefix"), omit it. The instruction must be explicit; the default is always to include 🤖.
+
+**What this does NOT cover:** commit messages, PR titles, PR *bodies/descriptions* (those follow the separate Co-Authored-By / "Generated with Claude Code" conventions), and Slack posts (those follow the Slack-PR-posting emoji conventions). This rule is specifically about *comments* on issues and pull requests.
+
 ---
 
 

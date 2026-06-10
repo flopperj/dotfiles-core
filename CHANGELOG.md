@@ -2,6 +2,18 @@
 
 > **How to update:** The pre-commit hook (`scripts/pre-commit.sh`) is auto-installed by `install.sh`. It runs a fast leakage check (`scripts/check-no-leakage.sh`) and re-renders the generated `CLAUDE.md.generated` and `AGENTS.md.generated` files on every commit. Full test/lint suite (`make all`) runs in CI. If you bypass the hook or work in a context where hooks cannot run, keep this file current manually. Each release heading links to the diff on the public mirror.
 
+## v1.12.0 — 2026-06-10 (automated comment marker)
+
+### Added
+
+- `_shared/agents-md/20-task-orchestration.md` § "Automated Comment Marker — 🤖 prefix" — a canonical global rule: every comment an agent posts on the user's behalf (Jira issue comments, GitHub PR review/inline/general comments, GitHub issue comments) is prefixed with `🤖 `, even when the user approved the exact text — approval makes the content theirs, authorship is still the agent. One carve-out: omit only on explicit user instruction ("post as me, no robot prefix"). Explicitly scoped to *comments* — commit messages, PR titles, PR bodies, and Slack posts follow their own separate conventions. Replaces the previous state where the 🤖 marker was sprinkled only into the example comment strings of `ticket-pickup`/`ticket-swarm` (Jira-only, unenforced).
+- `tests/automated-comment-marker.bats` (13 cases) — guards the canonical rule's presence in the fragment + generated AGENTS.md, its Jira/GitHub coverage and "unless instructed" carve-out, that all six posting surfaces (ticket-pickup, ticket-swarm, scout/ranger skills, scout/ranger agents) reference it, and that the autonomous Jira pings still carry the inline prefix.
+
+### Changed
+
+- `.claude/skills/scout-reviewer/SKILL.md`, `.claude/skills/ranger-reviewer/SKILL.md`, `.claude/agents/scout-reviewer.md`, `.claude/agents/ranger-reviewer.md` — the comment-posting steps and gate rules now require the `🤖 ` prefix on every posted PR comment and approval message (visible in the draft the user approves), citing the canonical AGENTS.md rule. Previously these GitHub paths had no marker at all.
+- `.claude/skills/ticket-pickup/SKILL.md`, `.claude/skills/ticket-swarm/SKILL.md` — the inline 🤖 voice note now points at the canonical AGENTS.md rule as the source of the requirement, rather than implying it's a skill-local convention.
+
 ## v1.11.0 — 2026-06-10 (review heuristics)
 
 ### Added
