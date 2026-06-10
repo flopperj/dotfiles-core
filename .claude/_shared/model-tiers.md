@@ -32,7 +32,7 @@ Some models are selectable in `/model` but are **not** what the `opus`/`sonnet`/
 - **Portability** — agent files work across Claude Code versions that may not have the latest model available.
 - **Drift signal** — centralizing the expected mapping in one place (this file + `/doctor`) means a silent regression is catchable, not invisible.
 
-The cost is that a specific model ID cannot be guaranteed per invocation. That cost is acceptable because every invocation inherits whatever Anthropic currently ships as the tier's latest — which is the direction we want anyway.
+The cost is that a specific model ID cannot be guaranteed per invocation. That cost is acceptable for most agents because every invocation inherits whatever Anthropic currently ships as the tier's latest — which is the direction we want anyway. The exception is when reaching a non-aliased tier is worth giving up auto-upgrade for: Aristotle and Optimus accept that opposite tradeoff with explicit `claude-fable-5` pins (see the assignment table, the pin-tradeoff note, and [Non-aliased tiers](#non-aliased-tiers)).
 
 ## When to revisit
 
