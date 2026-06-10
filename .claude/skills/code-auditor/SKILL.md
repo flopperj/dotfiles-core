@@ -197,6 +197,12 @@ finding, demote any that don't pass the senior-staff bar, and offer a tone choic
 auditor does not perform the verification, bar-fit critique, tone selection, or anchor
 check itself.
 
+Both reviewers also share a small set of test/review heuristics — the four
+lies of a green diff, "test only code you own", and scope-feedback-to-the-diff —
+documented once in [`references/review-heuristics.md`](references/review-heuristics.md).
+The auditor does not apply them (it routes, it does not review); the reference is
+the canonical source the reviewers and Cyrus cite.
+
 ## Gate rules
 
 - **Never auto-route in gated mode.** Present the recommendation and

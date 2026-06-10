@@ -107,16 +107,16 @@ If no `mcpServers.jenkins-mcp` entry exists in `~/.claude.json`:
 
 ### Step 6c — Agent model tier resolution
 
-Agents use the `opus` and `sonnet` aliases in their `model:` frontmatter rather than pinned model IDs. Tier intent and expected alias resolution live in `<dotfiles>/.claude/_shared/model-tiers.md` — the source of truth.
+Most agents use the `opus` and `sonnet` aliases in their `model:` frontmatter; a few are intentionally pinned to a raw model ID to reach a non-aliased tier (e.g. `claude-fable-5`). Tier intent, expected alias resolution, and which agents are pinned all live in `<dotfiles>/.claude/_shared/model-tiers.md` — the source of truth.
 
 Check:
-1. Read `<dotfiles>/.claude/_shared/model-tiers.md` and extract the expected alias resolution table (the `opus → claude-opus-4-7`, `sonnet → claude-sonnet-4-6` lines).
-2. For each agent file in `<dotfiles>/.claude/agents/*.md`, read the `model:` frontmatter field and confirm it matches the tier assigned to that agent in the tiers doc.
-3. If an agent's frontmatter tier does not match the documented tier, report: `WARN: {agent} declares model: {actual} but model-tiers.md expects {expected}`.
+1. Read `<dotfiles>/.claude/_shared/model-tiers.md` and extract both the agent tier table and the expected alias resolution block (the `opus → claude-opus-…`, `sonnet → claude-sonnet-…` lines). Use whatever IDs, pins, and date the doc currently states — it is the source of truth; do not hardcode a version here.
+2. For each agent file in `<dotfiles>/.claude/agents/*.md`, read the `model:` frontmatter field and confirm it matches the tier the doc assigns that agent — an **alias** (`opus`/`sonnet`/`haiku`) for aliased agents, or the **exact pinned ID** for agents the doc marks `(pinned)`.
+3. If an agent's frontmatter does not match the documented tier, report: `WARN: {agent} declares model: {actual} but model-tiers.md expects {expected}`. A pinned ID that matches the doc's pin is NOT drift — do not warn on it.
 4. Check `~/.claude/settings.json` and the `ANTHROPIC_MODEL` env var for any top-level `model` override. If present, report: `INFO: model override detected: {source}={value}`.
 5. Alias-to-model resolution cannot be probed without an API call. Surface the expected mapping so the user can verify manually via `/model`.
 
-Report: `INFO: Agent model tiers validated against _shared/model-tiers.md. Expected: opus → claude-opus-4-7, sonnet → claude-sonnet-4-6. Verify with /model if unsure.`
+Report: `INFO: Agent model tiers validated against _shared/model-tiers.md. Expected: <the alias→model mappings as stated in that doc>. Verify with /model if unsure.`
 
 ### Step 7 — Submodule health (if submodule present)
 
