@@ -162,6 +162,7 @@ Apply these universal criteria plus any project-specific criteria from the proje
 - New code has corresponding tests following project conventions
 - Tests cover both happy paths and error paths
 - Test framework and patterns match the project's existing tests
+- **The four lies of a green diff** — a passing suite only proves the inputs the author wrote down. Scan for these as **correctness** findings (a test that lies is a real bug, not a coverage nit, so it survives confidence filtering): (1) test asserts the wrong thing — checks a mock *was called* but never the actual result/status; (2) dead code — a new symbol is unit-tested in isolation but no call site wires it in (grep call sites); (3) placeholder behind an interface — `pass` / `return null` / `throw new Error('TODO')` satisfying a type contract while implementing nothing; (4) type/contract error tests don't catch — mock always supplies a well-formed value, but a production path can pass `undefined`/wrong shape and throw. See `~/.claude/skills/code-auditor/references/review-heuristics.md` § The four lies of a green diff for the full catalog and the catch-it move for each.
 
 ### Git & PR Hygiene
 - Commit messages are clear and follow project conventions
