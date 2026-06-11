@@ -189,7 +189,7 @@ Every comment an agent posts on my behalf — **Jira and GitHub alike** — is p
 **Scope — what this covers:**
 
 - Autonomous status pings (`/ticket-pickup`, `/ticket-swarm` Jira updates) — already do this; the marker is now canonical here.
-- Approval-gated PR comments (`/scout-reviewer`, `/ranger-reviewer`, `/code-auditor`) — the draft I approve and the posted text both carry the prefix. Show the 🤖 in the draft preview so what I approve is what posts.
+- Approval-gated PR comments (`/scout-reviewer`, `/ranger-reviewer`) — the draft I approve and the posted text both carry the prefix. Show the 🤖 in the draft preview so what I approve is what posts. (`/code-auditor` routes to these reviewers but never posts to GitHub itself, so the prefix is applied by whichever reviewer it delegates to, not by the auditor.)
 - Any manual `gh api` / `gh pr comment` / Jira-MCP comment an agent issues during a task.
 
 **The one carve-out — "unless instructed":** if I explicitly tell the agent to post in my own voice without the marker (e.g. "post this comment as me, no robot prefix"), omit it. The instruction must be explicit; the default is always to include 🤖.
