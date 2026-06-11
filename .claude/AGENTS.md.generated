@@ -107,6 +107,16 @@ Subdirectories and files:
 - **No Laziness**: Find root causes. No temporary fixes. Senior developer standards.
 - **Minimal Impact**: Changes should only touch what's necessary. Avoid introducing bugs.
 
+## Token Economy
+
+Context is the scarce resource — the more an agent re-reads, re-sends, or regenerates, the slower and more expensive the work, and the sooner a long session hits a wall. These rules make the cost discipline the architecture already encodes explicit, so every skill and agent inherits it:
+
+- **Scope before exploring.** An unscoped task explores wide and burns tokens on investigation that a one-line constraint would have ruled out. State the target, the boundary, and the done-condition up front (this is also why the Optimus → Cyrus pipeline plans before it builds — scoping is a cost-control mechanism, not only a quality one).
+- **Batch and parallelize agent calls; don't serialize what's independent.** Each subagent invocation re-sends its prompt and re-reads context. Independent work should fan out in one parallel wave (as `code-auditor` does with its 3 analysis agents), and related asks to the same agent should go in one prompt rather than a sequence of follow-ups. Reserve sequential calls for genuine dependencies.
+- **Prefer targeted edits over regeneration.** Change the section that changed; don't re-emit an unchanged file, plan, or report to alter one part of it. When asking a subagent for a revision, point it at the specific delta.
+- **Route work to the cheapest sufficient tier.** Mechanical, high-volume work belongs on the cheaper model tier; reserve the top tier for the reasoning steps that gate everything downstream. See `~/.claude/_shared/model-tiers.md` for the per-agent assignments and rationale.
+- **Offload to subagents to keep the main context clean** (see Subagent Strategy above) — but weigh that against the per-call re-send cost; a subagent is worth it when it keeps a large exploration out of the main window, not for a cheap lookup the main loop could do inline.
+
 ## Code Comments
 
 Applies to every agent that writes or edits code (Cyrus, Optimus snippets, direct implementation, frontend-design, etc.).
