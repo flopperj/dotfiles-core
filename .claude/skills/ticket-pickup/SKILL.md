@@ -17,7 +17,10 @@ these are Jira comments, not status pages.
 Voice: write the assistant's comments in first person (e.g., "Picked this one up.",
 "Had to stop on this one.") — not third person ("Automated assistant has…"). The 🤖
 prefix is the machine-marker; the first-person voice keeps the comments readable as a
-brief status update rather than a system notification.
+brief status update rather than a system notification. The 🤖 prefix on every comment is
+required by the canonical rule in `~/.claude/AGENTS.md` § "Automated Comment Marker — 🤖
+prefix" (applies to all agent-posted Jira and GitHub comments); the example strings below
+already carry it.
 
 # Ticket Pickup
 
