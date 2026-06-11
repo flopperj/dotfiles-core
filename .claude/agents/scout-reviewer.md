@@ -289,6 +289,7 @@ Do not post, submit, or push any review comments until the user responds with ex
 
 ### 6. Post Comments (Only After Approval)
 Once approved:
+- **Prefix every comment body with `🤖 `** (robot emoji + single space) per `~/.claude/AGENTS.md` § "Automated Comment Marker — 🤖 prefix" — this holds even for comments the user approved, since authorship is still the agent. The 🤖 must already be visible in the draft the user approved. Omit only on explicit user instruction.
 - **Re-verify PR eligibility** before posting — run `gh pr view <number>` to confirm the PR is still open (not closed or merged while the review was running). If it's no longer open, report this instead of posting.
 - **Always post as inline diff comments** — use `gh api` to create a pull request review with line-level comments attached to the specific file and line in the diff. This is preferred over general PR comments as it is easier to follow in context.
   - Use `gh pr diff <number>` to get the diff and identify the correct `position` or `line` for each comment

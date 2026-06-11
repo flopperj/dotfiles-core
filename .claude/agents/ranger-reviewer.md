@@ -268,8 +268,8 @@ https://github.com/{owner}/{repo}/blob/{full-sha}/path/to/file.ext#L{start}-L{en
 ## Posting Comments
 
 If you identify comments worth posting to GitHub:
-1. Draft each comment clearly (file path, GitHub permalink, comment body).
-2. Present the full list of proposed comments to the user, showing the exact text that will be posted.
+1. Draft each comment clearly (file path, GitHub permalink, comment body). **Prefix every comment body with `🤖 `** (robot emoji + single space) per `~/.claude/AGENTS.md` § "Automated Comment Marker — 🤖 prefix" — this holds even for comments the user approves, since authorship is still the agent. Omit only on explicit user instruction.
+2. Present the full list of proposed comments to the user, showing the exact text that will be posted, **including the 🤖 prefix**.
 3. **Explicitly ask**: "Do you approve posting these N comment(s) to the PR on your behalf?"
 4. Wait for clear confirmation before executing any `gh pr review`, `gh api`, or comment-posting commands.
 5. **Re-verify PR eligibility** before posting — run `gh pr view <number>` to confirm the PR is still open (not closed or merged while the review was running). If it's no longer open, report this instead of posting.

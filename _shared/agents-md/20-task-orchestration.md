@@ -75,6 +75,16 @@ Subdirectories and files:
 - **No Laziness**: Find root causes. No temporary fixes. Senior developer standards.
 - **Minimal Impact**: Changes should only touch what's necessary. Avoid introducing bugs.
 
+## Token Economy
+
+Context is the scarce resource — the more an agent re-reads, re-sends, or regenerates, the slower and more expensive the work, and the sooner a long session hits a wall. These rules make the cost discipline the architecture already encodes explicit, so every skill and agent inherits it:
+
+- **Scope before exploring.** An unscoped task explores wide and burns tokens on investigation that a one-line constraint would have ruled out. State the target, the boundary, and the done-condition up front (this is also why the Optimus → Cyrus pipeline plans before it builds — scoping is a cost-control mechanism, not only a quality one).
+- **Batch and parallelize agent calls; don't serialize what's independent.** Each subagent invocation re-sends its prompt and re-reads context. Independent work should fan out in one parallel wave (as `code-auditor` does with its 3 analysis agents), and related asks to the same agent should go in one prompt rather than a sequence of follow-ups. Reserve sequential calls for genuine dependencies.
+- **Prefer targeted edits over regeneration.** Change the section that changed; don't re-emit an unchanged file, plan, or report to alter one part of it. When asking a subagent for a revision, point it at the specific delta.
+- **Route work to the cheapest sufficient tier.** Mechanical, high-volume work belongs on the cheaper model tier; reserve the top tier for the reasoning steps that gate everything downstream. See `~/.claude/_shared/model-tiers.md` for the per-agent assignments and rationale.
+- **Offload to subagents to keep the main context clean** (see Subagent Strategy above) — but weigh that against the per-call re-send cost; a subagent is worth it when it keeps a large exploration out of the main window, not for a cheap lookup the main loop could do inline.
+
 ## Code Comments
 
 Applies to every agent that writes or edits code (Cyrus, Optimus snippets, direct implementation, frontend-design, etc.).
@@ -147,6 +157,22 @@ When posting inline review comments to GitHub PRs via the API (`pulls/{number}/r
 - **Never use `"event": "COMMENT"`** for inline comments — that submits the review immediately.
 - PR-level notes (semver labels, CI status, general observations) go in the review `body`, not as inline comments on arbitrary files.
 - This applies to all agents: Ranger, Scout, code-auditor, and any manual `gh api` review calls.
+
+## Automated Comment Marker — 🤖 prefix
+
+Every comment an agent posts on my behalf — **Jira and GitHub alike** — is prefixed with the 🤖 robot emoji so the reader can tell at a glance that a machine authored it. This holds even when I approved the exact text (e.g. a Scout/Ranger PR comment I confirmed at the draft gate): approval makes the *content* mine, but the *authorship* is still the agent, and the marker reflects that.
+
+**The rule:** any comment body an agent submits to an external system (Jira issue comments, GitHub PR review comments, GitHub inline/diff comments, GitHub general PR comments, GitHub issue comments) **must begin with `🤖 `** — the emoji followed by a single space, before the comment text.
+
+**Scope — what this covers:**
+
+- Autonomous status pings (`/ticket-pickup`, `/ticket-swarm` Jira updates) — already do this; the marker is now canonical here.
+- Approval-gated PR comments (`/scout-reviewer`, `/ranger-reviewer`) — the draft I approve and the posted text both carry the prefix. Show the 🤖 in the draft preview so what I approve is what posts. (`/code-auditor` routes to these reviewers but never posts to GitHub itself, so the prefix is applied by whichever reviewer it delegates to, not by the auditor.)
+- Any manual `gh api` / `gh pr comment` / Jira-MCP comment an agent issues during a task.
+
+**The one carve-out — "unless instructed":** if I explicitly tell the agent to post in my own voice without the marker (e.g. "post this comment as me, no robot prefix"), omit it. The instruction must be explicit; the default is always to include 🤖.
+
+**What this does NOT cover:** commit messages, PR titles, PR *bodies/descriptions* (those follow the separate Co-Authored-By / "Generated with Claude Code" conventions), and Slack posts (those follow the Slack-PR-posting emoji conventions). This rule is specifically about *comments* on issues and pull requests.
 
 ---
 
