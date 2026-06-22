@@ -2,6 +2,14 @@
 
 > **How to update:** The pre-commit hook (`scripts/pre-commit.sh`) is auto-installed by `install.sh`. It runs a fast leakage check (`scripts/check-no-leakage.sh`) and re-renders the generated `CLAUDE.md.generated` and `AGENTS.md.generated` files on every commit. Full test/lint suite (`make all`) runs in CI. If you bypass the hook or work in a context where hooks cannot run, keep this file current manually. Each release heading links to the diff on the public mirror.
 
+## v1.13.0 — 2026-06-22 (revert Fable pins to opus alias)
+
+### Changed
+
+- `.claude/agents/aristotle-deconstructor.md`, `.claude/agents/optimus-planner.md` — reverted `model: claude-fable-5` (pinned in v1.11.0) back to the `opus` alias. A pinned raw model ID has **no auto-fallback**: if `claude-fable-5` is disabled or withdrawn, the pinned agents do not fall back to `opus`/Opus 4.8 — the spawn errors or falls through to the session model, never to the intended tier. An alias can never be stranded that way (it always resolves to whatever the platform currently ships for the tier), and it keeps auto-upgrade. Net: both deepest-reasoning agents are back on the strongest auto-upgrading tier with no stranding risk.
+- `.claude/_shared/model-tiers.md` — table moves Aristotle/Optimus back to `opus`; dropped the pin-tradeoff note; rewrote the "Non-aliased tiers" Fable entry to explain *why no agent pins it* (the no-auto-fallback + auto-upgrade-loss reasoning) and to recommend a session `/model` override over a permanent pin when Fable's tuning is genuinely wanted; refreshed the alias-resolution date stamp. Doctor Step 6c logic is unchanged — it remains pin-aware and forward-safe, it just finds zero pinned agents now.
+- `.claude/skills/doctor/SKILL.md` — Step 6c prose reworded so the pin mechanism is described conditionally ("if any agent is pinned…") rather than asserting present-tense that pinned agents exist, since the revert leaves zero. The validation logic is unchanged.
+
 ## v1.12.0 — 2026-06-10 (comment marker + token economy)
 
 ### Added

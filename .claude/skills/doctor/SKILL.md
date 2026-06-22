@@ -107,7 +107,7 @@ If no `mcpServers.jenkins-mcp` entry exists in `~/.claude.json`:
 
 ### Step 6c — Agent model tier resolution
 
-Most agents use the `opus` and `sonnet` aliases in their `model:` frontmatter; a few are intentionally pinned to a raw model ID to reach a non-aliased tier (e.g. `claude-fable-5`). Tier intent, expected alias resolution, and which agents are pinned all live in `<dotfiles>/.claude/_shared/model-tiers.md` — the source of truth.
+Agents use the `opus` and `sonnet` aliases in their `model:` frontmatter. An agent *may* instead be intentionally pinned to a raw model ID to reach a non-aliased tier (e.g. `claude-fable-5`) — none are today, but the check below handles it if one ever is. Tier intent, expected alias resolution, and which agents (if any) are pinned all live in `<dotfiles>/.claude/_shared/model-tiers.md` — the source of truth.
 
 Check:
 1. Read `<dotfiles>/.claude/_shared/model-tiers.md` and extract both the agent tier table and the expected alias resolution block (the `opus → claude-opus-…`, `sonnet → claude-sonnet-…` lines). Use whatever IDs, pins, and date the doc currently states — it is the source of truth; do not hardcode a version here.
