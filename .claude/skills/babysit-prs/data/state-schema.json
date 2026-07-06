@@ -1,0 +1,68 @@
+{
+  "$comment": "Per-run state shape for the /babysit-prs skill. This file documents the JSON that babysit-state.sh reads and writes at ~/.claude/tasks/<project>/babysit-prs/<run_id>.json. It is BOTH documentation and a round-trip fixture: babysit-state.bats loads the sample per-PR record from .prs and asserts it survives state-write-pr -> state-read-pr unchanged. Keep the example values in sync with the PRD state model. Field notes live in sibling '*_doc' keys under $schema_notes so the top-level object stays a valid, loadable state document.",
+  "run_id": "run-20260702-1710-abc123",
+  "started": "2026-07-02T17:10:00Z",
+  "flags": "--merge --fix --approve",
+  "my_login": "octocat",
+  "slack": {
+    "channel_id": "C0123456789",
+    "last_seen_ts": "1700000000.000100",
+    "enabled": true
+  },
+  "targets": "482 491",
+  "prs": {
+    "482": {
+      "head_sha": "abc123def456",
+      "authored_by_me": true,
+      "explicitly_named": true,
+      "ci_failures": {
+        "lint": 2,
+        "unit-tests": 1
+      },
+      "fix_attempts": 1,
+      "blocker_fingerprints": [
+        "src/gate.ts|lint|unused-variable",
+        "src/state.ts|type|missing-return"
+      ],
+      "last_review": {
+        "sha": "abc123def456",
+        "ci": "SUCCESS",
+        "reviewDecision": "APPROVED",
+        "blockers": 0
+      },
+      "approved": true,
+      "status": "watching"
+    }
+  },
+  "$schema_notes": {
+    "run_level": {
+      "run_id": "Unique id for this /loop run. Names the state file (<run_id>.json).",
+      "started": "ISO-8601 UTC timestamp of state-init.",
+      "flags": "Verbatim flag string the run was launched with (e.g. '--merge --fix'). Read as durable authorization.",
+      "my_login": "GitHub login resolved once per run via `gh api user --jq .login`. Feeds authored_by_me.",
+      "slack": {
+        "channel_id": "Resolved Slack channel id when --slack is used; null/absent otherwise.",
+        "last_seen_ts": "Watermark: only Slack messages newer than this are scanned each tick.",
+        "enabled": "true iff Slack discovery is active for this run."
+      },
+      "targets": "Normalized, space-joined seed target list. state-load matches a resume candidate by exact-set equality on this value.",
+      "prs": "Map of PR number (string key) -> per-PR record."
+    },
+    "per_pr_record": {
+      "head_sha": "Last-seen head SHA of the PR. Drives staleness / re-review / counter-reset.",
+      "authored_by_me": "true iff PR author == my_login. One (weak) input to the blast-radius gate.",
+      "explicitly_named": "true iff the PR was a command-line seed target (vs Slack-discovered).",
+      "ci_failures": "Map of check-name -> consecutive-failure count. Flake guard arms a fix only at count >= 2. Reset to 0 on green/pending; whole map cleared on a new head_sha.",
+      "fix_attempts": "Count of Cyrus dispatches for this PR this run. Bounded (default 3). Reset by a human commit.",
+      "blocker_fingerprints": "Fingerprints (file|category|fuzzy-claim, NOT line number) of blockers seen. A surviving fingerprint after a dispatch trips the non-convergence stop.",
+      "last_review": {
+        "sha": "SHA the last review ran against. Re-review only when head_sha != last_review.sha.",
+        "ci": "CI conclusion at last review (change-detector for settled re-arm).",
+        "reviewDecision": "GitHub reviewDecision at last review (change-detector for settled re-arm).",
+        "blockers": "Count of blocking findings from the last valid review."
+      },
+      "approved": "true iff the loop has already auto-approved the current head_sha (once-per-SHA dedup). Re-armed on new SHA.",
+      "status": "One of: watching | settled | needs-human | merged | closed. merged/closed are terminal; settled is re-armable."
+    }
+  }
+}
