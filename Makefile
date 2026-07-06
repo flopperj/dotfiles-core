@@ -5,13 +5,18 @@ DOTFILES_DIR := $(shell realpath .)
 # Discover all *.bats files in tests/ (no LLM tests in core)
 TEST_FILES := $(wildcard tests/*.bats)
 
+# Repo-root scripts plus any skill-local scripts (e.g. babysit-prs). Skill
+# scripts back consequential actions, so they are shellchecked in CI too, not
+# by a manual reminder. The nested glob no-ops cleanly when no skill ships one.
+LINT_FILES := $(wildcard scripts/*.sh) $(wildcard .claude/skills/*/scripts/*.sh)
+
 all: lint check-leakage check-consult-grammar test
 
 test:                                   ## Run all bats tests
 	DOTFILES_DIR=$(DOTFILES_DIR) bats $(TEST_FILES)
 
-lint:                                   ## Run shellcheck on all scripts
-	shellcheck --severity=warning scripts/*.sh
+lint:                                   ## Run shellcheck on all scripts (repo-root + skill-local)
+	shellcheck --severity=warning $(LINT_FILES)
 
 check-leakage:                          ## Scan for company-specific tokens
 	bash scripts/check-no-leakage.sh .
