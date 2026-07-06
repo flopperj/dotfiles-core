@@ -229,6 +229,7 @@ The submodule SHA pin is intentional — your overlay records exactly which vers
 |---|---|
 | `/agent-stats` | Aggregate agent pipeline metrics: first-pass rate, classification distribution, health flags |
 | `/aristotle-deconstructor` | First-principles deconstruction pipeline (Aristotle → Optimus → Cyrus) |
+| `/babysit-prs` | Watch open PRs under `/loop` — one tick per invocation: watch CI, review, and (behind typed flags) fix / approve / merge behind a fail-closed gate |
 | `/briefing` | Session-start situation report: sprint status, open PRs, CI, calendar, Slack signals |
 | `/code-auditor` | Complexity-aware PR review router — auto-routes to Scout or Ranger |
 | `/core-edit` | Edit a skill inside dotfiles-core from within an overlay repo |
