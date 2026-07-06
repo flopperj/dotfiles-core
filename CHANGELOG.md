@@ -2,6 +2,25 @@
 
 > **How to update:** The pre-commit hook (`scripts/pre-commit.sh`) is auto-installed by `install.sh`. It runs a fast leakage check (`scripts/check-no-leakage.sh`) and re-renders the generated `CLAUDE.md.generated` and `AGENTS.md.generated` files on every commit. Full test/lint suite (`make all`) runs in CI. If you bypass the hook or work in a context where hooks cannot run, keep this file current manually. Each release heading links to the diff on the public mirror.
 
+## v1.14.0 — 2026-07-06 (babysit-prs)
+
+### Added
+
+- `/babysit-prs` skill (`.claude/skills/babysit-prs/`) — a `/loop`-driven orchestrator that watches open PRs and, behind escalating typed opt-in flags (`--review-only` default, `--fix`, `--approve`, `--merge`), reviews / fixes / approves / merges them behind a reversibility × blast-radius gate. One tick per invocation; `/loop` owns cadence. No companion agent: it composes `/code-auditor` → Scout/Ranger for review and Cyrus for fixes, owning only the scheduling, gating, and I/O glue. Internally split into a read-only **Watcher** (target resolution, one `gh pr view` per PR, transition/CI classification) and an in-session **Actor** (the only half that mutates); every accept/hold/settle/stop decision is a call to the tested `babysit-gate.sh`, never re-derived in prose. Safety posture: merging a teammate's PR you did not name is structurally impossible (foreign authorship is high blast-radius; merge requires blast-radius `!= high`), and every safety-relevant comparison fails **closed** on absent/non-numeric input.
+- `.claude/skills/babysit-prs/scripts/babysit-gate.sh` — the pure-function decision core (`decide`, `merge-gate`, `blast-radius`, `flake-tick`, `fingerprint`, `converged?`, `settle?`, `rearm?`, `auto-approve?`, `defer?`, `stop?`): JSON/args in → token on stdout, exit 0, no side effects.
+- `.claude/skills/babysit-prs/scripts/babysit-state.sh` — per-run JSON state store; atomic write-temp-then-rename that refuses to commit empty content; single-writer per tick.
+- `.claude/skills/babysit-prs/data/state-schema.json` — documents and round-trip-fixtures the per-run state shape.
+- `tests/babysit-{gate,state,routing}.bats` — 124 tests, auto-discovered by `make test`. Adversarial coverage includes the fail-open regression (non-numeric/absent safety input → HOLD/high-blast, never ALLOW), line-independent fingerprints, per-name flake keying, a state-corruption regression (a malformed `--set` key leaves the state file byte-identical), and the octal-leading-zero fail-open (a stringified `"0450"` size must gate as `high:size`, not slip through as `low`).
+
+### Changed
+
+- `Makefile` — `make lint` now shellchecks skill-local scripts (`.claude/skills/*/scripts/*.sh`) in addition to repo-root `scripts/*.sh`; the nested glob no-ops cleanly when a skill ships none. Skill scripts back consequential actions, so they are gated by CI rather than a manual reminder.
+- `_shared/claude-md/10-agent-routing.md`, `_shared/claude-md/20-trigger-skills.md` — name-prefix (`Babysit, ...`) and trigger-phrase routing rows for the new skill, regenerated into `.claude/CLAUDE.md.generated` in lockstep.
+
+### Fixed
+
+- `.claude/skills/babysit-prs/scripts/babysit-gate.sh` — forced base-10 in the two `$(( ))` arithmetic sites (`_blast_radius` churn, `flake-tick` counter). A digit-only but leading-zero size string (e.g. `"0450"`) previously read as **octal** (296 decimal, under the 400 threshold when the true value 450 is over it), silently failing the size veto **open** to `low` — or crashing on an invalid octal literal like `"0800"`. Both violated the gate's fail-closed contract. Found by Ranger on the pre-merge pass and verified by execution before and after the fix.
+
 ## v1.13.0 — 2026-06-22 (revert Fable pins to opus alias)
 
 ### Changed
