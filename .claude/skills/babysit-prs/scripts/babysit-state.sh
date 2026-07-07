@@ -185,8 +185,17 @@ cmd_state_load() {
 }
 
 # Portable mtime-as-epoch (GNU vs BSD stat).
+#
+# Cannot rely on `stat -f %m || stat -c %Y`: on GNU/Linux `stat -f` is valid
+# (it means --file-system) and exits 0, so the `||` fallback never fires and we
+# get the verbose filesystem block instead of an mtime. Detect GNU explicitly —
+# only GNU coreutils stat has --version.
 _mtime() {
-    stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null || echo 0
+    if stat --version >/dev/null 2>&1; then
+        stat -c %Y "$1" 2>/dev/null || echo 0   # GNU
+    else
+        stat -f %m "$1" 2>/dev/null || echo 0    # BSD/macOS
+    fi
 }
 
 cmd_state_read_pr() {
