@@ -93,6 +93,15 @@ Applies to every agent that writes or edits code (Cyrus, Optimus snippets, direc
 
 - **Do not add narrative comments that restate what the code does.** Avoid obvious, redundant comments like `// import the module`, `// define the function`, `// loop over items`, `// return the result`, `// handle the error`, or `# increment counter`.
 - **Do not leave "what I changed" comments.** Never use comments to explain the edit you just made (e.g., `// switched from map to reduce for perf`, `// added null check`). That belongs in the commit message or PR description, not the source.
+- **Never leak agent-pipeline vocabulary into source.** Comments (and code
+  identifiers, log strings, and JSX) in shipped files must not reference the
+  internal planning pipeline: no agent names (Aristotle/Optimus/Cyrus/Scout/
+  Ranger), no plan step numbers (`Step 3`, `Step 4a`), no assumption or risk
+  IDs (`A9`, `A10`, `risk R6`), no "wave"/"handoff"/"gate" framing. These are
+  scaffolding for building the code, not facts about the code. A ticket key on
+  its own (e.g. `// PROJ-1234:` linking a gotcha to its ticket) is fine; the
+  step/risk/assumption tokens are not. If a comment only makes sense to someone
+  who read the plan, delete it or rewrite it as the underlying constraint.
 - **Comments should explain non-obvious intent, trade-offs, or constraints** that the code itself cannot convey — *why* something is done, a gotcha, a spec reference, a perf constraint, a security consideration, or a link to a ticket/issue. If a future contributor would be confused without the comment, keep it. Otherwise, delete it.
 - **Keep existing meaningful comments.** Do not strip comments that explain intent, only remove the narrative ones if you encounter them during an edit.
 - **Tests are code too.** The same rule applies — test names and `describe`/`it` blocks should carry the intent; do not add narrating comments inside test bodies.

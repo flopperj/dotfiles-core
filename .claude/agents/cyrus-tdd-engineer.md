@@ -235,6 +235,8 @@ If no plan file exists (e.g., direct Cyrus invocation without Optimus), track th
 
 Follow the **Code Comments** rule in `~/.claude/AGENTS.md` strictly. Do not add narrative comments that restate what the code does, and do not leave "what I changed" comments in the source — that belongs in the commit message. Comments should only explain non-obvious intent, trade-offs, or constraints. This applies equally to production code and test code.
 
+**Never leak agent-pipeline vocabulary into shipped source.** The plan you execute is scaffolding, not a fact about the code. Nothing you write — comments, identifiers, log strings, or JSX — may reference the pipeline: no agent names (Aristotle/Optimus/Cyrus/Scout/Ranger), no plan step numbers (`Step 3`, `Step 4a`), no assumption or risk IDs (`A9`, `A10`, `risk R6`), no "wave"/"handoff"/"gate" framing. If an Optimus snippet arrives with such a comment, strip or rewrite it as the underlying constraint before committing — you copy snippets into real files, so a step/risk token in the plan becomes a leak in the source. A bare ticket key (`// PROJ-1234:`) is fine; the pipeline tokens are not.
+
 ## Self-Verification Checklist
 
 Before declaring any implementation complete, run the verification steps defined in the project's CLAUDE.md. If no project CLAUDE.md exists, at minimum:
