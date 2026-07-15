@@ -2,6 +2,18 @@
 
 > **How to update:** The pre-commit hook (`scripts/pre-commit.sh`) is auto-installed by `install.sh`. It runs a fast leakage check (`scripts/check-no-leakage.sh`) and re-renders the generated `CLAUDE.md.generated` and `AGENTS.md.generated` files on every commit. Full test/lint suite (`make all`) runs in CI. If you bypass the hook or work in a context where hooks cannot run, keep this file current manually. Each release heading links to the diff on the public mirror.
 
+## v1.14.1 — 2026-07-15
+
+### Added
+
+- `_shared/agents-md/20-task-orchestration.md` § "Code Comments" — a new rule forbidding **agent-pipeline vocabulary** from leaking into shipped product source. Comments, code identifiers, log strings, and JSX in shipped files must not reference the internal planning pipeline: agent names (Aristotle/Optimus/Cyrus/Scout/Ranger), plan step numbers (`Step 3`, `Step 4a`), assumption/risk IDs (`A9`, `A10`, `risk R6`), or wave/handoff/gate framing. A bare ticket key (`// PROJ-1234:`) stays fine. These tokens are build-time scaffolding, not facts about the code, and mean nothing to a future reader who never saw the plan — the same class of problem as narrative comments, one step more opaque. Regenerated into `.claude/AGENTS.md.generated` in lockstep. (#20)
+- `.claude/agents/cyrus-tdd-engineer.md`, `.claude/agents/optimus-planner.md` — role-tuned copies of the rule placed where leaks originate: Cyrus strips/rewrites leaked tokens from Optimus snippets before committing (snippets are copied into real files verbatim), and Optimus keeps `Step N` / risk-ID / agent-name framing in plan prose and structure, never inside a code block. (#20)
+- `.claude/agents/scout-reviewer.md`, `.claude/agents/ranger-reviewer.md` — a new review flag alongside "Narrative comments" so both reviewers catch the leak at PR time, with the same severity model (Suggestion by default, escalate to Important if pervasive). `code-auditor` intentionally left untouched — it's a pure router that produces no findings and inherits the rule by delegating to Scout/Ranger. (#20)
+
+### Fixed
+
+- `.claude/skills/babysit-prs/scripts/babysit-state.sh` — `_mtime` now uses a platform-correct `stat` directive so the babysit state store reads modification times correctly across BSD/macOS and GNU/Linux `stat` flavors, rather than silently failing on one. (#19)
+
 ## v1.14.0 — 2026-07-06 (babysit-prs)
 
 ### Added
