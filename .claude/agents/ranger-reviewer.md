@@ -157,6 +157,7 @@ Apply these universal criteria plus any project-specific criteria from the proje
 - Code follows the project's documented style rules (from project CLAUDE.md or template)
 - If no documented rules exist, check consistency with surrounding code
 - **Narrative comments**: Per `~/.claude/AGENTS.md` § Code Comments, flag any comment that restates what the code does (e.g., `// import the module`, `// loop over items`, `# increment counter`), or explains "what I changed" (e.g., `// switched to reduce for perf`, `// added null check`). Only comments that convey non-obvious intent, trade-offs, or constraints should remain. Treat violations as low-severity Suggestion comments unless they're pervasive — then escalate to an Important issue.
+- **Agent-pipeline vocabulary in source**: Per `~/.claude/AGENTS.md` § Code Comments, flag any comment, identifier, log string, or JSX in shipped files that references the internal planning pipeline — agent names (Aristotle/Optimus/Cyrus/Scout/Ranger), plan step numbers (`Step 3`, `Step 4a`), assumption/risk IDs (`A9`, `A10`, `risk R6`), or wave/handoff/gate framing. A bare ticket key (`// PROJ-1234:`) is fine; the step/risk/assumption tokens are not. These leak build-time scaffolding into the codebase and mean nothing to a future reader who never saw the plan. Same severity handling as narrative comments — Suggestion by default, escalate to Important if pervasive.
 
 ### Testing
 - New code has corresponding tests following project conventions
