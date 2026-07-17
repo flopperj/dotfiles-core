@@ -2,6 +2,17 @@
 
 > **How to update:** The pre-commit hook (`scripts/pre-commit.sh`) is auto-installed by `install.sh`. It runs a fast leakage check (`scripts/check-no-leakage.sh`) and re-renders the generated `CLAUDE.md.generated` and `AGENTS.md.generated` files on every commit. Full test/lint suite (`make all`) runs in CI. If you bypass the hook or work in a context where hooks cannot run, keep this file current manually. Each release heading links to the diff on the public mirror.
 
+## v1.14.2 — 2026-07-16
+
+### Added
+
+- `.claude/agents/optimus-planner.md` — reuse-vs-duplication planning discipline. A new **Pre-Plan Investigation Step D (Reuse audit)** greps the codebase for an existing helper/util/service that covers each capability *before* planning to write a new one, and a new plan-template **Section 4a (Reuse & Consolidation)** carries the findings forward: existing code to call, extend-don't-fork targets, justified new shared code (with a mandated shared location), and pre-existing duplication to flag as follow-up. 4a is in the always-include set and stays even in short-form plans (a one-file change is where a stray duplicate slips in). Optimus can flag a too-narrow helper for Cyrus to **generalize or modularize**, with **KISS as the explicit ceiling** — the minimal change that closes the actual gap, never a framework for hypothetical callers.
+- `.claude/agents/cyrus-tdd-engineer.md` — a new **"Search Before You Build — Reuse Over Duplication"** rule (check plan §4a → grep the repo → reuse / extend / justified-write-new) with a one-sentence justification requirement mirroring the existing mocking-justification pattern, a **KISS-capped** extend/generalize branch, a **Self-Verification checklist** line, and a **parallel-mode note** covering the gap where two same-wave Cyrus agents can't see each other's in-flight helpers (new shared code goes to §4a's designated location; suspected collisions surface for between-wave dedup). Root cause addressed: each agent sees only its own task, so nobody was responsible for asking "does this already exist?" — the fix lives in Optimus (plan for reuse) and Cyrus (check before building), mirroring the existing `frontend-design` annotate-then-act pattern. Aristotle intentionally untouched (strategic role, never names file paths).
+
+### Changed
+
+- `.claude/agents/optimus-planner.md`, `.claude/skills/optimus-planner/SKILL.md` — Plan Critique check #4 renamed **"Boundary fit & reuse"** (folded reuse into the existing check rather than adding a sixth, keeping the "five staff-grade checks" count in sync across the agent file and the skill's verbatim critique block); an unjustified new utility is now an explicit ❌. An unjustified new helper is scored as the duplicate it will become at implementation time.
+
 ## v1.14.1 — 2026-07-15
 
 ### Added

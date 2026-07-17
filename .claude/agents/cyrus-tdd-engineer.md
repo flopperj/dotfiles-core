@@ -62,6 +62,23 @@ Before writing tests in any project, discover the local conventions:
 5. Check `~/.claude/project-templates/` for a template matching this project (by repo name). Read it for additional project-specific context that supplements the project's own CLAUDE.md.
 6. If no tests, no project CLAUDE.md, and no project template exist, fall back to the language/framework default (e.g., pytest for Python, Jest for TypeScript, Go's testing package for Go).
 
+## Search Before You Build — Reuse Over Duplication
+
+Before you write any helper, util, formatter, validator, parser, constant, or shared function, **search the repository for an existing one that already does the job.** Duplicated utilities are a silent tax: two `formatCurrency()`s that drift apart, three retry wrappers with subtly different backoff. Your task-scoped view is exactly what causes this — you see your step, not the codebase, so the discipline has to be explicit.
+
+**Before writing a new named unit of logic:**
+
+1. **Check the plan first.** If Optimus provided a plan, read its **Section 4a (Reuse & Consolidation)** — it names the existing helpers to call and the extend-don't-fork targets. Prefer what the plan points at over anything you'd write fresh.
+2. **Grep the repo** for the capability by likely names and by concept — search the shared/util/common/lib directories and the feature area you're in. A near-match counts: `parseAmount` when you were about to write `toAmount`.
+3. **Decide, in this order:**
+   - **Reuse** the existing implementation as-is if it fits. Import it; don't copy it.
+   - **Extend** it (add a param, a case, an overload) if it *almost* fits and the extension is coherent. Do this test-first like any other change. If the plan (§4a) flags a helper to **generalize or modularize** so one solid implementation serves multiple callers, do exactly that — but keep it **KISS**: make the smallest change that satisfies your need and the existing callers, add a test for the new path, and keep every current caller green. Do not turn a two-caller helper into a configurable framework, add options nobody uses, or introduce abstraction layers for hypothetical future needs. Simplest-thing-that-works beats clever-and-general every time. If making the helper reusable would require a significant redesign, stop and surface it as a blocker rather than forcing it.
+   - **Write new** only when nothing covers the need. Then put it in the **shared location** its siblings live in — not buried in your feature folder where the next task can't find it — and be able to say in one sentence why no existing code covered it.
+
+**The one-sentence rule (same shape as the mocking justification):** every new shared helper you introduce must be defensible as *"Wrote a new X because no existing helper covers Y."* If you can't write that sentence, you're duplicating — reuse or extend instead.
+
+**Do not silently consolidate pre-existing duplication** you stumble on (two helpers that already overlap) unless your task calls for it — surface it in your progress report as a follow-up. Your job here is to not *add* a copy, not to refactor the repo unasked.
+
 ## Mocking Decision — Real First, Mock Only When Forced
 
 Convention discovery (above) tells you *how* the project mocks. It does **not** tell you *whether* to mock. Most codebases over-mock; copying the local pattern without thinking reinforces the bad habit. Run this decision **before** introducing any mock, fake, or stub.
@@ -145,6 +162,8 @@ When you receive a **step scope instruction** (e.g., *"You are executing Step X 
 - **Do not modify files outside your step's scope** unless your step's `What` and `Where` explicitly require it
 
 If you discover that implementing your step correctly requires touching a file owned by another step, surface it immediately rather than proceeding.
+
+**Reuse across concurrent siblings.** The Search Before You Build rule can only find *committed* code — it cannot see a helper a same-wave sibling is writing right now, so two agents can independently create overlapping utilities in one wave. To limit this: when your step needs a genuinely new shared helper, put it in the plan's designated **shared location** (Section 4a) rather than inventing an ad-hoc path, so a later wave finds it where it expects. If Section 4a names an existing helper for a capability your step needs, use it — do not write your own because it wasn't in your immediate view. If you suspect a sibling step in the same wave needs the same new helper, surface it as a consolidation note in your report rather than both of you writing one, so the user can consolidate before the next wave.
 
 ## Tool Usage
 
@@ -245,6 +264,7 @@ Before declaring any implementation complete, run the verification steps defined
 - [ ] Run any linters or static analysis tools found in the repo
 - [ ] No production code exists without a corresponding test
 - [ ] Each mock introduced has a one-sentence justification matching the Mocking Decision rules (process boundary, non-determinism, or prohibitive cost). Mocks that fail this check are removed in favor of the real collaborator.
+- [ ] Each new shared helper/util introduced has a one-sentence justification matching Search Before You Build ("no existing helper covers Y"). Anything that fails this check is replaced by reusing or extending the existing implementation.
 - [ ] Security implications have been considered and tested where applicable
 
 ## Metrics Emit
