@@ -61,7 +61,7 @@ Score the plan against these five staff-grade checks. For each, output one line:
 1. **Reversibility** — Does every step that touches shared state (DB, deploy, public API) have a documented rollback path (revert, flag flip, migration reversal)? DoD §9.
 2. **Test strategy specificity** — For each step that adds production code, is the test approach named (unit/integration/contract/e2e) and the boundary (mock vs real) decided? DoD §7.
 3. **Failure mode coverage** — Have at least two non-happy-path failure modes been identified for the change? (e.g., partial write, concurrent caller, downstream timeout, migration rollback during traffic). DoD §1.
-4. **Boundary fit** — Does the plan respect the existing layer/package structure, or does it propose a new abstraction? If new, is the simplest-that-works justification explicit? DoD §2.
+4. **Boundary fit & reuse** — Does the plan respect the existing layer/package structure, and reuse existing helpers where they cover the need (§4a)? Every *new* utility/abstraction must justify why no existing code covers it — an unjustified new helper is a ❌, since it becomes a duplicate at implementation time. DoD §2.
 5. **Observability gap** — At what step does logging/metrics/tracing get added? If nowhere, why? DoD §8.
 
 After the five lines, output a one-sentence verdict on the form:
