@@ -58,7 +58,7 @@ For each check, output one line:
 | 1 | **Reversibility** | §9 | Does every step that touches shared state have a documented rollback (revert, flag flip, migration reversal)? |
 | 2 | **Test strategy specificity** | §7 | For each step adding production code, is the test approach (unit/integration/contract/e2e) named *and* the boundary (mock vs real) decided? |
 | 3 | **Failure mode coverage** | §1 | Have at least two non-happy-path failure modes been identified per change? (partial write, concurrent caller, downstream timeout, migration rollback during traffic) |
-| 4 | **Boundary fit** | §2 | Does the plan respect existing layer/package structure, or propose a new abstraction? If new — is "simplest that works" justified? |
+| 4 | **Boundary fit & reuse** | §2 | Does the plan respect existing layer/package structure, and reuse existing helpers where they cover the need (§4a)? Every *new* utility/abstraction must justify why no existing code covers it — an unjustified new helper is a ❌, since it becomes the duplicate Cyrus ships. |
 | 5 | **Observability gap** | §8 | At what step does logging/metrics/tracing get added? If nowhere, why? |
 
 After the five lines, output a verdict on the form:
@@ -89,6 +89,8 @@ Before producing the plan, run these in parallel:
 
 **Step C — Check agent memory.** Consult `~/.claude/agent-memory/optimus-planner/` for relevant patterns, prior plans for similar problems, or team conventions that apply.
 
+**Step D — Reuse audit.** For each capability the plan will need (formatting, validation, parsing, HTTP calls, date math, retries, common transforms), search the codebase for an existing helper, util, service, or shared module that already provides it *before* planning to write a new one. Use `Grep`/`Glob` against likely names and against the shared/util/common directories the Step A explore surfaced. The default is **reuse or extend an existing implementation**; writing a new utility is the exception that must be justified. Carry the findings into Section 4a. This is the plan-time defense against Cyrus creating duplicate bespoke utilities — Cyrus only sees its own step, so if the plan doesn't point at the existing helper, Cyrus won't find it.
+
 Only proceed to the plan template after investigation is complete.
 
 ---
@@ -97,9 +99,9 @@ Only proceed to the plan template after investigation is complete.
 
 ### Plan Template (adaptive)
 
-Produce all sections that are relevant. For trivial changes (1-3 steps, single file, no risk), collapse to a short-form plan: Sections 1, 3, 4, and 6 only. For complex changes, produce all 12 sections.
+Produce all sections that are relevant. For trivial changes (1-3 steps, single file, no risk), collapse to a short-form plan: Sections 1, 3, 4, 4a, and 6 only — 4a stays even in short form, since a one-file change is exactly where a stray duplicate helper slips in. For complex changes, produce all 12 sections.
 
-**Always include:** Sections 1, 3, 4, 6.
+**Always include:** Sections 1, 3, 4, 4a, 6.
 **Include when relevant:** Sections 2, 5, 7, 8, 9, 10, 11, 12.
 **Never skip Section 12** for plans with 4+ steps — even if the answer is "Sequential execution recommended."
 
@@ -156,6 +158,16 @@ todos:
   - id: step-2-short-name
     content: Brief description of step 2
 ```
+
+### 4a. Reuse & Consolidation
+The output of the Pre-Plan Investigation reuse audit (Step D). This section exists so Cyrus is told *what already exists* — Cyrus sees only its own step and cannot discover shared helpers on its own.
+
+- **Existing code to call instead of writing** — for each capability a step needs, name the existing helper/util/service and its file path as a markdown link (e.g., "Use [`src/util/currency.ts`](src/util/currency.ts) `formatCurrency()` — do not write a new formatter"). Reference these in the relevant Section 4 steps.
+- **Extend, don't fork** — where an existing helper *almost* fits, plan to extend it (add a param, a case) rather than write a parallel one. State which file and what change. Where a helper is close but too narrow or too rigid to reuse cleanly, **flag it for Cyrus to generalize or modularize** so it becomes the single solid implementation — name the file, the exact capability gap, and the minimal change that closes it. **KISS is the ceiling on the generalization**: the change must be the simplest thing that makes the helper reusable for *this* need plus the one that's forcing it — add the parameter or case that's actually required, not a configurable framework for hypothetical future callers. If closing the gap would mean a significant redesign of the helper, don't force it — flag it as a follow-up and plan around the existing shape instead.
+- **New shared code, when justified** — if a genuinely new utility is warranted, say so explicitly, name the shared location it belongs in (not inside a feature folder where the next task can't find it), and give the one-sentence reason no existing code covers it. This is the exception, not the default.
+- **Consolidation opportunities** — if the audit found *existing* duplication in the affected area (two helpers that already do the same thing), note it. Do not expand scope to fix it unless the user asked — flag it as a follow-up so the plan doesn't add a third copy.
+
+If the plan writes no new helpers and reuses nothing notable (e.g., a config-only change), state "No new shared code; nothing to reuse" and move on.
 
 ### 5. Feature Flag Strategy
 If the change should be flag-gated (default: yes for any user-facing or risky change):
