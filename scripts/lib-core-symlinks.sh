@@ -64,16 +64,15 @@ _link_dir() {
 }
 
 # Install scripts/<hook_name>.sh as a symlink at .git/hooks/<hook_name>.
-# Skips when .git is a file (submodule worktree — hook management belongs to the
-# parent repo in that case). Idempotent: removes a pre-existing symlink before
-# re-creating it so a re-run after a core_dir path change stays correct.
+# Resolves the real gitdir via `git rev-parse --git-dir` so hooks install in
+# standalone clones and submodule worktrees (.git is a file pointing elsewhere).
+# Idempotent: removes a pre-existing symlink before re-creating it so a re-run
+# after a core_dir path change stays correct.
 # Usage: _install_git_hook <core_dir> <hook_name>
 _install_git_hook() {
     local core_dir="$1"
     local hook_name="$2"
-    local git_entry="$core_dir/.git"
-    local hook_src="$core_dir/scripts/${hook_name}.sh"
-    local hook_dst="$core_dir/.git/hooks/${hook_name}"
+    local git_dir hook_src hook_dst
 
     # Test-isolation bypass: tests/install.bats sets this to prevent writing to
     # the real .git/hooks/ directory during install.sh integration tests. The
@@ -84,12 +83,17 @@ _install_git_hook() {
         return 0
     fi
 
-    # Skip submodule worktrees where .git is a file, not a directory.
-    if [ ! -d "$git_entry" ]; then
+    if ! git_dir="$(git -C "$core_dir" rev-parse --git-dir 2>/dev/null)"; then
         return 0
     fi
+    if [[ "$git_dir" != /* ]]; then
+        git_dir="$core_dir/$git_dir"
+    fi
 
-    mkdir -p "$core_dir/.git/hooks"
+    hook_src="$core_dir/scripts/${hook_name}.sh"
+    hook_dst="$git_dir/hooks/${hook_name}"
+
+    mkdir -p "$git_dir/hooks"
 
     # Remove existing symlink so the link target stays current.
     # If a regular file exists (husky, lefthook, hand-written hook), back it up
