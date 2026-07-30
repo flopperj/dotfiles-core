@@ -10,5 +10,23 @@ jobs:
       - uses: actions/checkout@v4
       - name: install bats + shellcheck
         run: sudo apt-get update && sudo apt-get install -y bats shellcheck
-      - name: make all
-        run: make all
+      - name: lint
+        run: make lint
+      - name: consult grammar
+        run: make check-consult-grammar
+      - name: tests (leakage mechanism runs on synthetic tokens)
+        run: make test
+      # The company token data exists only in trusted environments. On public
+      # runners the scan below is structurally skipped — a visible "skipped"
+      # step status, never a silent green.
+      - name: detect guard data
+        id: guard
+        run: |
+          if [ -f "${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles-guard/company-context" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: company-token scan
+        if: steps.guard.outputs.present == 'true'
+        run: make check-leakage
