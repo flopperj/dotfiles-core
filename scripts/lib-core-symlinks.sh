@@ -63,21 +63,23 @@ _link_dir() {
     ln -s "$src" "$dst"
 }
 
-# Install scripts/pre-commit.sh as a symlink at .git/hooks/pre-commit.
+# Install scripts/<hook_name>.sh as a symlink at .git/hooks/<hook_name>.
 # Skips when .git is a file (submodule worktree — hook management belongs to the
 # parent repo in that case). Idempotent: removes a pre-existing symlink before
 # re-creating it so a re-run after a core_dir path change stays correct.
-# Usage: _install_precommit_hook <core_dir>
-_install_precommit_hook() {
+# Usage: _install_git_hook <core_dir> <hook_name>
+_install_git_hook() {
     local core_dir="$1"
+    local hook_name="$2"
     local git_entry="$core_dir/.git"
-    local hook_src="$core_dir/scripts/pre-commit.sh"
-    local hook_dst="$core_dir/.git/hooks/pre-commit"
+    local hook_src="$core_dir/scripts/${hook_name}.sh"
+    local hook_dst="$core_dir/.git/hooks/${hook_name}"
 
     # Test-isolation bypass: tests/install.bats sets this to prevent writing to
     # the real .git/hooks/ directory during install.sh integration tests. The
-    # dedicated tests/install-precommit-hook.bats does NOT set this — it tests
-    # this function in proper isolation using a scratch fixture core.
+    # variable keeps its historical name but bypasses ALL git-hook installs.
+    # The dedicated tests/install-precommit-hook.bats does NOT set this — it
+    # tests this function in proper isolation using a scratch fixture core.
     if [ -n "${_SKIP_PRECOMMIT_INSTALL:-}" ]; then
         return 0
     fi
@@ -95,14 +97,17 @@ _install_precommit_hook() {
     if [ -L "$hook_dst" ]; then
         rm "$hook_dst"
     elif [ -f "$hook_dst" ]; then
-        echo "  WARNING: existing pre-commit hook at $hook_dst — backing up."
+        echo "  WARNING: existing ${hook_name} hook at $hook_dst — backing up."
         _backup_collision "$hook_dst"
     fi
 
     ln -s "$hook_src" "$hook_dst"
     chmod +x "$hook_dst"
-    echo "  Installed pre-commit hook -> scripts/pre-commit.sh"
+    echo "  Installed ${hook_name} hook -> scripts/${hook_name}.sh"
 }
+
+_install_precommit_hook() { _install_git_hook "$1" "pre-commit"; }
+_install_prepush_hook() { _install_git_hook "$1" "pre-push"; }
 
 # Create all dotfiles-core symlinks in $HOME.
 # Usage: install_core_symlinks <core_dir>
