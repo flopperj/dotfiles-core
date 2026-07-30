@@ -2,6 +2,23 @@
 
 > **How to update:** The pre-commit hook (`scripts/pre-commit.sh`) is auto-installed by `install.sh`. It runs a fast leakage check (`scripts/check-no-leakage.sh`) and re-renders the generated `CLAUDE.md.generated` and `AGENTS.md.generated` files on every commit. A pre-push gate (`scripts/pre-push.sh`, also auto-installed) scans every outgoing commit's tree and metadata before it leaves the machine. CI runs lint, consult-grammar, and the test suite (including synthetic-token leakage mechanism tests) on every PR; the company-token scan is a separate step that runs only when guard data is present on the runner. If you bypass the hooks or work in a context where hooks cannot run, keep this file current manually. Each release heading links to the diff on the public mirror.
 
+## v1.15.2 — 2026-07-29 (shape CI + mirror history scrub)
+
+### Added
+
+- `scripts/check-leakage-shapes.sh` — secret-free structural leakage scan for public CI and fork PRs: flags in-tree `leakage-tokens.txt`, `dotfiles-guard/` material, and corporate email shapes in `.claude/` publication surfaces without embedding company-specific token values.
+- `tests/leakage-shapes.bats` — coverage for the shape scan.
+- `make check-leakage-shapes` — Makefile target wired into `.github/workflows/lint.yml` as an always-on CI step.
+
+### Changed
+
+- `scripts/scrub-mirror-history.sh` — gains a `push` subcommand for force-pushing scrubbed bare mirrors; audit output lists release tags to re-apply.
+- `PROTOCOL.md` — documents the shape scan as the fork-PR coverage layer alongside the structurally skipped company-token scan.
+
+### Ops
+
+- Public mirror history rewritten to remove `scripts/leakage-tokens.txt` from all commits (`git filter-repo` + force-push). Fork owners may need to rebase.
+
 ## v1.15.1 — 2026-07-29 (publication-gate follow-ups)
 
 ### Added

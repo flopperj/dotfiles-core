@@ -16,6 +16,11 @@ jobs:
         run: make check-consult-grammar
       - name: tests (leakage mechanism runs on synthetic tokens)
         run: make test
+      # Secret-free shape scan — always runs on public runners and fork PRs.
+      # Catches in-tree denylist files and corporate email shapes without the
+      # real company token list.
+      - name: leakage shape scan
+        run: make check-leakage-shapes
       # The company token data exists only in trusted environments. On public
       # runners the scan below is structurally skipped — a visible "skipped"
       # step status, never a silent green.
