@@ -147,9 +147,15 @@ author/committer identity and the commit message. The pre-commit hook is
 retained as a fast working-tree early warning; the pre-push gate is what guards
 publication.
 
-**Public CI** runs the mechanism tests on synthetic tokens and shows the
-company-token scan as a structurally skipped step — visible non-execution,
-never a silent green.
+**Public CI** runs the mechanism tests on synthetic tokens, a **shape scan**
+(`scripts/check-leakage-shapes.sh`) that always executes on public runners, and
+shows the company-token scan as a structurally skipped step — visible
+non-execution, never a silent green.
+
+The shape scan is secret-free: it flags in-tree denylist/guard paths and
+corporate email shapes in `.claude/` publication surfaces without embedding any
+company-specific token values. It is the fork-PR coverage layer where the real
+denylist cannot exist.
 
 The token file format is unchanged: one token per line, `#` comments.
 

@@ -1,4 +1,4 @@
-.PHONY: test lint check-leakage gen-docs gen-boundaries gen-role-guards gen all
+.PHONY: test lint check-leakage check-leakage-shapes gen-docs gen-boundaries gen-role-guards gen all
 
 DOTFILES_DIR := $(shell realpath .)
 
@@ -20,6 +20,9 @@ lint:                                   ## Run shellcheck on all scripts (repo-r
 
 check-leakage:                          ## Scan for company-specific tokens
 	bash scripts/check-no-leakage.sh .
+
+check-leakage-shapes:                   ## Secret-free structural scan (public CI / fork PRs)
+	bash scripts/check-leakage-shapes.sh .
 
 check-consult-grammar:                  ## Positive grammar check for consult-instructions
 	bash scripts/check-consult-grammar.sh .
