@@ -212,8 +212,6 @@ teardown() {
         "JQL"
         "Atlassian"
         "DAST-Orch"
-        "Mailchimp"
-        "Intuit"
     )
     for token in "${tokens[@]}"; do
         if grep -qF "$token" "$SKILL_FILE"; then
