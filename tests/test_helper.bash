@@ -15,6 +15,23 @@ setup_file() {
     export DOTFILES_DIR
 }
 
+# Pin synthetic guard data so check-no-leakage.sh runs on CI (no skip) and
+# behaves consistently on developer machines with real guard data installed.
+# Individual tests may override LEAKAGE_* for absent-marker / fail-closed cases.
+_leakage_guard_fixture() {
+    GUARD="$SCRATCH/guard"
+    mkdir -p "$GUARD"
+    cat > "$GUARD/leakage-tokens.txt" <<'EOF'
+# synthetic tokens — mechanism tests only
+xyzzy-corp
+plugh
+xyzzy.example.com
+EOF
+    echo "fixture" > "$GUARD/company-context"
+    export LEAKAGE_TOKENS_FILE="$GUARD/leakage-tokens.txt"
+    export LEAKAGE_MARKER_FILE="$GUARD/company-context"
+}
+
 setup() {
     # CORE_DIR is the root of the dotfiles-core repo.
     CORE_DIR="$(realpath "$BATS_TEST_DIRNAME/..")"
@@ -28,6 +45,8 @@ setup() {
     # Isolated scratch dir for tests that write files.
     SCRATCH="$(mktemp -d)"
     export SCRATCH
+
+    _leakage_guard_fixture
 }
 
 teardown() {
