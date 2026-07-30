@@ -10,6 +10,19 @@ _run_install() {
     HOME="$SCRATCH/home" run bash "$CORE_DIR/install.sh" $args
 }
 
+# Capture a hook file's state for before/after comparison: symlink target,
+# regular-file mtime (BSD stat with GNU fallback), or absence.
+_hook_state() {
+    local hook="$1"
+    if [ -L "$hook" ]; then
+        echo "symlink:$(readlink "$hook")"
+    elif [ -f "$hook" ]; then
+        echo "file:$(stat -f '%m' "$hook" 2>/dev/null || stat -c '%Y' "$hook")"
+    else
+        echo "absent"
+    fi
+}
+
 setup() {
     # Call parent setup for CORE_DIR and SCRATCH
     CORE_DIR="$(realpath "$BATS_TEST_DIRNAME/..")"
@@ -236,36 +249,28 @@ teardown() {
 }
 
 # ---------------------------------------------------------------------------
-# 11. Pre-commit hook isolation — install.bats must not mutate real .git/hooks/
+# 11. Git-hook isolation — install.bats must not mutate real .git/hooks/
 # ---------------------------------------------------------------------------
 
 @test "install does not write to real .git/hooks/ when _SKIP_PRECOMMIT_INSTALL is set" {
     # _SKIP_PRECOMMIT_INSTALL is exported in setup() for all tests in this file.
     # This explicit assertion documents the contract and catches any regression
-    # where setup() stops exporting the bypass.
-    local real_hook="$CORE_DIR/.git/hooks/pre-commit"
+    # where setup() stops exporting the bypass. Covers every installed hook.
+    local real_precommit="$CORE_DIR/.git/hooks/pre-commit"
+    local real_prepush="$CORE_DIR/.git/hooks/pre-push"
 
-    # Snapshot: capture whether hook exists and, if so, its link target or mtime.
-    local before_state
-    if [ -L "$real_hook" ]; then
-        before_state="symlink:$(readlink "$real_hook")"
-    elif [ -f "$real_hook" ]; then
-        before_state="file:$(stat -f '%m' "$real_hook" 2>/dev/null || stat -c '%Y' "$real_hook")"
-    else
-        before_state="absent"
-    fi
+    # Snapshot: capture each hook's state (link target, mtime, or absence).
+    local precommit_before prepush_before
+    precommit_before="$(_hook_state "$real_precommit")"
+    prepush_before="$(_hook_state "$real_prepush")"
 
     _run_install
 
     # Snapshot: state after install
-    local after_state
-    if [ -L "$real_hook" ]; then
-        after_state="symlink:$(readlink "$real_hook")"
-    elif [ -f "$real_hook" ]; then
-        after_state="file:$(stat -f '%m' "$real_hook" 2>/dev/null || stat -c '%Y' "$real_hook")"
-    else
-        after_state="absent"
-    fi
+    local precommit_after prepush_after
+    precommit_after="$(_hook_state "$real_precommit")"
+    prepush_after="$(_hook_state "$real_prepush")"
 
-    [ "$before_state" = "$after_state" ]
+    [ "$precommit_before" = "$precommit_after" ]
+    [ "$prepush_before" = "$prepush_after" ]
 }

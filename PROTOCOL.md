@@ -83,11 +83,12 @@ future contributors do not re-inline the loop.
 
 ## Enforcement evolution
 
-### Today (denylist)
+### Cohort 0 (in-tree denylist — SUPERSEDED)
 
-`make check-leakage` runs `scripts/check-no-leakage.sh`, which scans every file
-in the repo against a list of company-specific tokens in `scripts/leakage-tokens.txt`.
-This catches accidental leakage of overlay-specific identifiers into core.
+The original `make check-leakage` scan compared every file in the repo against
+a token list that used to live in the tree at `scripts/leakage-tokens.txt`.
+That in-tree copy was itself a leak — the list enumerated the exact identifiers
+the repo must never contain — and is gone as of Cohort 3.
 
 Weakness: the denylist approach is structurally fragile (see §Why denylist is
 structurally weak). For consult-instructions specifically, the section name
@@ -115,11 +116,42 @@ with positive grammar enforcement for consult-instructions:
 - Empty vocabulary is a fatal configuration error (exit code 2).
 - Wired into `make all` and `scripts/pre-commit.sh`.
 
-**D3 decision (Cohort 2):** `leakage-tokens.txt` is kept as belt-and-suspenders
-for free-prose leakage of other company-specific tokens (`mailchimp`, `intuit`,
-`turbotax`, `quickbooks`, `cg-tax`, `build.intuit.com`, `@intuit.com`,
-`@mailchimp.com`). `DAST-Orch` has been removed from the denylist; grammar
-check is its primary enforcement. The PROVISIONAL allowlist sed-pipe is removed.
+**D3 decision (Cohort 2, amended in Cohort 3):** the denylist is kept as
+belt-and-suspenders for free-prose leakage of company-specific tokens. The list
+itself is overlay-owned and lives outside every repo working tree (see Cohort 3);
+this document deliberately does not enumerate its contents. `DAST-Orch` was
+removed from the denylist; the grammar check is its primary enforcement. The
+PROVISIONAL allowlist sed-pipe is removed.
+
+### Cohort 3 (externalized token data + publication-set gate — current)
+
+Token data no longer lives in this repository. The overlay owns the list and
+materializes it at install time to
+`${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles-guard/leakage-tokens.txt`, with a
+`company-context` marker file beside it declaring that the machine holds
+company context.
+
+**Checker semantics** (`scripts/check-no-leakage.sh`):
+
+- Marker absent → the scan is skipped with exit 0. Machines without company
+  context (public CI, fresh clones) cannot and need not run the real scan.
+- Marker present but the token list missing or empty → fail closed with exit 2.
+  A machine that claims company context must have real data behind the claim.
+- Findings → exit 1 with file/line references only. Matched content is never
+  echoed, because the checker's output is itself a publication channel (CI
+  logs, terminal scrollback, pasted bug reports).
+
+**Primary enforcement** is `scripts/pre-push.sh`, which scans every commit not
+already on a remote-tracking ref — the full tree of each outgoing commit plus
+author/committer identity and the commit message. The pre-commit hook is
+retained as a fast working-tree early warning; the pre-push gate is what guards
+publication.
+
+**Public CI** runs the mechanism tests on synthetic tokens and shows the
+company-token scan as a structurally skipped step — visible non-execution,
+never a silent green.
+
+The token file format is unchanged: one token per line, `#` comments.
 
 ## Why denylist is structurally weak
 
@@ -128,13 +160,14 @@ of context. A legitimate consult-instruction (`consult \`## Jira fallback (DAST-
 triggers the same match as an accidental leakage (`Use the DAST-Orch MCP for Jira`).
 The denylist cannot tell these apart without the allowlist band-aid.
 
-**Partial-token near-miss.** A token like `intuit` matches `intuitive`, `inuit`, or
-any word containing the substring. Denylist authors must enumerate every variant or
-accept false-positive noise. Neither is maintainable at scale.
+**Partial-token near-miss.** A short token appears inside longer words (`corp`
+inside `corporate`). Denylist authors must anchor word boundaries or accept
+false-positive noise. Neither is maintainable at scale.
 
 **Maintenance via grepping the world.** Adding a new overlay-specific identifier
-requires updating `leakage-tokens.txt`, re-running the scanner, and verifying that
-no existing legitimate mention is newly flagged. Each update is a manual audit.
+requires updating the overlay's copy of `leakage-tokens.txt` (re-materialized at
+install time — see Cohort 3), re-running the scanner, and verifying that no
+existing legitimate mention is newly flagged. Each update is a manual audit.
 Positive grammar requires only adding one line to `consult-vocabulary.txt`.
 
 ## Versioning
