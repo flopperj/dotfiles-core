@@ -13,7 +13,7 @@
 set -euo pipefail
 
 _tmpfiles=()
-trap 'rm -f "${_tmpfiles[@]}"' EXIT INT TERM
+trap '(( ${#_tmpfiles[@]} )) && rm -f "${_tmpfiles[@]}"' EXIT INT TERM
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/_lib.sh"

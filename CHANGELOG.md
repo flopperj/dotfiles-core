@@ -2,6 +2,22 @@
 
 > **How to update:** The pre-commit hook (`scripts/pre-commit.sh`) is auto-installed by `install.sh`. It runs a fast leakage check (`scripts/check-no-leakage.sh`) and re-renders the generated `CLAUDE.md.generated` and `AGENTS.md.generated` files on every commit. A pre-push gate (`scripts/pre-push.sh`, also auto-installed) scans every outgoing commit's tree and metadata before it leaves the machine. CI runs lint, consult-grammar, and the test suite (including synthetic-token leakage mechanism tests) on every PR; the company-token scan is a separate step that runs only when guard data is present on the runner. If you bypass the hooks or work in a context where hooks cannot run, keep this file current manually. Each release heading links to the diff on the public mirror.
 
+## v1.15.1 — 2026-07-29 (publication-gate follow-ups)
+
+### Added
+
+- `scripts/scrub-mirror-history.sh` — audit/scrub helper for removing `scripts/leakage-tokens.txt` from the public mirror's git history (`audit` and `scrub` subcommands; scrub requires `git-filter-repo` and a manual force-push).
+
+### Changed
+
+- `scripts/lib-core-symlinks.sh` — `_install_git_hook` resolves the real gitdir via `git rev-parse --git-dir`, so pre-commit and pre-push hooks install in submodule worktrees (`.git` is a file) as well as standalone clones.
+- `tests/test_helper.bash` — pins synthetic `LEAKAGE_*` guard fixtures in every test so migration/content leakage checks run on CI instead of silently skipping.
+- `tests/install-precommit-hook.bats` — fixtures use real git repos; submodule gitdir install is tested explicitly.
+
+### Fixed
+
+- `scripts/role-guard-gen.sh` — empty `_tmpfiles` array no longer triggers an unbound-variable error on exit when no fragments were written.
+
 ## v1.15.0 — 2026-07-29 (externalized leakage gate)
 
 ### Added

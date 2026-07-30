@@ -9,11 +9,15 @@ setup() {
     SCRATCH="$(mktemp -d)"
     export SCRATCH
 
-    # Fixture core dir with a real .git directory (not a submodule file)
+    # Fixture core dir with a real git repository
     FIXTURE_CORE="$SCRATCH/fixture_core"
-    mkdir -p "$FIXTURE_CORE/.git/hooks"
-    # Hook scripts must exist in the fixture so the symlink targets are real
     mkdir -p "$FIXTURE_CORE/scripts"
+    git init -q "$FIXTURE_CORE"
+    FIXTURE_GIT_DIR="$(git -C "$FIXTURE_CORE" rev-parse --git-dir)"
+    if [[ "$FIXTURE_GIT_DIR" != /* ]]; then
+        FIXTURE_GIT_DIR="$FIXTURE_CORE/$FIXTURE_GIT_DIR"
+    fi
+    export FIXTURE_GIT_DIR
     cp "$CORE_DIR/scripts/pre-commit.sh" "$FIXTURE_CORE/scripts/pre-commit.sh"
     cp "$CORE_DIR/scripts/pre-push.sh" "$FIXTURE_CORE/scripts/pre-push.sh"
 }
@@ -41,12 +45,9 @@ teardown() {
     source "$CORE_DIR/scripts/lib-core-symlinks.sh"
     _install_precommit_hook "$FIXTURE_CORE"
 
-    local hook="$FIXTURE_CORE/.git/hooks/pre-commit"
+    local hook="$FIXTURE_GIT_DIR/hooks/pre-commit"
     [ -L "$hook" ]
-    # Symlink must point at scripts/pre-commit.sh inside fixture core
-    local target
-    target="$(readlink "$hook")"
-    [ "$target" = "$FIXTURE_CORE/scripts/pre-commit.sh" ]
+    [ "$(realpath "$hook")" = "$(realpath "$FIXTURE_CORE/scripts/pre-commit.sh")" ]
 }
 
 # ---------------------------------------------------------------------------
@@ -58,7 +59,7 @@ teardown() {
     source "$CORE_DIR/scripts/lib-core-symlinks.sh"
     _install_precommit_hook "$FIXTURE_CORE"
 
-    [ -x "$FIXTURE_CORE/.git/hooks/pre-commit" ]
+    [ -x "$FIXTURE_GIT_DIR/hooks/pre-commit" ]
 }
 
 # ---------------------------------------------------------------------------
@@ -71,32 +72,40 @@ teardown() {
     _install_precommit_hook "$FIXTURE_CORE"
     _install_precommit_hook "$FIXTURE_CORE"
 
-    local hook="$FIXTURE_CORE/.git/hooks/pre-commit"
+    local hook="$FIXTURE_GIT_DIR/hooks/pre-commit"
     [ -L "$hook" ]
     # Still exactly one hook file — not duplicated
     local count
-    count="$(find "$FIXTURE_CORE/.git/hooks" -maxdepth 1 -name 'pre-commit*' | wc -l)"
+    count="$(find "$FIXTURE_GIT_DIR/hooks" -maxdepth 1 -name 'pre-commit' | wc -l)"
     [ "$count" -eq 1 ]
 }
 
 # ---------------------------------------------------------------------------
-# 5. Skips when .git is a file (submodule worktree)
+# 5. Submodule worktree: .git is a file — hook installs in resolved gitdir
 # ---------------------------------------------------------------------------
 
-@test "_install_precommit_hook skips when .git is a file not a directory" {
+@test "_install_precommit_hook installs into resolved gitdir when .git is a file" {
     # shellcheck source=/dev/null
     source "$CORE_DIR/scripts/lib-core-symlinks.sh"
 
-    # Simulate submodule worktree: .git is a file, not a dir
-    local submod_core="$SCRATCH/submod_core"
+    local real_repo="$SCRATCH/real_repo"
+    local gitdir submod_core
+    git init -q "$real_repo"
+    gitdir="$(git -C "$real_repo" rev-parse --git-dir)"
+    if [[ "$gitdir" != /* ]]; then
+        gitdir="$real_repo/$gitdir"
+    fi
+    submod_core="$SCRATCH/submod_core"
     mkdir -p "$submod_core/scripts"
     cp "$CORE_DIR/scripts/pre-commit.sh" "$submod_core/scripts/pre-commit.sh"
-    echo "gitdir: /some/other/.git" > "$submod_core/.git"
+    printf 'gitdir: %s\n' "$gitdir" > "$submod_core/.git"
 
     _install_precommit_hook "$submod_core"
 
-    # No hooks directory should have been created
-    [ ! -d "$submod_core/.git/hooks" ]
+    local hook="$gitdir/hooks/pre-commit"
+    [ -L "$hook" ]
+    [ "$(realpath "$hook")" = "$(realpath "$submod_core/scripts/pre-commit.sh")" ]
+    [ -x "$hook" ]
 }
 
 # ---------------------------------------------------------------------------
@@ -107,7 +116,7 @@ teardown() {
     # shellcheck source=/dev/null
     source "$CORE_DIR/scripts/lib-core-symlinks.sh"
 
-    local hook="$FIXTURE_CORE/.git/hooks/pre-commit"
+    local hook="$FIXTURE_GIT_DIR/hooks/pre-commit"
 
     # Plant a regular (non-symlink) hook file — simulates husky/lefthook/hand-written hook
     echo "#!/bin/sh" > "$hook"
@@ -117,18 +126,16 @@ teardown() {
 
     # install must succeed: hook is now a symlink pointing at pre-commit.sh
     [ -L "$hook" ]
-    local target
-    target="$(readlink "$hook")"
-    [ "$target" = "$FIXTURE_CORE/scripts/pre-commit.sh" ]
+    [ "$(realpath "$hook")" = "$(realpath "$FIXTURE_CORE/scripts/pre-commit.sh")" ]
 
     # Original regular file must be preserved as a .bak file
     local bak_count
-    bak_count="$(find "$FIXTURE_CORE/.git/hooks" -maxdepth 1 -name 'pre-commit.bak.*' 2>/dev/null | wc -l)"
+    bak_count="$(find "$FIXTURE_GIT_DIR/hooks" -maxdepth 1 -name 'pre-commit.bak.*' 2>/dev/null | wc -l)"
     [ "$bak_count" -ge 1 ]
 
     # Backup must contain the original hook content
     local bak_file
-    bak_file="$(find "$FIXTURE_CORE/.git/hooks" -maxdepth 1 -name 'pre-commit.bak.*' 2>/dev/null | head -1)"
+    bak_file="$(find "$FIXTURE_GIT_DIR/hooks" -maxdepth 1 -name 'pre-commit.bak.*' 2>/dev/null | head -1)"
     grep -q "existing hook" "$bak_file"
 }
 
@@ -152,12 +159,9 @@ teardown() {
     source "$CORE_DIR/scripts/lib-core-symlinks.sh"
     _install_prepush_hook "$FIXTURE_CORE"
 
-    local hook="$FIXTURE_CORE/.git/hooks/pre-push"
+    local hook="$FIXTURE_GIT_DIR/hooks/pre-push"
     [ -L "$hook" ]
-    # Symlink must point at scripts/pre-push.sh inside fixture core
-    local target
-    target="$(readlink "$hook")"
-    [ "$target" = "$FIXTURE_CORE/scripts/pre-push.sh" ]
+    [ "$(realpath "$hook")" = "$(realpath "$FIXTURE_CORE/scripts/pre-push.sh")" ]
     [ -x "$hook" ]
 }
 
@@ -171,30 +175,38 @@ teardown() {
     _install_prepush_hook "$FIXTURE_CORE"
     _install_prepush_hook "$FIXTURE_CORE"
 
-    local hook="$FIXTURE_CORE/.git/hooks/pre-push"
+    local hook="$FIXTURE_GIT_DIR/hooks/pre-push"
     [ -L "$hook" ]
     # Still exactly one hook file — not duplicated
     local count
-    count="$(find "$FIXTURE_CORE/.git/hooks" -maxdepth 1 -name 'pre-push*' | wc -l)"
+    count="$(find "$FIXTURE_GIT_DIR/hooks" -maxdepth 1 -name 'pre-push' | wc -l)"
     [ "$count" -eq 1 ]
 }
 
 # ---------------------------------------------------------------------------
-# 10. Pre-push install skips when .git is a file (submodule worktree)
+# 10. Pre-push install resolves gitdir when .git is a file (submodule worktree)
 # ---------------------------------------------------------------------------
 
-@test "_install_prepush_hook skips when .git is a file not a directory" {
+@test "_install_prepush_hook installs into resolved gitdir when .git is a file" {
     # shellcheck source=/dev/null
     source "$CORE_DIR/scripts/lib-core-symlinks.sh"
 
-    # Simulate submodule worktree: .git is a file, not a dir
-    local submod_core="$SCRATCH/submod_core"
+    local real_repo="$SCRATCH/real_repo"
+    local gitdir submod_core
+    git init -q "$real_repo"
+    gitdir="$(git -C "$real_repo" rev-parse --git-dir)"
+    if [[ "$gitdir" != /* ]]; then
+        gitdir="$real_repo/$gitdir"
+    fi
+    submod_core="$SCRATCH/submod_core"
     mkdir -p "$submod_core/scripts"
     cp "$CORE_DIR/scripts/pre-push.sh" "$submod_core/scripts/pre-push.sh"
-    echo "gitdir: /some/other/.git" > "$submod_core/.git"
+    printf 'gitdir: %s\n' "$gitdir" > "$submod_core/.git"
 
     _install_prepush_hook "$submod_core"
 
-    # No hooks directory should have been created
-    [ ! -d "$submod_core/.git/hooks" ]
+    local hook="$gitdir/hooks/pre-push"
+    [ -L "$hook" ]
+    [ "$(realpath "$hook")" = "$(realpath "$submod_core/scripts/pre-push.sh")" ]
+    [ -x "$hook" ]
 }
