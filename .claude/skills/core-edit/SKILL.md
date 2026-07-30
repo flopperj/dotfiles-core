@@ -93,8 +93,10 @@ Run leakage check on the modified file before proceeding:
 bash .claude/dotfiles-core/scripts/check-no-leakage.sh .claude/dotfiles-core/.claude/skills/<skill-name>/
 ```
 
-If leakage check fails: show the hits, ask the user to revise the edit,
-and re-check. Do not commit a file with leakage tokens.
+If the leakage check fails, it reports file/line references only (matched
+content is withheld by design) — ask the user to revise the edit against
+those locations and re-check. Do not commit a file with leakage tokens.
+On machines without the company-context marker the check skips cleanly.
 
 ---
 
