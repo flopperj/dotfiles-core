@@ -54,6 +54,7 @@ echo "Installing dotfiles-core from $CORE_DIR"
 
 install_core_symlinks "$CORE_DIR"
 _install_precommit_hook "$CORE_DIR"
+_install_prepush_hook "$CORE_DIR"
 _seed_core_agent_memory "$CORE_DIR"
 _install_cli_and_plugins "$CORE_DIR"
 

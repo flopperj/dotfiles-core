@@ -1,6 +1,24 @@
 # Changelog
 
-> **How to update:** The pre-commit hook (`scripts/pre-commit.sh`) is auto-installed by `install.sh`. It runs a fast leakage check (`scripts/check-no-leakage.sh`) and re-renders the generated `CLAUDE.md.generated` and `AGENTS.md.generated` files on every commit. Full test/lint suite (`make all`) runs in CI. If you bypass the hook or work in a context where hooks cannot run, keep this file current manually. Each release heading links to the diff on the public mirror.
+> **How to update:** The pre-commit hook (`scripts/pre-commit.sh`) is auto-installed by `install.sh`. It runs a fast leakage check (`scripts/check-no-leakage.sh`) and re-renders the generated `CLAUDE.md.generated` and `AGENTS.md.generated` files on every commit. A pre-push gate (`scripts/pre-push.sh`, also auto-installed) scans every outgoing commit's tree and metadata before it leaves the machine. Full test/lint suite (`make all`) runs in CI. If you bypass the hooks or work in a context where hooks cannot run, keep this file current manually. Each release heading links to the diff on the public mirror.
+
+## v1.15.0 — 2026-07-29 (externalized leakage gate)
+
+### Added
+
+- `scripts/pre-push.sh` — a publication-set leakage gate, installed as the `pre-push` git hook by `install.sh` via `_install_git_hook`. Where the pre-commit check scans only the working tree (early warning), the pre-push gate scans every outgoing commit in the pushed range — each commit's **full tree** plus its **metadata** (author/committer identity and commit message) — so a token buried in an intermediate commit, or in a commit message, can never reach a remote even if a later commit removed it from the tree.
+- External token-data contract — the token list no longer lives in this repo. It is materialized outside every working tree at `${XDG_CONFIG_HOME:-~/.config}/dotfiles-guard/leakage-tokens.txt` by an overlay installer, alongside a `company-context` marker file. Semantics are fail-closed: marker present but list missing (or empty) is a hard configuration error, never a silent pass; marker absent means the machine carries no company context and the checks skip cleanly.
+- `tests/pre-push-hook.bats` — coverage for the publication-set gate, exercising the mechanism entirely on synthetic tokens.
+- `.github/workflows/lint.yml` — the company-token scan is now a **structurally skipped** step on runners without the guard data: a visible "skipped" status in the run, never a silent green. Lint, the consult-grammar check, and the synthetic-token test suite still run everywhere.
+
+### Changed
+
+- `scripts/check-no-leakage.sh` — reads the external token list instead of an in-tree file; output is content-free (file/line references only — matched content is withheld by design, because the checker's own output is a publication channel); gains a `--commits` mode that reads commit SHAs from stdin and scans each commit's tree and metadata (used by the pre-push gate); fails closed with a distinct exit code when the company-context marker exists but the list is missing or has no effective tokens.
+- `tests/leakage-check.bats` — rewritten on synthetic tokens pointed at fixture list/marker files, so the detection mechanism is fully testable in public CI without the real token data.
+
+### Removed
+
+- The in-tree token list (`scripts/leakage-tokens.txt`) and the per-file scan exclusions it required — the list's own presence in the tree was the leak the check existed to prevent.
 
 ## v1.14.2 — 2026-07-16
 

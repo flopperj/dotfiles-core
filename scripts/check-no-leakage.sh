@@ -1,88 +1,134 @@
 #!/usr/bin/env bash
-# check-no-leakage.sh — scan a directory for forbidden company tokens.
+# check-no-leakage.sh — scan for forbidden tokens without ever printing them.
 #
-# Usage: bash scripts/check-no-leakage.sh [DIR]
-#   DIR defaults to "." (current directory).
+# The token list is data, not code: it lives OUTSIDE every repo working tree
+# and is materialized by a private overlay installer. This repo never commits
+# the list, and this script never echoes matched content — findings are
+# reported as file/line references only, because the checker's own output is
+# itself a publication channel (CI logs are public).
+#
+# Usage:
+#   bash scripts/check-no-leakage.sh [DIR]      # scan a directory tree (default ".")
+#   ... | bash scripts/check-no-leakage.sh --commits
+#       # read commit SHAs (one per line) from stdin; scan each commit's full
+#       # tree plus its metadata (author/committer identity, commit message)
+#
+# Environment overrides (tests point these at fixtures):
+#   LEAKAGE_TOKENS_FILE   default ${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles-guard/leakage-tokens.txt
+#   LEAKAGE_MARKER_FILE   default ${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles-guard/company-context
 #
 # Exit codes:
-#   0 — no forbidden tokens found
-#   1 — at least one forbidden token found (matches printed to stdout)
+#   0 — clean, or skipped (no company-context marker on this machine)
+#   1 — at least one forbidden token found (locations only, content withheld)
+#   2 — configuration error: marker present but token list missing or empty
 #
-# Token list lives in scripts/leakage-tokens.txt (relative to this script).
-# Tokens are matched case-insensitively with word-boundary anchoring.
-#
-# Exclusions:
-#   .git/                         — version control internals
-#   scripts/leakage-tokens.txt    — canonical token list (defines forbidden words, not a leak)
-#   tests/leakage-check.bats      — test fixture legitimately contains tokens
-#   PROTOCOL.md                   — protocol meta-doc names tokens by design (same reason as leakage-tokens.txt)
+# Token file format: one token per line; blank lines and #-comments ignored.
+# Matching is case-insensitive with word-boundary anchoring where _ and - are
+# treated as non-word characters (so token_suffix and prefix-token are caught).
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TOKENS_FILE="$SCRIPT_DIR/leakage-tokens.txt"
-SCAN_DIR="${1:-.}"
+GUARD_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles-guard"
+TOKENS_FILE="${LEAKAGE_TOKENS_FILE:-$GUARD_DIR/leakage-tokens.txt}"
+MARKER_FILE="${LEAKAGE_MARKER_FILE:-$GUARD_DIR/company-context}"
 
-if [ ! -f "$TOKENS_FILE" ]; then
-    echo "ERROR: leakage-tokens.txt not found at $TOKENS_FILE" >&2
-    exit 2
+MODE="dir"
+SCAN_DIR="."
+if [ "${1:-}" = "--commits" ]; then
+    MODE="commits"
+else
+    SCAN_DIR="${1:-.}"
 fi
 
-# Build a list of tokens from the file, skipping blank lines and comments.
-# Note: avoid `mapfile`/`readarray` — they require bash 4+, but this repo
-# targets macOS's stock bash 3.2. A while-read loop is portable.
-TOKENS=()
-while IFS= read -r _line; do
-    TOKENS+=("$_line")
-done < <(grep -v '^\s*#' "$TOKENS_FILE" | grep -v '^\s*$')
+# In --commits mode, drain stdin BEFORE any early exit. Exiting with stdin
+# unread would SIGPIPE the feeding pre-push pipeline under pipefail.
+SHAS=()
+if [ "$MODE" = "commits" ]; then
+    while IFS= read -r _sha; do
+        [ -n "$_sha" ] && SHAS+=("$_sha")
+    done
+fi
 
-if [ "${#TOKENS[@]}" -eq 0 ]; then
-    echo "WARNING: leakage-tokens.txt is empty; nothing to check." >&2
+if [ ! -f "$MARKER_FILE" ]; then
+    echo "leakage check: skipped (no company-context marker at $MARKER_FILE)" >&2
     exit 0
 fi
 
+if [ ! -f "$TOKENS_FILE" ]; then
+    echo "ERROR: company-context marker present but token list missing at $TOKENS_FILE" >&2
+    echo "Fail-closed: re-run the overlay installer to materialize the token list." >&2
+    exit 2
+fi
+
+# Build the token array. No mapfile — this repo targets macOS stock bash 3.2.
+TOKENS=()
+while IFS= read -r _line; do
+    TOKENS+=("$_line")
+done < <(grep -v '^\s*#' "$TOKENS_FILE" | grep -v '^\s*$' || true)
+
+if [ "${#TOKENS[@]}" -eq 0 ]; then
+    echo "ERROR: token list at $TOKENS_FILE has no effective tokens." >&2
+    echo "Fail-closed: an empty list in a company context is a configuration error." >&2
+    exit 2
+fi
+
+# One combined ERE: (^|[^a-zA-Z0-9])(tok1|tok2|...)([^a-zA-Z0-9]|$)
+# Regex specials inside tokens are escaped; _ and - stay non-word chars.
+ALTERNATION=""
+for token in "${TOKENS[@]}"; do
+    escaped="$(printf '%s' "$token" | sed 's/[.[\*^${}()+?|]/\\&/g')"
+    if [ -z "$ALTERNATION" ]; then
+        ALTERNATION="$escaped"
+    else
+        ALTERNATION="$ALTERNATION|$escaped"
+    fi
+done
+PATTERN="(^|[^a-zA-Z0-9])(${ALTERNATION})([^a-zA-Z0-9]|$)"
+
 FOUND=0
 
-for token in "${TOKENS[@]}"; do
-    # Word-boundary pattern: character preceding/following the token must NOT
-    # be an alphanumeric. Underscore (_) and hyphen (-) are NOT word chars here
-    # so that "<token>_suffix" and "prefix-<token>" forms are caught.
-    # For tokens containing special regex chars (. @ -), we escape them.
-    escaped_token="$(printf '%s' "$token" | sed 's/[.[\*^${}()+?|]/\\&/g')"
-    pattern="(^|[^a-zA-Z0-9])${escaped_token}([^a-zA-Z0-9]|$)"
-
-    # Use find to enumerate files, excluding .git/ and the leakage test fixture.
+if [ "$MODE" = "dir" ]; then
     while IFS= read -r -d '' file; do
-        # Skip binary files (git objects, images, etc.).
-        # Use null-byte detection rather than `file` classification: `file` can
-        # misidentify legitimate text files (e.g. files starting with ``` are
-        # flagged as "Dyalog APL transfer"). grep -qI '' exits 0 for files with
-        # no null bytes (safe to grep as text) and exits 1 for true binaries.
-        if grep -qI '' "$file" 2>/dev/null; then
-            matches="$(grep -inE "$pattern" "$file" 2>/dev/null || true)"
-            if [ -n "$matches" ]; then
-                FOUND=1
-                echo "=== LEAKAGE FOUND in $file ===" >&2
-                echo "$matches" >&2
-                echo ""
-                # Also print to stdout for capture in tests
-                echo "=== LEAKAGE FOUND in $file ==="
-                echo "$matches"
-            fi
+        # Null-byte detection: grep -qI '' exits 0 for text, 1 for binary.
+        grep -qI '' "$file" 2>/dev/null || continue
+        lines="$(grep -inE "$PATTERN" "$file" 2>/dev/null | cut -d: -f1 | tr '\n' ' ')" || true
+        if [ -n "$lines" ]; then
+            FOUND=1
+            echo "LEAKAGE: $file — line(s): ${lines}(content withheld)" >&2
         fi
     done < <(find "$SCAN_DIR" \
         -not -path "*/.git/*" \
         -not -name ".git" \
-        -not -path "*/scripts/leakage-tokens.txt" \
-        -not -path "*/tests/leakage-check.bats" \
-        -not -path "*/tests/handoff-skill.bats" \
-        -not -path "*/PROTOCOL.md" \
         -type f \
         -print0 2>/dev/null)
-done
-
-if [ "$FOUND" -ne 0 ]; then
-    exit 1
+else
+    for sha in "${SHAS[@]:-}"; do
+        [ -n "$sha" ] || continue
+        if ! git cat-file -e "${sha}^{commit}" 2>/dev/null; then
+            echo "ERROR: not a commit: $sha" >&2
+            exit 2
+        fi
+        # Full tree of the pushed commit — not the diff. Content introduced in
+        # one commit and removed in a later one still publishes with the push.
+        tree_hits="$(git grep -I -i -n -E "$PATTERN" "$sha" -- 2>/dev/null | cut -d: -f1-3)" || true
+        if [ -n "$tree_hits" ]; then
+            FOUND=1
+            echo "LEAKAGE in pushed commit tree (content withheld):" >&2
+            echo "$tree_hits" >&2
+        fi
+        meta_lines="$(git log -1 --format='%an <%ae>%n%cn <%ce>%n%B' "$sha" \
+            | grep -inE "$PATTERN" | cut -d: -f1 | tr '\n' ' ')" || true
+        if [ -n "$meta_lines" ]; then
+            FOUND=1
+            echo "LEAKAGE in metadata of commit $sha — line(s): ${meta_lines}(content withheld)" >&2
+        fi
+    done
 fi
 
+if [ "$FOUND" -ne 0 ]; then
+    echo "" >&2
+    echo "Leakage check FAILED. Matched content is withheld by design;" >&2
+    echo "compare the referenced locations against the local token list." >&2
+    exit 1
+fi
 exit 0

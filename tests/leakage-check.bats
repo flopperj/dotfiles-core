@@ -1,216 +1,311 @@
 #!/usr/bin/env bats
 # Tests for scripts/check-no-leakage.sh
 #
-# RED phase: these tests are written before the script exists.
-# Each test case verifies a behavioral contract from the PRD.
+# Mechanism tests only — every token below is synthetic (xyzzy-corp, plugh,
+# xyzzy.example.com, grault-sentinel). The real token list is data, not code:
+# it lives outside every repo working tree and is never referenced here.
 
 load 'test_helper'
 
-# Helper: create a scratch file with given content, run leakage check on it.
-# CORE_DIR is set by test_helper.bash setup() before each test.
+# Pin BOTH overrides in every test. A developer machine has real guard data
+# installed and CI does not — unpinned tests would change verdict per host.
+_guard_fixture() {
+    GUARD="$SCRATCH/guard"
+    SCAN="$SCRATCH/scan"           # scanned dir — must NOT contain the fixture list
+    mkdir -p "$GUARD" "$SCAN"
+    cat > "$GUARD/leakage-tokens.txt" <<'EOF'
+# synthetic tokens — mechanism tests only
+xyzzy-corp
+plugh
+xyzzy.example.com
+EOF
+    echo "fixture" > "$GUARD/company-context"
+    export LEAKAGE_TOKENS_FILE="$GUARD/leakage-tokens.txt"
+    export LEAKAGE_MARKER_FILE="$GUARD/company-context"
+}
+
 _check_file() {
-    local content="$1"
-    echo "$content" > "$SCRATCH/subject.txt"
-    run bash "$CORE_DIR/scripts/check-no-leakage.sh" "$SCRATCH"
+    printf '%s\n' "$1" > "$SCAN/subject.txt"
+    run bash "$CORE_DIR/scripts/check-no-leakage.sh" "$SCAN"
+}
+
+_git_fixture() {
+    REPO="$SCRATCH/repo"
+    mkdir -p "$REPO"
+    git -C "$REPO" init -q
+    git -C "$REPO" config user.email "dev@example.com"
+    git -C "$REPO" config user.name "Dev"
+}
+
+# Run the checker in --commits mode with cwd inside the fixture repo,
+# feeding the given lines (one SHA per line) on stdin.
+_check_commits() {
+    run bash -c "cd '$REPO' && printf '%s\n' \"\$@\" | bash '$CORE_DIR/scripts/check-no-leakage.sh' --commits" _ "$@"
 }
 
 # ---------------------------------------------------------------------------
-# 1. Script exists and is executable
+# Script contract: existence + clean scan
 # ---------------------------------------------------------------------------
 
 @test "check-no-leakage.sh exists and is executable" {
+    _guard_fixture
     [ -f "$CORE_DIR/scripts/check-no-leakage.sh" ]
     [ -x "$CORE_DIR/scripts/check-no-leakage.sh" ]
 }
 
-# ---------------------------------------------------------------------------
-# 2. Clean tree exits 0
-# ---------------------------------------------------------------------------
-
 @test "clean directory exits 0" {
+    _guard_fixture
     echo "This file has no forbidden tokens — just universal content." \
-        > "$SCRATCH/clean.txt"
-    run bash "$CORE_DIR/scripts/check-no-leakage.sh" "$SCRATCH"
+        > "$SCAN/clean.txt"
+    run bash "$CORE_DIR/scripts/check-no-leakage.sh" "$SCAN"
     [ "$status" -eq 0 ]
 }
 
 # ---------------------------------------------------------------------------
-# 3. Each forbidden token is caught — lowercase
+# Token matching: case-insensitive
 # ---------------------------------------------------------------------------
 
-@test "catches 'mailchimp' (lowercase)" {
-    _check_file "See the mailchimp documentation."
-    [ "$status" -ne 0 ]
+@test "catches 'xyzzy-corp' (lowercase)" {
+    _guard_fixture
+    _check_file "See the xyzzy-corp documentation."
+    [ "$status" -eq 1 ]
 }
 
-@test "catches 'intuit' (lowercase)" {
-    _check_file "intuit is the company name."
-    [ "$status" -ne 0 ]
+@test "catches 'Xyzzy-Corp' (title case)" {
+    _guard_fixture
+    _check_file "The Xyzzy-Corp platform."
+    [ "$status" -eq 1 ]
 }
 
-@test "catches 'turbotax' (lowercase)" {
-    _check_file "Filed with turbotax this year."
-    [ "$status" -ne 0 ]
+@test "catches 'XYZZY-CORP' (uppercase)" {
+    _guard_fixture
+    _check_file "XYZZY-CORP CONFIDENTIAL"
+    [ "$status" -eq 1 ]
 }
 
-@test "catches 'quickbooks' (lowercase)" {
-    _check_file "Track expenses in quickbooks."
-    [ "$status" -ne 0 ]
+@test "catches 'plugh' in prose" {
+    _guard_fixture
+    _check_file "The plugh service handles this."
+    [ "$status" -eq 1 ]
 }
-
-@test "catches 'cg-tax' (lowercase)" {
-    _check_file "Service name: cg-tax"
-    [ "$status" -ne 0 ]
-}
-
-@test "catches 'build.intuit.com' URL" {
-    _check_file "CI lives at https://build.intuit.com/jobs/123"
-    [ "$status" -ne 0 ]
-}
-
-@test "catches '@intuit.com' email domain" {
-    _check_file "Send mail to user@intuit.com for support."
-    [ "$status" -ne 0 ]
-}
-
-@test "catches '@mailchimp.com' email domain" {
-    _check_file "Contact support@mailchimp.com"
-    [ "$status" -ne 0 ]
-}
-
 
 # ---------------------------------------------------------------------------
-# 4. Case-insensitive matching
+# Word-boundary semantics: _ and - are non-word chars; alnum is a word char
 # ---------------------------------------------------------------------------
 
-@test "catches 'Intuit' (title case)" {
-    _check_file "Intuit is headquartered in Mountain View."
-    [ "$status" -ne 0 ]
-}
-
-@test "catches 'INTUIT' (uppercase)" {
-    _check_file "INTUIT CONFIDENTIAL"
-    [ "$status" -ne 0 ]
-}
-
-@test "catches 'Mailchimp' (title case)" {
-    _check_file "The Mailchimp platform."
-    [ "$status" -ne 0 ]
-}
-
-
-# ---------------------------------------------------------------------------
-# 5. Word-boundary: false positives do NOT trigger
-# ---------------------------------------------------------------------------
-
-@test "word boundary: 'intuitive' does NOT match 'intuit'" {
-    echo "An intuitive interface." > "$SCRATCH/ok.txt"
-    run bash "$CORE_DIR/scripts/check-no-leakage.sh" "$SCRATCH"
+@test "word boundary: 'plughing' does NOT match 'plugh'" {
+    _guard_fixture
+    _check_file "We are plughing along nicely."
     [ "$status" -eq 0 ]
 }
 
-@test "word boundary: 'intuition' does NOT match 'intuit'" {
-    echo "Trust your intuition here." > "$SCRATCH/ok.txt"
-    run bash "$CORE_DIR/scripts/check-no-leakage.sh" "$SCRATCH"
+@test "word boundary: 'xyzzy-corporate' does NOT match 'xyzzy-corp'" {
+    _guard_fixture
+    _check_file "A xyzzy-corporate strategy document."
+    [ "$status" -eq 0 ]
+}
+
+@test "word boundary: 'xyzzy-corp_secrets' DOES match (underscore is not a word char)" {
+    _guard_fixture
+    _check_file "xyzzy-corp_secrets.json"
+    [ "$status" -eq 1 ]
+}
+
+@test "word boundary: 'prefix-xyzzy-corp' DOES match (hyphen is not a word char)" {
+    _guard_fixture
+    _check_file "your-prefix-xyzzy-corp value"
+    [ "$status" -eq 1 ]
+}
+
+# ---------------------------------------------------------------------------
+# Regex-special escaping: '.' in a token is literal
+# ---------------------------------------------------------------------------
+
+@test "catches 'xyzzy.example.com' (dot-containing token)" {
+    _guard_fixture
+    _check_file "see xyzzy.example.com endpoint"
+    [ "$status" -eq 1 ]
+}
+
+@test "dot is literal: 'xyzzyzexamplezcom' does NOT match 'xyzzy.example.com'" {
+    _guard_fixture
+    _check_file "the string xyzzyzexamplezcom is harmless"
     [ "$status" -eq 0 ]
 }
 
 # ---------------------------------------------------------------------------
-# 5b. Word-boundary: underscore and hyphen after token are NOT word chars
-#     (H2 regression: old regex [^a-zA-Z0-9_-] let these slip through)
-# ---------------------------------------------------------------------------
-
-@test "word boundary: 'intuit_x' DOES match 'intuit' (underscore is not a word char)" {
-    _check_file "intuit_client_secrets.json"
-    [ "$status" -ne 0 ]
-}
-
-@test "word boundary: 'intuit-x' DOES match 'intuit' (hyphen is not a word char)" {
-    _check_file "your-intuit-username"
-    [ "$status" -ne 0 ]
-}
-
-# ---------------------------------------------------------------------------
-# 6. Tokens inside code blocks, frontmatter, comments still caught
+# Tokens inside code blocks, frontmatter, comments still caught
 # ---------------------------------------------------------------------------
 
 @test "token inside markdown fenced code block is caught" {
+    _guard_fixture
     _check_file '```bash
-# Connect to intuit services
-curl https://api.intuit.com
+# Connect to xyzzy-corp services
+curl https://xyzzy.example.com/api
 ```'
-    [ "$status" -ne 0 ]
+    [ "$status" -eq 1 ]
 }
 
 @test "token inside YAML frontmatter is caught" {
+    _guard_fixture
     _check_file '---
-owner: user@intuit.com
+owner: user@xyzzy-corp.example
 ---
 Content here.'
-    [ "$status" -ne 0 ]
+    [ "$status" -eq 1 ]
 }
 
 @test "token inside shell comment is caught" {
+    _guard_fixture
     _check_file '#!/usr/bin/env bash
-# Uses mailchimp MCP for campaign data'
-    [ "$status" -ne 0 ]
+# Uses the plugh MCP for campaign data'
+    [ "$status" -eq 1 ]
 }
 
 # ---------------------------------------------------------------------------
-# 7. Adding a new token to leakage-tokens.txt is picked up
+# Token list is data: appending to the (fixture) list changes behavior
 # ---------------------------------------------------------------------------
 
-@test "new token in leakage-tokens.txt is picked up without restart" {
-    local tokens_file="$CORE_DIR/scripts/leakage-tokens.txt"
-    local orig_content
-    orig_content="$(cat "$tokens_file")"
-
-    # Add a unique test token
-    echo "xyzzy-sentinel-unique" >> "$tokens_file"
-
-    echo "xyzzy-sentinel-unique appears in this file" > "$SCRATCH/test.txt"
-    run bash "$CORE_DIR/scripts/check-no-leakage.sh" "$SCRATCH"
-    local exit_code="$status"
-
-    # Restore original tokens file
-    echo "$orig_content" > "$tokens_file"
-
-    [ "$exit_code" -ne 0 ]
+@test "new token appended to the tokens file is picked up" {
+    _guard_fixture
+    echo "grault-sentinel" >> "$GUARD/leakage-tokens.txt"
+    _check_file "grault-sentinel appears in this file"
+    [ "$status" -eq 1 ]
 }
 
 # ---------------------------------------------------------------------------
-# 8. Output on failure includes file path and matched line
+# Redaction: findings name locations only — matched content is never printed
 # ---------------------------------------------------------------------------
 
-@test "failure output includes matched file path" {
-    _check_file "This contains intuit somewhere."
-    [ "$status" -ne 0 ]
-    echo "$output" | grep -qi "subject.txt"
+@test "failure output names the file but never the matched token" {
+    _guard_fixture
+    _check_file "This contains xyzzy-corp somewhere."
+    [ "$status" -eq 1 ]
+    echo "$output" | grep -q "subject.txt"
+    ! echo "$output" | grep -q "xyzzy-corp"
 }
 
 # ---------------------------------------------------------------------------
-# 9. .git/ directory is excluded from the check
+# .git/ is excluded from directory scans
 # ---------------------------------------------------------------------------
 
 @test ".git directory is excluded from leakage scan" {
-    mkdir -p "$SCRATCH/.git"
-    echo "intuit is here" > "$SCRATCH/.git/config_hack"
-    echo "clean content only" > "$SCRATCH/clean.txt"
-    run bash "$CORE_DIR/scripts/check-no-leakage.sh" "$SCRATCH"
+    _guard_fixture
+    mkdir -p "$SCAN/.git"
+    echo "xyzzy-corp is here" > "$SCAN/.git/config_hack"
+    echo "clean content only" > "$SCAN/clean.txt"
+    run bash "$CORE_DIR/scripts/check-no-leakage.sh" "$SCAN"
     [ "$status" -eq 0 ]
 }
 
 # ---------------------------------------------------------------------------
-# 10. D3 — DAST-Orch removed from denylist (Cohort 2)
-#     Grammar check is now primary enforcement; denylist is belt-and-suspenders
-#     for other tokens only. DAST-Orch is no longer forbidden by the denylist.
+# Marker gate: absent marker means this machine cannot possess the token
+# list — skip cleanly. Present marker with missing/empty list fails closed.
 # ---------------------------------------------------------------------------
 
-@test "DAST-Orch free-prose mention is NOT flagged (removed from denylist in Cohort 2)" {
-    # DAST-Orch was removed from leakage-tokens.txt in Cohort 2.
-    # Grammar check (check-consult-grammar.sh) is now the primary enforcement
-    # for consult-instruction section names. Free-prose DAST-Orch is no longer
-    # a leakage signal for the denylist check.
-    _check_file "Use the DAST-Orch MCP server directly for Jira queries."
+@test "marker absent: skips with exit 0 even when a leaky file is present" {
+    _guard_fixture
+    export LEAKAGE_MARKER_FILE="$GUARD/absent"
+    _check_file "xyzzy-corp would match if the scan ran"
     [ "$status" -eq 0 ]
+    echo "$output" | grep -qi "skipped"
+}
+
+@test "marker present + tokens file missing: fail closed with exit 2" {
+    _guard_fixture
+    export LEAKAGE_TOKENS_FILE="$GUARD/no-such-tokens.txt"
+    _check_file "any content"
+    [ "$status" -eq 2 ]
+    echo "$output" | grep -q "ERROR"
+}
+
+@test "marker present + comments-only tokens file: fail closed with exit 2" {
+    _guard_fixture
+    cat > "$GUARD/leakage-tokens.txt" <<'EOF'
+# only comments in here
+
+# nothing effective
+EOF
+    _check_file "any content"
+    [ "$status" -eq 2 ]
+    echo "$output" | grep -q "ERROR"
+}
+
+# ---------------------------------------------------------------------------
+# --commits mode: scan each commit's full tree plus its metadata
+# ---------------------------------------------------------------------------
+
+@test "--commits: clean commit exits 0" {
+    _guard_fixture
+    _git_fixture
+    echo "clean content" > "$REPO/notes.txt"
+    git -C "$REPO" add -A
+    git -C "$REPO" commit -qm "add notes"
+    _check_commits "$(git -C "$REPO" rev-parse HEAD)"
+    [ "$status" -eq 0 ]
+}
+
+@test "--commits: leaky tree exits 1 and names the path, not the token" {
+    _guard_fixture
+    _git_fixture
+    echo "xyzzy-corp lives in this file" > "$REPO/notes.txt"
+    git -C "$REPO" add -A
+    git -C "$REPO" commit -qm "add notes"
+    _check_commits "$(git -C "$REPO" rev-parse HEAD)"
+    [ "$status" -eq 1 ]
+    echo "$output" | grep -q "notes.txt"
+    ! echo "$output" | grep -q "xyzzy-corp"
+}
+
+@test "--commits: token only in the commit message exits 1" {
+    _guard_fixture
+    _git_fixture
+    echo "clean content" > "$REPO/notes.txt"
+    git -C "$REPO" add -A
+    git -C "$REPO" commit -qm "integrate with xyzzy-corp systems"
+    _check_commits "$(git -C "$REPO" rev-parse HEAD)"
+    [ "$status" -eq 1 ]
+}
+
+@test "--commits: token in the author email exits 1" {
+    _guard_fixture
+    _git_fixture
+    echo "clean content" > "$REPO/notes.txt"
+    git -C "$REPO" add -A
+    git -C "$REPO" -c user.email="dev@xyzzy-corp.example" commit -qm "clean message"
+    _check_commits "$(git -C "$REPO" rev-parse HEAD)"
+    [ "$status" -eq 1 ]
+}
+
+@test "--commits: token added then removed across two commits still exits 1" {
+    _guard_fixture
+    _git_fixture
+    echo "xyzzy-corp was here" > "$REPO/leaky.txt"
+    git -C "$REPO" add -A
+    git -C "$REPO" commit -qm "first"
+    local sha1
+    sha1="$(git -C "$REPO" rev-parse HEAD)"
+    git -C "$REPO" rm -q leaky.txt
+    git -C "$REPO" commit -qm "second"
+    local sha2
+    sha2="$(git -C "$REPO" rev-parse HEAD)"
+    _check_commits "$sha1" "$sha2"
+    [ "$status" -eq 1 ]
+}
+
+@test "--commits: empty stdin exits 0" {
+    _guard_fixture
+    _git_fixture
+    run bash -c "cd '$REPO' && printf '' | bash '$CORE_DIR/scripts/check-no-leakage.sh' --commits"
+    [ "$status" -eq 0 ]
+}
+
+@test "--commits: garbage SHA exits 2" {
+    _guard_fixture
+    _git_fixture
+    echo "clean content" > "$REPO/notes.txt"
+    git -C "$REPO" add -A
+    git -C "$REPO" commit -qm "add notes"
+    _check_commits "not-a-real-sha"
+    [ "$status" -eq 2 ]
 }

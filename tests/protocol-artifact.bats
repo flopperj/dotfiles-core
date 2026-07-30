@@ -1,6 +1,5 @@
 #!/usr/bin/env bats
-# Step 1 — RED-phase tests for PROTOCOL.md shape validation.
-# Written before PROTOCOL.md is authored; all tests must fail first.
+# Shape validation for PROTOCOL.md — pins required headings and content markers.
 
 load 'test_helper'
 
@@ -58,8 +57,9 @@ PROTOCOL_FILE="$CORE_DIR/PROTOCOL.md"
 # 4. Enforcement evolution sub-sections
 # ---------------------------------------------------------------------------
 
-@test "PROTOCOL.md has 'Today (denylist)' sub-section" {
-    grep -q "^### Today (denylist)" "$PROTOCOL_FILE"
+@test "PROTOCOL.md has 'Cohort 0' sub-section mentioning in-tree" {
+    grep -q "^### Cohort 0" "$PROTOCOL_FILE"
+    sed -n '/^### Cohort 0/,/^### Cohort 1/p' "$PROTOCOL_FILE" | grep -q "in-tree"
 }
 
 @test "PROTOCOL.md has Cohort 1 sub-section with 'PROVISIONAL'" {
@@ -70,6 +70,11 @@ PROTOCOL_FILE="$CORE_DIR/PROTOCOL.md"
 @test "PROTOCOL.md has Cohort 2 sub-section with 'positive grammar'" {
     grep -q "### Cohort 2" "$PROTOCOL_FILE"
     grep -q "positive grammar" "$PROTOCOL_FILE"
+}
+
+@test "PROTOCOL.md has Cohort 3 sub-section with 'publication'" {
+    grep -q "^### Cohort 3" "$PROTOCOL_FILE"
+    grep -q "publication" "$PROTOCOL_FILE"
 }
 
 # ---------------------------------------------------------------------------
