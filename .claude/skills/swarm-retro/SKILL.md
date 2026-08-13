@@ -245,10 +245,15 @@ Swarm Retro: {run-id}
 
 ---
 
-## Step 4: Propose heuristic updates
+## Step 4: Propose heuristic updates and draft eval cases
 
 Based on the analysis, propose concrete updates to ticket-pickup's
-classification logic:
+classification logic (4a). Each misclassification from Step 2a also yields
+a drafted eval case (4b). Before presenting the approval gate, run the eval
+precondition (4c). Everything is approved or rejected at the single existing
+gate (4d) — no new gates.
+
+### 4a. Heuristic proposals
 
 ```
 Proposed heuristic updates:
@@ -264,18 +269,117 @@ Proposed heuristic updates:
   3. [FLAKY TEST] MC_CampaignTest::testPreviewTimeout is flaky.
      Evidence: Failed on first attempt, succeeded on retry. No code changes.
      Action: Add to known flaky test list in agent memory.
-
-  -> approve all = Save all proposed updates to agent memory
-  -> approve 1,3 = Save specific updates (comma-separated)
-  -> edit N      = Modify a proposal before saving
-  -> x           = Discard (no memory updates)
 ```
 
-Wait for user approval before writing to agent memory.
+### 4b. Draft eval cases from misclassifications (the answer key grows from real failures)
+
+For every misclassification identified in Step 2a, draft an anonymized eval
+case for `~/.claude/evals/sets/classifier-v1.jsonl`. The `expected` label is
+the **correct** classification the retro determined — not the one the
+classifier produced. That is what makes the case a regression test.
+
+Anonymization rules (mandatory — the same bar as the seeded set):
+
+- Replace the Jira key with a placeholder in the `PROJ-1xxx` range.
+- **Rewrite** the summary and description — paraphrase to preserve the shape
+  of the decision, never copy the original wording.
+- **Preserve the structural features** the classifier actually keys on:
+  `files_touched`, component/dependency shape, cross-repo vs single-repo,
+  presence of a schema or migration, test-surface breadth.
+- Drop real file paths, service names, and any component name that
+  identifies a company system.
+- Set `"source":"retro"`.
+
+Record shape (one JSONL line):
+
+```json
+{"id":"eval-013","summary":"...","description":"...","files_touched":2,"expected":"Medium","rationale":"...","source":"retro"}
+```
+
+Two hard constraints:
+
+- A case that cannot be anonymized without losing the decision boundary it
+  encodes is **dropped, not weakened**.
+- `make check-leakage-shapes` must pass on any commit touching the set. The
+  retro never commits the case itself — no auto-commit. The addition is only
+  *proposed* here; approved cases are appended in Step 5 and the commit is
+  left to the user.
+
+### 4c. Eval precondition — validate heuristics against the answer key
+
+Before presenting the approval gate, verify the proposed heuristic changes
+do not regress classification accuracy on the eval set:
+
+1. **Baseline.** Classify every case in
+   `~/.claude/evals/sets/classifier-v1.jsonl` using the *current* heuristics
+   (ticket-pickup's classification rubric plus
+   `~/.claude/agent-memory/ticket-swarm/classification-heuristics.md`, if it
+   exists). Producing predictions is this agent's job — the runner never
+   invokes an LLM, it only scores. Write predictions as JSONL
+   (`{"id":"eval-001","predicted":"Medium"}` per line) to a scratch dir,
+   then score:
+
+   ```bash
+   scratch="$(mktemp -d)"
+   bash ~/.claude/evals/scripts/eval-run.sh \
+     --set ~/.claude/evals/sets/classifier-v1.jsonl \
+     --predictions "$scratch/baseline.jsonl" \
+     --warn-only
+   ```
+
+   `--warn-only` keeps the exit code 0 while still printing the full
+   per-case report and the accuracy line — this run feeds a comparison; it
+   is not itself the gate. Record the reported accuracy as **baseline**.
+
+2. **Scratch copy.** Apply the proposed heuristic updates to a *scratch
+   copy* of `classification-heuristics.md` under `$scratch/` — never to the
+   live file in `~/.claude/agent-memory/`.
+
+3. **Candidate.** Re-classify every case using the scratch heuristics, write
+   `$scratch/candidate.jsonl`, re-run the same command against it, and
+   record the reported accuracy as **candidate**.
+
+4. **If candidate < baseline: do not promote.** Report the regression with
+   the specific cases that flipped — the ids that were PASS at baseline and
+   FAIL at candidate, with `expected` and each run's prediction. The user
+   may revise the proposal and re-run 4c; the regressing version never
+   reaches Step 5.
+
+5. **If candidate >= baseline**, carry both numbers into the gate below.
+
+The eval is a **precondition in front of the existing approval gate, never a
+replacement for it**. A green number never auto-promotes — the user still
+approves every memory update.
+
+### 4d. The approval gate
+
+One gate — the same user approval that has always guarded memory promotion —
+covers both the heuristic updates and the drafted eval cases. Number drafted
+cases continuing the proposal list from 4a so `approve N` addresses either
+kind:
+
+```
+Eval precondition: baseline 83% (10/12) -> candidate 92% (11/12) — no regression
+
+  4. [EVAL CASE] eval-013 (source: retro, expected: Medium)
+     Drafted from PROJ-1003 misclassification (classified Simple, actual Medium).
+     Summary: "..."  files_touched: 2
+     Anonymized: placeholder key, rewritten text, real paths/components dropped.
+
+  -> approve all = Save approved heuristics to agent memory + append approved eval cases to the set
+  -> approve 1,4 = Save specific items (comma-separated)
+  -> edit N      = Modify a proposal or drafted case before saving
+  -> x           = Discard (no memory updates, no eval-case additions)
+```
+
+Wait for user approval before writing to agent memory or the eval set.
 
 ---
 
 ## Step 5: Promote to agent memory (if approved)
+
+This step is reachable only when the eval precondition (4c) reported
+candidate >= baseline **and** the user approved at the gate (4d).
 
 For approved heuristic updates, write to
 `~/.claude/agent-memory/ticket-swarm/classification-heuristics.md`:
@@ -298,6 +402,12 @@ Remove any heuristics the user explicitly asks to forget.
 
 Ticket-pickup and team-lead should check this file (if it exists) during
 their classification and failure analysis steps.
+
+For approved eval cases, append each one as a single JSONL line to
+`~/.claude/evals/sets/classifier-v1.jsonl` (the symlink resolves into the
+dotfiles-core checkout). **Never commit** — staging and committing stay with
+the user, and remind them that `make check-leakage-shapes` must pass on any
+commit touching the set.
 
 ---
 
@@ -324,6 +434,14 @@ If `~/.claude/tasks/<project>/plans/archive/` contains plans:
 - **Read-only analysis.** Swarm Retro never modifies code, tickets, or PRs.
 - **User approves memory updates.** Heuristic promotions to agent memory
   require explicit approval.
+- **Eval precondition before promotion.** A heuristic change that regresses
+  the answer key (candidate < baseline in 4c) is never promoted. The eval
+  fronts the approval gate; it does not replace it — a green number never
+  auto-promotes.
+- **One gate, no auto-commit.** Drafted eval cases are approved at the same
+  gate as heuristic promotions — no separate gate. Approved cases are
+  appended to the set but never committed by the retro; a case that cannot
+  be anonymized without losing its boundary is dropped, not weakened.
 - **Evidence-based proposals.** Every proposed heuristic must cite specific
   tickets and outcomes from the run log.
 - **No run log = no retro.** If no logs exist, direct the user to run a
