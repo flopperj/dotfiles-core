@@ -148,6 +148,29 @@ teardown() {
 }
 
 # ---------------------------------------------------------------------------
+# 5c. Normal install: workflows directory
+# ---------------------------------------------------------------------------
+
+@test "install creates ~/.claude/workflows/ directory" {
+    _run_install
+    [ -d "$SCRATCH/home/.claude/workflows" ]
+}
+
+@test "install removes stale workflow symlinks" {
+    mkdir -p "$SCRATCH/home/.claude/workflows"
+    ln -s "$SCRATCH/nonexistent-target.js" "$SCRATCH/home/.claude/workflows/deleted-workflow.js"
+    _run_install
+    [ ! -e "$SCRATCH/home/.claude/workflows/deleted-workflow.js" ]
+    [ ! -L "$SCRATCH/home/.claude/workflows/deleted-workflow.js" ]
+}
+
+@test "install --check output mentions workflows" {
+    _run_install
+    HOME="$SCRATCH/home" run bash "$CORE_DIR/install.sh" --check
+    echo "$output" | grep -qi "workflows"
+}
+
+# ---------------------------------------------------------------------------
 # 6. Memory seeds: seed-once behavior
 # ---------------------------------------------------------------------------
 

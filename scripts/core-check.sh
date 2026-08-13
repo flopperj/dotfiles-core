@@ -79,6 +79,26 @@ run_core_check() {
         errors=$((errors + 1))
     fi
 
+    # Check workflows
+    echo ""
+    echo "Workflows (~/.claude/workflows/):"
+    local workflow_file
+    for workflow_file in "$core_dir/.claude/workflows/"*.js; do
+        [ -f "$workflow_file" ] || continue
+        local wf_filename
+        wf_filename="$(basename "$workflow_file")"
+        local wf_link="$HOME/.claude/workflows/$wf_filename"
+        if [ -L "$wf_link" ] && [ -e "$wf_link" ]; then
+            echo "  ok    $wf_filename"
+        elif [ -L "$wf_link" ]; then
+            echo "  BROKEN $wf_filename (dead symlink)"
+            errors=$((errors + 1))
+        else
+            echo "  MISSING $wf_filename"
+            errors=$((errors + 1))
+        fi
+    done
+
     # Check generated files (CLAUDE.md and AGENTS.md symlinks)
     echo ""
     echo "Generated files (~/.claude/):"

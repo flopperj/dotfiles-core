@@ -1,4 +1,4 @@
-.PHONY: test lint check-leakage check-leakage-shapes gen-docs gen-boundaries gen-role-guards gen all
+.PHONY: test lint lint-agents check-leakage check-leakage-shapes gen-docs gen-boundaries gen-role-guards gen all
 
 DOTFILES_DIR := $(shell realpath .)
 
@@ -10,7 +10,7 @@ TEST_FILES := $(wildcard tests/*.bats)
 # by a manual reminder. The nested glob no-ops cleanly when no skill ships one.
 LINT_FILES := $(wildcard scripts/*.sh) $(wildcard .claude/skills/*/scripts/*.sh) $(wildcard .claude/evals/scripts/*.sh)
 
-all: lint check-leakage check-consult-grammar test
+all: lint lint-agents check-leakage check-consult-grammar test
 
 test:                                   ## Run all bats tests
 	DOTFILES_DIR=$(DOTFILES_DIR) bats $(TEST_FILES)
