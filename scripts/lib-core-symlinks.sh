@@ -126,6 +126,12 @@ install_core_symlinks() {
         echo "  Linked _shared"
     fi
 
+    # --- evals directory ---
+    if [ -d "$core_dir/.claude/evals" ]; then
+        _link_dir "$core_dir/.claude/evals" "$HOME/.claude/evals"
+        echo "  Linked evals"
+    fi
+
     # --- Agents ---
     mkdir -p "$HOME/.claude/agents"
     _clean_stale_symlinks "$HOME/.claude/agents"

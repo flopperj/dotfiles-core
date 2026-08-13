@@ -128,6 +128,26 @@ teardown() {
 }
 
 # ---------------------------------------------------------------------------
+# 5b. Normal install: evals symlinked
+# ---------------------------------------------------------------------------
+
+@test "install symlinks evals directory into ~/.claude/" {
+    _run_install
+    [ -L "$SCRATCH/home/.claude/evals" ]
+}
+
+@test "evals symlink resolves to a tree containing emit-metric.sh" {
+    _run_install
+    [ -f "$SCRATCH/home/.claude/evals/scripts/emit-metric.sh" ]
+}
+
+@test "install --check output mentions evals" {
+    _run_install
+    HOME="$SCRATCH/home" run bash "$CORE_DIR/install.sh" --check
+    echo "$output" | grep -qi "evals"
+}
+
+# ---------------------------------------------------------------------------
 # 6. Memory seeds: seed-once behavior
 # ---------------------------------------------------------------------------
 

@@ -65,6 +65,20 @@ run_core_check() {
         errors=$((errors + 1))
     fi
 
+    # Check evals
+    echo ""
+    echo "evals (~/.claude/evals):"
+    local evals_link="$HOME/.claude/evals"
+    if [ -L "$evals_link" ] && [ -e "$evals_link" ]; then
+        echo "  ok    evals"
+    elif [ -L "$evals_link" ]; then
+        echo "  BROKEN evals (dead symlink)"
+        errors=$((errors + 1))
+    else
+        echo "  MISSING evals"
+        errors=$((errors + 1))
+    fi
+
     # Check generated files (CLAUDE.md and AGENTS.md symlinks)
     echo ""
     echo "Generated files (~/.claude/):"
