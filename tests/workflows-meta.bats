@@ -152,6 +152,46 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
+# Deterministic-arithmetic pin: code-auditor-score weights and bands
+# ---------------------------------------------------------------------------
+# CI cannot execute workflows (no model access; node is not a core
+# dependency), so the determinism claim is enforced by static text
+# analysis: grep the constants out of the .js and compare numerically.
+# Fail-closed: if the grep finds no WEIGHTS line (e.g. the constant was
+# renamed), the test FAILS rather than silently pinning nothing.
+
+@test "code-auditor-score weights are pinned at 40/35/25 and sum to 1.0" {
+    local wf="$CORE_DIR/.claude/workflows/code-auditor-score.js"
+    [ -f "$wf" ]
+
+    local line
+    line="$(grep -E '^const WEIGHTS' "$wf" || true)"
+    # Fail-closed on extraction: a renamed/missing constant must FAIL, not skip.
+    [ -n "$line" ]
+
+    [[ "$line" == *"structural: 0.40"* ]]
+    [[ "$line" == *"impact: 0.35"* ]]
+    [[ "$line" == *"scope: 0.25"* ]]
+
+    # Scaled-integer sum: float equality on 0.40+0.35+0.25 is not reliable.
+    local sum
+    sum="$(printf '%s\n' "$line" | grep -oE '0\.[0-9]+' | awk '{ s += $1 * 100 } END { printf "%d", s + 0.5 }')"
+    [ -n "$sum" ]
+    [ "$sum" -eq 100 ]
+
+    # Band cut-points are the other half of the routing contract
+    # (Low 0-39, Medium 40-69, High 70-100); they are hoisted constants,
+    # so pin them here too — same fail-closed extraction.
+    local low_line medium_line
+    low_line="$(grep -E '^const LOW_MAX' "$wf" || true)"
+    medium_line="$(grep -E '^const MEDIUM_MAX' "$wf" || true)"
+    [ -n "$low_line" ]
+    [ -n "$medium_line" ]
+    [[ "$low_line" == *"= 39"* ]]
+    [[ "$medium_line" == *"= 69"* ]]
+}
+
+# ---------------------------------------------------------------------------
 # Real repo state
 # ---------------------------------------------------------------------------
 
