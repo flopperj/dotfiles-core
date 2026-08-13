@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$comment": "Return contract for the code-auditor-score workflow (.claude/workflows/code-auditor-score.js). The workflow's final return must be exactly this object and nothing else — narration goes to log(). Consumed by code-auditor SKILL.md's invoke -> validate -> fall-back seam. ABORT CONTRACT: a fully aborted run (2+ dead scorers) returns null for composite/band/recommendation; those nulls intentionally FAIL this schema (composite is 'number', not ['number','null']; the enums do not admit null) so the caller's prose fallback takes over instead of trusting a confident wrong score. Only individual components entries may be null — that is the single-dead-scorer degraded path, which still yields a valid renormalized composite with degraded=true.",
+  "type": "object",
+  "required": ["composite", "band", "recommendation", "components", "degraded"],
+  "properties": {
+    "composite": {
+      "$comment": "Weighted 0-100 composite over the surviving scorer components (weights 0.40/0.35/0.25, renormalized when one scorer is dead). Non-null by design: an aborted run's null must fail validation.",
+      "type": "number"
+    },
+    "band": {
+      "$comment": "Routing band over the composite: Low 0-39, Medium 40-69, High 70-100.",
+      "type": "string",
+      "enum": ["Low", "Medium", "High"]
+    },
+    "recommendation": {
+      "$comment": "Reviewer routing: 'scout' (light review, also the trivial-diff fast path), 'ranger' (deep review, High band or autonomous-mode borderline 65-74 escalation), 'none' (documentation-only change).",
+      "type": "string",
+      "enum": ["scout", "ranger", "none"]
+    },
+    "components": {
+      "$comment": "Per-scorer clamped 0-100 scores. A null entry means that scorer died or returned a schema-invalid result; with exactly one null the composite is renormalized over the survivors and degraded is true.",
+      "type": "object",
+      "required": ["structural", "impact", "scope"],
+      "properties": {
+        "structural": { "type": ["number", "null"] },
+        "impact": { "type": ["number", "null"] },
+        "scope": { "type": ["number", "null"] }
+      }
+    },
+    "degraded": {
+      "$comment": "True when at least one scorer component is unavailable and the composite was renormalized over the survivors.",
+      "type": "boolean"
+    }
+  }
+}
