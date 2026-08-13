@@ -368,3 +368,112 @@ EOF
     [ "$status" -eq 0 ]
     [[ "$output" == *"accuracy: 100%"* ]]
 }
+
+# ---------------------------------------------------------------------------
+# --ratchet: mechanical warn-only/blocking flip on the set's case count.
+# count < 30 -> warn-only (report + WARN, exit 0); count >= 30 -> blocking.
+# The count comes from the set file itself — no human toggle — and an
+# indeterminable count is a hard error, never a silent warn-only default.
+# ---------------------------------------------------------------------------
+
+# Fixture builder: n records, all correct except the last (one miss), so the
+# warn-only and blocking arms produce different exit codes under the default
+# 100% threshold.
+_write_set_n_with_miss() {
+    local n="$1" out="$2" i=1
+    : > "$out"
+    while [ "$i" -lt "$n" ]; do
+        printf '{"id":"r%d","summary":"s","description":"d","files_touched":1,"expected":"Simple","rationale":"r","source":"authored","predicted":"Simple"}\n' "$i" >> "$out"
+        i=$((i + 1))
+    done
+    printf '{"id":"r%d","summary":"s","description":"d","files_touched":1,"expected":"Simple","rationale":"r","source":"authored","predicted":"Medium"}\n' "$n" >> "$out"
+}
+
+# Fixture builder: n records, all correct.
+_write_set_n_all_correct() {
+    local n="$1" out="$2" i=1
+    : > "$out"
+    while [ "$i" -le "$n" ]; do
+        printf '{"id":"r%d","summary":"s","description":"d","files_touched":1,"expected":"Simple","rationale":"r","source":"authored","predicted":"Simple"}\n' "$i" >> "$out"
+        i=$((i + 1))
+    done
+}
+
+@test "ratchet: 29-record set with a miss is warn-only — exit 0, WARN, arm + count printed" {
+    _write_set_n_with_miss 29 "$FIX/set29.jsonl"
+    run bash "$RUNNER" --ratchet --set "$FIX/set29.jsonl"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"ratchet: 29 cases < 30 -> warn-only"* ]]
+    [[ "$output" == *"WARN"* ]]
+    [[ "$output" == *"FAIL r29"* ]]
+}
+
+@test "ratchet: 30-record set with a miss is blocking — exit 1, arm + count printed" {
+    _write_set_n_with_miss 30 "$FIX/set30.jsonl"
+    run bash "$RUNNER" --ratchet --set "$FIX/set30.jsonl"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"ratchet: 30 cases >= 30 -> blocking"* ]]
+    [[ "$output" == *"RESULT: FAIL"* ]]
+}
+
+@test "ratchet: 31-record set with a miss is blocking — exit 1" {
+    _write_set_n_with_miss 31 "$FIX/set31.jsonl"
+    run bash "$RUNNER" --ratchet --set "$FIX/set31.jsonl"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"ratchet: 31 cases >= 30 -> blocking"* ]]
+}
+
+@test "ratchet: passing warn-only arm still prints arm + count, no WARN" {
+    _write_set_n_all_correct 29 "$FIX/set29ok.jsonl"
+    run bash "$RUNNER" --ratchet --set "$FIX/set29ok.jsonl"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"ratchet: 29 cases < 30 -> warn-only"* ]]
+    [[ "$output" == *"RESULT: PASS"* ]]
+    [[ "$output" != *"WARN"* ]]
+}
+
+@test "ratchet: passing blocking arm exits 0 and prints arm + count" {
+    _write_set_n_all_correct 30 "$FIX/set30ok.jsonl"
+    run bash "$RUNNER" --ratchet --set "$FIX/set30ok.jsonl"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"ratchet: 30 cases >= 30 -> blocking"* ]]
+    [[ "$output" == *"RESULT: PASS"* ]]
+}
+
+@test "ratchet: unreadable set file errors rather than defaulting to warn-only" {
+    if [ "$(id -u)" -eq 0 ]; then
+        skip "root ignores file modes"
+    fi
+    _write_set_n_with_miss 29 "$FIX/locked.jsonl"
+    chmod 000 "$FIX/locked.jsonl"
+    run bash "$RUNNER" --ratchet --set "$FIX/locked.jsonl"
+    chmod 644 "$FIX/locked.jsonl"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"cannot determine case count"* ]]
+    [[ "$output" != *"-> warn-only"* ]]
+}
+
+@test "ratchet: empty set still hard-errors (never a silent warn-only pass)" {
+    : > "$FIX/empty.jsonl"
+    run bash "$RUNNER" --ratchet --set "$FIX/empty.jsonl"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"no scorable records"* ]]
+}
+
+@test "ratchet cannot be combined with --warn-only (no human toggle)" {
+    _write_set_75
+    run bash "$RUNNER" --ratchet --set "$FIX/set75.jsonl" --warn-only
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"cannot be combined"* ]]
+}
+
+# ---------------------------------------------------------------------------
+# make eval: the CI entry point — ratcheted self-check over the committed key
+# ---------------------------------------------------------------------------
+
+@test "make eval runs the ratcheted self-check green against the committed key" {
+    run make -C "$DOTFILES_DIR" eval
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"ratchet:"* ]]
+    [[ "$output" == *"accuracy: 100%"* ]]
+}
