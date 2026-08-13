@@ -172,6 +172,21 @@ install_core_symlinks() {
         done
     fi
 
+    # --- Workflows ---
+    if [ -d "$core_dir/.claude/workflows" ]; then
+        mkdir -p "$HOME/.claude/workflows"
+        _clean_stale_symlinks "$HOME/.claude/workflows"
+
+        local workflow_file
+        for workflow_file in "$core_dir/.claude/workflows/"*.js; do
+            [ -f "$workflow_file" ] || continue
+            local workflow_name
+            workflow_name="$(basename "$workflow_file")"
+            _link_file "$workflow_file" "$HOME/.claude/workflows/$workflow_name"
+            echo "  Linked workflow: $workflow_name"
+        done
+    fi
+
     # --- Generated CLAUDE.md and AGENTS.md ---
     # Symlink the core-only rendered views so ~/.claude/CLAUDE.md and
     # ~/.claude/AGENTS.md are always up-to-date with the latest fragments.

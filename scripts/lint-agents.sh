@@ -6,7 +6,7 @@
 #
 # Usage:
 #   bash scripts/lint-agents.sh                          # scan default dirs
-#   bash scripts/lint-agents.sh --agents-dir <dir> --skills-dir <dir>  # custom dirs (for testing)
+#   bash scripts/lint-agents.sh --agents-dir <dir> --skills-dir <dir> --workflows-dir <dir>  # custom dirs (for testing)
 #
 # Required sections enforced by this linter:
 #
@@ -38,6 +38,16 @@
 #
 #   Checklist-v1 checks are SOFT — they emit WARN, not FAIL, and never affect exit code.
 #   Skills opt in by adding the marker; until then they continue under the existing rules.
+#
+#   Workflow files (.claude/workflows/*.js):
+#     - export const meta block
+#     - name: field in meta
+#     - description: field in meta
+#     - name matches the filename stem (workflows are invoked by name,
+#       so a mismatch makes the slash command resolve unpredictably)
+#     - node --input-type=module --check parses the file — ONLY when node
+#       is installed; node is not a core dependency, so its absence emits
+#       WARN, never FAIL.
 
 set -euo pipefail
 
@@ -47,8 +57,9 @@ DOTFILES_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 # Default directories (overridable for testing)
 AGENTS_DIR="$DOTFILES_DIR/.claude/agents"
 SKILLS_DIR="$DOTFILES_DIR/.claude/skills"
+WORKFLOWS_DIR="$DOTFILES_DIR/.claude/workflows"
 
-# Parse optional --agents-dir and --skills-dir flags
+# Parse optional --agents-dir, --skills-dir, and --workflows-dir flags
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --agents-dir)
@@ -57,6 +68,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --skills-dir)
             SKILLS_DIR="$2"
+            shift 2
+            ;;
+        --workflows-dir)
+            WORKFLOWS_DIR="$2"
             shift 2
             ;;
         *)
@@ -240,6 +255,57 @@ for skill_dir in "$SKILLS_DIR"/*/; do
         else
             _check fail "$skill_name/SKILL.md" "boundary table header"
         fi
+    fi
+done
+
+# -----------------------------------------------------------------------
+# Lint workflow files
+# -----------------------------------------------------------------------
+for workflow_file in "$WORKFLOWS_DIR"/*.js; do
+    [ -f "$workflow_file" ] || continue
+    wf_filename="$(basename "$workflow_file")"
+    wf_stem="${wf_filename%.js}"
+
+    # 1. export const meta block
+    if _has "$workflow_file" '^export const meta'; then
+        _check pass "$wf_filename" "export const meta block"
+    else
+        _check fail "$wf_filename" "export const meta block"
+    fi
+
+    # 2. name: field in meta
+    if _has "$workflow_file" "^[[:space:]]*name:"; then
+        _check pass "$wf_filename" "meta name: field"
+    else
+        _check fail "$wf_filename" "meta name: field"
+    fi
+
+    # 3. description: field in meta
+    if _has "$workflow_file" "^[[:space:]]*description:"; then
+        _check pass "$wf_filename" "meta description: field"
+    else
+        _check fail "$wf_filename" "meta description: field"
+    fi
+
+    # 4. meta name matches the filename stem
+    wf_meta_name="$(sed -n "s/^[[:space:]]*name:[[:space:]]*['\"]\([^'\"]*\)['\"].*/\1/p" "$workflow_file" | head -1)"
+    if [ -n "$wf_meta_name" ] && [ "$wf_meta_name" = "$wf_stem" ]; then
+        _check pass "$wf_filename" "meta name matches filename stem"
+    else
+        _check fail "$wf_filename" "meta name matches filename stem (name='$wf_meta_name', stem='$wf_stem')"
+    fi
+
+    # 5. Syntax check — only when node is installed (not a core dependency).
+    #    --input-type=module via stdin: workflow files are ESM, and plain
+    #    `node --check <file>` parses .js as CommonJS on some node versions.
+    if command -v node > /dev/null 2>&1; then
+        if node --input-type=module --check < "$workflow_file" > /dev/null 2>&1; then
+            _check pass "$wf_filename" "node syntax check"
+        else
+            _check fail "$wf_filename" "node syntax check"
+        fi
+    else
+        _check_soft fail "$wf_filename" "node syntax check skipped (node not installed)"
     fi
 done
 
