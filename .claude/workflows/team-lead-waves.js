@@ -164,12 +164,12 @@ if (!planValid) {
     let results
     if (wave.parallel) {
       results = await parallel(
-        wave.tickets,
-        (key) => agent(pipelinePromptFor(key, wave.index, priorContext), {
-          schema: TICKET_RESULT,
-          label: key,
-          phase: `Wave ${wave.index}`
-        })
+        wave.tickets.map((key) => () =>
+          agent(pipelinePromptFor(key, wave.index, priorContext), {
+            schema: TICKET_RESULT,
+            label: key,
+            phase: `Wave ${wave.index}`
+          }))
       )
     } else {
       results = []

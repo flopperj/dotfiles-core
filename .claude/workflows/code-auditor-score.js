@@ -79,8 +79,8 @@ Additionally, include these exact strings in "findings" when the conditions hold
 
 phase('Analysis')
 const [structural, impact, scope] = await parallel(
-  ['structural', 'impact', 'scope'],
-  (kind) => agent(SCORER_PROMPTS[kind], { schema: SCORER_SCHEMA, label: kind, phase: 'Analysis' })
+  ['structural', 'impact', 'scope'].map((kind) => () =>
+    agent(SCORER_PROMPTS[kind], { schema: SCORER_SCHEMA, label: kind, phase: 'Analysis' }))
 )
 
 phase('Aggregate')
