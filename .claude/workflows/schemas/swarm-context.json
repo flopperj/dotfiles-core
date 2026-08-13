@@ -1,0 +1,39 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$comment": "Typed accumulator contract for team-lead wave sequencing (team-lead/SKILL.md Steps 1-3), and the return contract for the planned team-lead-waves workflow. Field names come from the SKILL.md vocabulary: waves is the Step 1 sequencing plan (sequential outer, parallel inner); sequencing_reasons records WHY tickets were ordered (same-file conflicts, Jira 'Blocks' links, schema-before-API logical ordering); domain is the ticket-swarm domain tag; blocked lists tickets that ended [BLOCKED] so downstream waves and ticket-swarm can react.",
+  "type": "object",
+  "required": ["waves", "sequencing_reasons", "domain", "blocked"],
+  "properties": {
+    "waves": {
+      "$comment": "Ordered execution waves. index is the 1-based wave number; tickets are Jira keys; parallel is true when the wave's tickets run concurrently (tickets sharing a file must never share a wave).",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["index", "tickets", "parallel"],
+        "properties": {
+          "index": { "type": "integer" },
+          "tickets": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "parallel": { "type": "boolean" }
+        }
+      }
+    },
+    "sequencing_reasons": {
+      "$comment": "One entry per ordering decision, naming the rule that forced it: same-file merge-conflict risk, a Jira 'Blocks' link, or logical ordering (schema before API, API before frontend, shared libs before consumers).",
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "domain": {
+      "$comment": "The cluster's domain tag as assigned by ticket-swarm triage.",
+      "type": "string",
+      "enum": ["backend", "frontend", "infra", "unknown"]
+    },
+    "blocked": {
+      "$comment": "Jira keys of tickets that reported a blocker and did not complete. Empty array when every ticket succeeded.",
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}
