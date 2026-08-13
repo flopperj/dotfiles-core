@@ -107,6 +107,17 @@ notice appears on every run, the workflow seam is broken and should be
 treated as unproven rather than as a working feature — surface that
 pattern to the user instead of quietly absorbing it.
 
+**Completion signals — workflow path vs. fallback path.** The workflow
+invocation is exempt from the `<<task-complete>>` sentinel check:
+`agent()` with a `schema` returns a validated object or `null`, which
+is itself the completion signal. Do not look for a sentinel in the
+workflow's return, and do not emit `agent_truncated` for
+workflow-owned scorers — a `null` component is the workflow-native
+signal, handled by the degraded semantics in Step 2b. The legacy prose
+fan-out below is `Agent`-tool orchestration from SKILL.md prose, so
+its subagents remain sentinel-checked — see
+`~/.claude/_shared/agent-turn-cap-warning.md`.
+
 ## Step 2b: Interpret the validated return
 
 A validated return maps directly onto the Step 3 summary:
@@ -174,7 +185,10 @@ Diff-level metrics:
 - Score: 0-100
 
 **Subagent failure handling:**
-If a subagent fails, times out, or returns empty:
+If a subagent fails, times out, returns empty, or returns without the
+`<<task-complete>>` sentinel (suspected turn-cap truncation — see
+`~/.claude/_shared/agent-turn-cap-warning.md`, including the
+`agent_truncated` metric to emit):
 - Log the failure and which agent it was
 - Continue with results from the remaining agents
 - Note the gap in the scoring (e.g., "Impact: unavailable — subagent
