@@ -8,7 +8,7 @@ TEST_FILES := $(wildcard tests/*.bats)
 # Repo-root scripts plus any skill-local scripts (e.g. babysit-prs). Skill
 # scripts back consequential actions, so they are shellchecked in CI too, not
 # by a manual reminder. The nested glob no-ops cleanly when no skill ships one.
-LINT_FILES := $(wildcard scripts/*.sh) $(wildcard .claude/skills/*/scripts/*.sh)
+LINT_FILES := $(wildcard scripts/*.sh) $(wildcard .claude/skills/*/scripts/*.sh) $(wildcard .claude/evals/scripts/*.sh)
 
 all: lint check-leakage check-consult-grammar test
 
