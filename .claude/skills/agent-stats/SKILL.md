@@ -48,10 +48,10 @@ If the user names a project that does not match a directory under `~/.claude/tas
 Invoke the script:
 
 ```bash
-bash ~/dotfiles/scripts/agent-stats.sh [--project <name>] [--days <N>]
+bash "$(readlink ~/.claude/skills/agent-stats)/../../../scripts/agent-stats.sh" [--project <name>] [--days <N>]
 ```
 
-(or `~/.claude/tasks/scripts/agent-stats.sh` — the install symlink layout is project-dependent; default to the dotfiles path).
+The script lives at `scripts/agent-stats.sh` in the dotfiles-core repo, which is not itself symlinked into `~/.claude/` — resolving through this skill's own symlink locates it regardless of where the repo is checked out.
 
 The script's output is plain text designed to be copy-pasted as-is. Do not reformat it. Do not summarize it. Display the raw output.
 
