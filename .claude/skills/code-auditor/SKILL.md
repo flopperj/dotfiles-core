@@ -60,11 +60,91 @@ If the target cannot be determined, ask the user.
   ask the user to verify the PR number/branch
 - Follow CLAUDE.md error handling defaults
 
-## Step 2: Complexity analysis
+## Step 2: Complexity scoring — invoke the `code-auditor-score` workflow
+
+Scoring runs through the saved `code-auditor-score` workflow
+(`.claude/workflows/code-auditor-score.js`). The workflow owns the
+topology — three parallel scorers plus deterministic weighted
+aggregation — so the composite is computed in script arithmetic, not
+re-derived by an agent. The skill's job here is a three-part contract:
+invoke, validate, fall back.
+
+1. **Invoke.** Invoke the `code-auditor-score` workflow, passing the
+   target descriptor from Step 1 (PR number, branch name, or file
+   paths) through the Workflow tool's `args`. In autonomous/swarm mode,
+   include the word `autonomous` in `args` — the workflow detects it
+   and applies the borderline-escalation rule (composite 65-74 →
+   `ranger`) inside its own aggregation.
+2. **Validate.** Check the workflow's return against
+   [`.claude/workflows/schemas/auditor-composite.json`](../../workflows/schemas/auditor-composite.json).
+   The five required fields must be present and well-typed:
+   - `composite` (number, 0-100)
+   - `band` (enum `Low` / `Medium` / `High`)
+   - `recommendation` (enum `scout` / `ranger` / `none`)
+   - `components` (per-scorer scores; a dead scorer's entry is `null`)
+   - `degraded` (boolean)
+
+   Validate **only those fields**. The workflow returns no prose — its
+   narration goes to the run journal — so do not require or parse any
+   text alongside the object.
+3. **Fall back.** If the invocation errors, returns nothing, or the
+   return fails validation, run the **legacy prose fan-out** (labelled
+   fallback block below) and produce the composite the old way. **State
+   plainly in the output that the fallback path ran**, e.g. *"Workflow
+   invocation unavailable — scored via the prose fan-out path."* The
+   user gets a correct audit either way; the only cost of a failed seam
+   is a line of text.
+
+**Journal diagnostic — check before declaring failure.** If the return
+*seems* empty, consult the workflow run's `journal.jsonl` before
+concluding the invocation failed. A workflow that ran correctly but
+whose return did not surface looks identical to one that never ran; the
+journal distinguishes them. Record what the journal showed alongside
+the fallback notice.
+
+**Fallback occurrences must be visible, not silent.** If the fallback
+notice appears on every run, the workflow seam is broken and should be
+treated as unproven rather than as a working feature — surface that
+pattern to the user instead of quietly absorbing it.
+
+## Step 2b: Interpret the validated return
+
+A validated return maps directly onto the Step 3 summary:
+
+- `composite` and `band` fill the score line. The bands are Low (0-39),
+  Medium (40-69), High (70-100) — pinned inside the workflow.
+- `components` fills the per-dimension lines (structural / impact /
+  scope). A `null` component means that scorer died.
+- `recommendation` seeds the routing recommendation: `scout`, `ranger`,
+  or `none`. `none` means the workflow detected a documentation-only
+  diff — report "Documentation-only change — no code review needed"
+  and skip the review. The workflow also applies the trivial-diff
+  fast-path internally (lines <= 10, 1-2 files, no security-sensitive
+  paths → lightweight Scout pass).
+
+**Degraded semantics (`degraded: true`):**
+
+- **One scorer dead** → the workflow continues: the surviving weights
+  are renormalized so the composite stays on the 0-100 scale, and
+  `degraded` is `true` with a non-null `composite`. Present the result
+  but note the gap in the Step 3 summary (e.g., "Impact: unavailable —
+  scorer failed; weights renormalized").
+- **Two or more scorers dead** → the workflow aborts rather than
+  presenting a confident wrong score: it returns `null` for
+  `composite`, `band`, and `recommendation` (with `degraded: true`).
+  Those nulls **fail schema validation by design**, so the Step 2
+  fallback engages automatically.
+
+<!-- LEGACY FALLBACK — prose fan-out. Runs ONLY when the
+     code-auditor-score workflow invocation or validation fails
+     (Step 2, part 3). Do not run this when the workflow returned a
+     valid composite. -->
+
+### Fallback: legacy prose fan-out
 
 Launch 3 parallel `fast` subagents against the diff (or specified files):
 
-### Agent 1: Structural complexity
+#### Agent 1: Structural complexity
 
 For each changed function/method in the diff:
 - Count decision points (if/else, switch cases, loops, ternary, catch
@@ -74,7 +154,7 @@ For each changed function/method in the diff:
 - Measure file length
 - Score: weighted sum normalized to 0-100
 
-### Agent 2: Fan-out / impact
+#### Agent 2: Fan-out / impact
 
 For each changed file:
 - `rg` for imports/usages of changed symbols across the codebase
@@ -83,7 +163,7 @@ For each changed file:
   `data/schemas/`, `app/lib-grpc/`)
 - Score: 0-100 based on consumer count and sensitivity
 
-### Agent 3: Scope
+#### Agent 3: Scope
 
 Diff-level metrics:
 - Total files changed
@@ -102,9 +182,7 @@ If a subagent fails, times out, or returns empty:
 - If 2 or more of the 3 agents fail, abort and report rather than
   presenting partial results
 
-## Step 2b: Aggregate scores
-
-Compute a weighted composite score:
+**Aggregate scores.** Compute a weighted composite score:
 
 - Structural complexity: 40%
 - Fan-out / impact: 35%
@@ -122,6 +200,9 @@ the full routing and recommend a lightweight single-pass review (Scout
 with collapsed analysis). If the diff is documentation-only (*.md,
 *.txt, comments only), report "Documentation-only change — no code
 review needed" and skip the review.
+
+<!-- END LEGACY FALLBACK -->
+
 
 ## Step 3: Route decision
 
