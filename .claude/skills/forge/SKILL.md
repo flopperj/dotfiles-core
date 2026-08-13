@@ -21,6 +21,12 @@ gates** (after grill-me; after to-prd) and then hands off to
 Cyrus). Each stage consumes the previous stage's artifact verbatim — no
 re-interviewing, no work duplication.
 
+`/forge`'s own stages stay prose-orchestrated by design
+(workflow-conversion audit, 2026-08): every inter-gate span is a single
+Skill invocation, and grill-me and to-prd take user input mid-stage,
+which a saved workflow script cannot host. No span here has the fixed
+2+-agent gate-free topology that would justify a workflow conversion.
+
 ---
 
 ## Execution modes
@@ -201,6 +207,17 @@ Once `/aristotle-deconstructor` is invoked, the inner pipeline (Aristotle
 -> Optimus -> Cyrus) runs to completion under its own gates. `/forge`
 does not gate again — the downstream gates are owned downstream.
 
+**Typed downstream handoffs.** The inner pipeline's stage handoffs
+(Aristotle -> Optimus, Optimus -> Cyrus) are typed contracts —
+[`aristotle-to-optimus.json`](../../workflows/schemas/aristotle-to-optimus.json)
+and
+[`optimus-to-cyrus.json`](../../workflows/schemas/optimus-to-cyrus.json) —
+validated by hand by the `/aristotle-deconstructor` orchestrator per its
+Handoff contracts section, since those stages are prose `Agent` calls,
+not saved workflow scripts (the schemas are written contracts, not
+`agent()`-enforced returns). `/forge` does not re-validate them; like
+the gates, the contract is owned downstream.
+
 ## Step 5b: Hand off to /optimus-planner (alternate path)
 
 Used when the user picked `o` at Gate 2, or `--skip-aristotle` was set.
@@ -214,7 +231,11 @@ embedded inline. The launch prompt must:
 3. Forward `execution_mode` and `swarm_mode` flags if present.
 
 `/optimus-planner` then runs its own gate flow (plan -> Cyrus). `/forge`
-does not gate again.
+does not gate again. The Optimus -> Cyrus handoff on this path remains
+typed per
+[`optimus-to-cyrus.json`](../../workflows/schemas/optimus-to-cyrus.json),
+validated by hand by that orchestrator — same written-contract semantics
+as the Step 5 path.
 
 ---
 
