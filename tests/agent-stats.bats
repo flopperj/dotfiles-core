@@ -64,6 +64,23 @@ _seed_project() {
 EOF
 }
 
+# Write a fixture metrics.jsonl for project $1 with $2 recent
+# pipeline_complete events, each carrying ci_fix_attempts $3 (a raw JSON
+# number literal, so "1.5" seeds the float case).
+_seed_pipelines() {
+    local project="$1" count="$2" ci="$3"
+    local now i
+    now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    mkdir -p "$TASKS_DIR/$project"
+    : > "$TASKS_DIR/$project/metrics.jsonl"
+    i=0
+    while [ "$i" -lt "$count" ]; do
+        echo "{\"timestamp\":\"$now\",\"event_type\":\"pipeline_complete\",\"agent\":\"cyrus-tdd-engineer\",\"project\":\"$project\",\"ticket\":\"PROJ-$((1000 + i))\",\"data\":{\"classification\":\"Medium\",\"first_pass\":true,\"tests_passed\":true,\"ci_fix_attempts\":$ci,\"duration_seconds\":100}}" \
+            >> "$TASKS_DIR/$project/metrics.jsonl"
+        i=$((i + 1))
+    done
+}
+
 # ---------------------------------------------------------------------------
 # Script exists
 # ---------------------------------------------------------------------------
@@ -150,6 +167,45 @@ EOF
     run /bin/bash "$STATS" --bogus
     [ "$status" -eq 1 ]
     [[ "$output" == *"Usage:"* ]]
+}
+
+# ---------------------------------------------------------------------------
+# Health gate: numeric validation (fail closed, not open)
+# ---------------------------------------------------------------------------
+# CI_TOTAL is jq-derived from event data, so a float ci_fix_attempts sum
+# ("7.5") is possible. `[ "$CI_TOTAL" -gt N ]` errors on non-integers, the
+# error is swallowed inside the if-condition, and the health flag silently
+# vanishes — the gate-fail-open-non-numeric trap. The gate must instead
+# surface a visible unparseable-data flag while the script still exits 0.
+
+@test "float ci_fix_attempts sum: unparseable-data flag surfaces, exit 0" {
+    _seed_pipelines "proj" 5 "1.5"
+    run /bin/bash "$STATS"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"unparseable"* ]]
+}
+
+@test "float ci_fix_attempts sum does not fire the CI-attempts flag" {
+    _seed_pipelines "proj" 5 "1.5"
+    run /bin/bash "$STATS"
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"exceed pipeline count"* ]]
+}
+
+@test "integer ci_fix_attempts exceeding pipeline count fires the CI-attempts flag" {
+    _seed_pipelines "proj" 5 "2"
+    run /bin/bash "$STATS"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"CI fix attempts (10) exceed pipeline count (5)"* ]]
+    [[ "$output" != *"unparseable"* ]]
+}
+
+@test "integer ci_fix_attempts within pipeline count raises neither flag" {
+    _seed_pipelines "proj" 5 "0"
+    run /bin/bash "$STATS"
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"exceed pipeline count"* ]]
+    [[ "$output" != *"unparseable"* ]]
 }
 
 # ---------------------------------------------------------------------------
