@@ -76,7 +76,11 @@ else
   # inject it after the opening brace using bash parameter expansion.
   if [[ "$INPUT" != *'"timestamp"'* ]]; then
     TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    INPUT="${INPUT/\{/\{\"timestamp\":\"$TS\",}"
+    # The replacement is built in a variable: bash 3.2 does not unescape \{
+    # in a literal REPLACEMENT half (it emits the backslash, corrupting the
+    # JSON), while a plain variable expansion behaves identically on 3.2 and 4+.
+    TS_PREFIX="{\"timestamp\":\"$TS\","
+    INPUT="${INPUT/\{/$TS_PREFIX}"
   fi
 
   echo "$INPUT" >> "$METRICS_FILE"
