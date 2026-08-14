@@ -138,6 +138,19 @@ teardown() {
     grep -q '"timestamp":"' "$METRICS_FILE"
 }
 
+@test "jq absent: appended line is valid JSON under /bin/bash 3.2" {
+    # The script always runs via bash in production, and macOS system bash
+    # (3.2.57) does not unescape \{ in a parameter-expansion REPLACEMENT,
+    # so the emitted line must be proven valid with jq restored to PATH
+    # after an emit performed explicitly under /bin/bash with no jq.
+    run /bin/bash -c 'echo "$VALID_EVENT" | PATH="$NOJQ_PATH" /bin/bash "$EMIT"'
+    [ "$status" -eq 0 ]
+    [ -s "$METRICS_FILE" ]
+    jq -e . "$METRICS_FILE" > /dev/null
+    run jq -r '.timestamp' "$METRICS_FILE"
+    [[ "$output" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]
+}
+
 @test "jq absent: explicit timestamp not duplicated" {
     run bash -c 'echo "{\"timestamp\":\"2020-01-01T00:00:00Z\",\"event_type\":\"x\",\"agent\":\"a\",\"project\":\"p\"}" | PATH="$NOJQ_PATH" bash "$EMIT"'
     [ "$status" -eq 0 ]
