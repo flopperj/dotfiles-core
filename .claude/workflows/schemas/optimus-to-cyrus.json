@@ -1,0 +1,42 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$comment": "Typed handoff contract for the Optimus -> Cyrus boundary. Field names come from the optimus-planner agent's 12-section plan: steps mirrors Section 4's What/Where/Why step shape plus the id used in the YAML todo checklist; test_plan is Section 6; files_to_create/files_to_modify are Section 3's Affected Areas lists; risks is Section 9's risk table entries. Cyrus executes the steps in order with TDD discipline and must not redesign or re-sequence them.",
+  "type": "object",
+  "required": ["steps", "test_plan", "files_to_create", "files_to_modify", "risks"],
+  "properties": {
+    "steps": {
+      "$comment": "Ordered execution steps. id is the stable step identifier from the plan's YAML todo checklist; what/where/why mirror Section 4's per-step fields (where is a file path).",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "what", "where", "why"],
+        "properties": {
+          "id": { "type": "string" },
+          "what": { "type": "string" },
+          "where": { "type": "string" },
+          "why": { "type": "string" }
+        }
+      }
+    },
+    "test_plan": {
+      "$comment": "Section 6: the tests to write, one entry per test with what it covers (happy path, error cases, flag variations).",
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "files_to_create": {
+      "$comment": "Section 3: full paths of files the plan creates.",
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "files_to_modify": {
+      "$comment": "Section 3: full paths of existing files the plan modifies.",
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "risks": {
+      "$comment": "Section 9: identified risks with their mitigations, one entry per risk.",
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

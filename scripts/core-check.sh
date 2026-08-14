@@ -65,6 +65,60 @@ run_core_check() {
         errors=$((errors + 1))
     fi
 
+    # Check evals
+    echo ""
+    echo "evals (~/.claude/evals):"
+    local evals_link="$HOME/.claude/evals"
+    if [ -L "$evals_link" ] && [ -e "$evals_link" ]; then
+        echo "  ok    evals"
+    elif [ -L "$evals_link" ]; then
+        echo "  BROKEN evals (dead symlink)"
+        errors=$((errors + 1))
+    else
+        echo "  MISSING evals"
+        errors=$((errors + 1))
+    fi
+
+    # Check workflows
+    echo ""
+    echo "Workflows (~/.claude/workflows/):"
+    local workflow_file
+    for workflow_file in "$core_dir/.claude/workflows/"*.js; do
+        [ -f "$workflow_file" ] || continue
+        local wf_filename
+        wf_filename="$(basename "$workflow_file")"
+        local wf_link="$HOME/.claude/workflows/$wf_filename"
+        if [ -L "$wf_link" ] && [ -e "$wf_link" ]; then
+            echo "  ok    $wf_filename"
+        elif [ -L "$wf_link" ]; then
+            echo "  BROKEN $wf_filename (dead symlink)"
+            errors=$((errors + 1))
+        else
+            echo "  MISSING $wf_filename"
+            errors=$((errors + 1))
+        fi
+    done
+
+    # Check workflow schemas
+    echo ""
+    echo "Workflow schemas (~/.claude/workflows/schemas/):"
+    local schema_file
+    for schema_file in "$core_dir/.claude/workflows/schemas/"*.json; do
+        [ -f "$schema_file" ] || continue
+        local schema_filename
+        schema_filename="$(basename "$schema_file")"
+        local schema_link="$HOME/.claude/workflows/schemas/$schema_filename"
+        if [ -L "$schema_link" ] && [ -e "$schema_link" ]; then
+            echo "  ok    $schema_filename"
+        elif [ -L "$schema_link" ]; then
+            echo "  BROKEN $schema_filename (dead symlink)"
+            errors=$((errors + 1))
+        else
+            echo "  MISSING $schema_filename"
+            errors=$((errors + 1))
+        fi
+    done
+
     # Check generated files (CLAUDE.md and AGENTS.md symlinks)
     echo ""
     echo "Generated files (~/.claude/):"
