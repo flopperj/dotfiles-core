@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$comment": "Typed handoff contract for the Aristotle -> Optimus boundary (aristotle-deconstructor/SKILL.md 'Handoff contracts'). Field names map to the aristotle-deconstructor agent's phases: aristotelian_move is Phase 5 (THE ARISTOTELIAN MOVE), assumptions_stripped is Phase 1 (ASSUMPTION AUTOPSY), bedrock_truths is Phase 2 (IRREDUCIBLE TRUTHS — the bedrock the agent rebuilds from). Only this object crosses the boundary; the full Phase 1-4 analysis and any implementation specifics are stripped per the SKILL.md handoff rules.",
+  "type": "object",
+  "required": ["aristotelian_move", "assumptions_stripped", "bedrock_truths", "constraints"],
+  "properties": {
+    "aristotelian_move": {
+      "$comment": "The single highest-leverage action, 1-2 sentences. Optimus references it as the Problem Summary source and must not re-litigate it.",
+      "type": "string"
+    },
+    "assumptions_stripped": {
+      "$comment": "Inherited assumptions identified in the Assumption Autopsy and removed from the framing — recorded so Optimus does not reintroduce them.",
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "bedrock_truths": {
+      "$comment": "The irreducible first principles that survive Phase 2 — the foundation the plan must be built from.",
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "constraints": {
+      "$comment": "Hard constraints on the solution space, including any user modifications or constraints stated at the approval gates.",
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

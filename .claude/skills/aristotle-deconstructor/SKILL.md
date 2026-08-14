@@ -59,13 +59,43 @@ offending content before passing it downstream.
 Each stage produces a **defined output shape**. Only this output crosses the
 boundary — everything else stays within the agent.
 
+Both handoffs are **typed contracts** with JSON Schemas:
+[`aristotle-to-optimus.json`](../../workflows/schemas/aristotle-to-optimus.json)
+and [`optimus-to-cyrus.json`](../../workflows/schemas/optimus-to-cyrus.json)
+(installed at `~/.claude/workflows/schemas/`). These stages are
+prose-orchestrated `Agent` tool calls, not saved workflow scripts, so the
+schemas are **written contracts the orchestrator (you) validates by hand** —
+they are not `agent()`-enforced returns. Structure each handoff per the
+schema's fields and check that every `required` field is present and
+non-empty before launching the downstream agent. If a field cannot be filled
+from the upstream output, treat the stage as deficient — surface the gap
+(see Truncation handling), never fabricate the field.
+
+> **Why these stages are not saved workflows (conversion audit, 2026-08):**
+> in gated mode every inter-gate span here is a single agent call, and the
+> autonomous-mode Aristotle -> Optimus -> Cyrus stretch has plan-dependent
+> topology — Step 2 can halt on a no-code-changes verdict, and Step 4 picks
+> sequential vs wave-parallel Cyrus from the plan's Section 12 — so no
+> gate-free span has the fixed 2+-agent topology a workflow script requires.
+> The typed contracts apply regardless of orchestration style.
+
 ### Aristotle -> Optimus handoff
 
-Pass **only** these from Aristotle's output:
-- **The Aristotelian Move** — the single highest-leverage action (1-2 sentences)
-- **Irreducible truths** — the first principles that survive Phase 2
-- **Implementation Handoff section** — Aristotle's summary of what needs to
-  be built, written as a strategic brief (what and why, never how)
+Structure the handoff per `aristotle-to-optimus.json`:
+
+- `aristotelian_move` — **The Aristotelian Move**: the single
+  highest-leverage action (1-2 sentences)
+- `bedrock_truths` — **Irreducible truths**: the first principles that
+  survive Phase 2
+- `assumptions_stripped` — the inherited assumptions the Assumption Autopsy
+  removed from the framing, recorded so Optimus does not reintroduce them
+- `constraints` — hard constraints on the solution space, including any user
+  modifications or constraints stated at the gate
+
+Alongside the typed object, pass the **Implementation Handoff section** —
+Aristotle's summary of what needs to be built, written as a strategic brief
+(what and why, never how). It is the narrative companion to
+`aristotelian_move`, not a schema field.
 
 **Strip before passing:**
 - The full Phase 1-4 analysis (user has already seen it; Optimus doesn't need it)
@@ -74,9 +104,18 @@ Pass **only** these from Aristotle's output:
 
 ### Optimus -> Cyrus handoff
 
-Pass **only** these from Optimus's output:
+Structure the typed core of the handoff per `optimus-to-cyrus.json`:
+
+- `steps` — ordered execution steps as `{id, what, where, why}` objects,
+  drawn from the plan's Section 4 steps and its YAML todo checklist ids
+- `test_plan` — Section 6's tests, one entry per test
+- `files_to_create` / `files_to_modify` — Section 3's Affected Areas lists
+- `risks` — Section 9's risk table entries
+
+Alongside the typed object, pass:
 - **The full execution plan** — all 12 sections (problem summary through
-  parallelization strategy)
+  parallelization strategy); the typed object indexes the plan, it does not
+  replace it
 - **The Aristotelian Move** (if pipeline started from Aristotle) — so Cyrus
   understands the strategic why
 
@@ -130,11 +169,17 @@ changes are needed, halt and report back to the caller instead.
 If the user chooses "p" or says to proceed:
 
 Launch the `optimus-planner` agent via the Agent tool. Pass it **only** the
-handoff contract output:
-- The Aristotelian Move
-- The irreducible truths
-- The Implementation Handoff section
-- Any additional context the user provided at the gate
+handoff contract output, structured per `aristotle-to-optimus.json`
+(see Handoff contracts):
+- `aristotelian_move` — The Aristotelian Move
+- `bedrock_truths` — the irreducible truths
+- `assumptions_stripped` — the assumptions removed from the framing
+- `constraints` — fold in any additional context or constraints the user
+  provided at the gate
+- The Implementation Handoff section (narrative companion to the typed object)
+
+Validate the object by hand against the schema's `required` fields before
+launching — this is a written contract, not an `agent()`-enforced one.
 
 **Instruct Optimus explicitly:** "This strategic direction comes from
 Aristotle's first-principles analysis. Do not re-litigate the strategy —
@@ -176,11 +221,18 @@ parallel (`ip`).
 If the user chooses "i" (sequential):
 
 Launch the `cyrus-tdd-engineer` agent via the Agent tool. Pass it **only**
-the handoff contract output:
+the handoff contract output, with the typed core structured per
+`optimus-to-cyrus.json` (see Handoff contracts):
+- The typed core: `steps`, `test_plan`, `files_to_create`,
+  `files_to_modify`, `risks`
 - Optimus's full execution plan (all 12 sections)
 - The Aristotelian Move (strategic context)
 - Any user modifications or constraints mentioned during the gates
 - Execution mode: `sequential`
+
+Validate the typed core by hand against the schema's `required` fields
+before launching — this is a written contract, not an `agent()`-enforced
+one.
 
 **Instruct Cyrus explicitly:** "This plan comes from Optimus. Execute it
 step-by-step with TDD discipline. Do not redesign the architecture or
@@ -190,6 +242,8 @@ working around it."
 If the user chooses "ip" (parallel):
 
 Invoke the Cyrus skill's parallel execution mode. Pass:
+- The typed handoff core per `optimus-to-cyrus.json` (see Handoff
+  contracts), validated by hand the same way as the sequential path
 - Optimus's full execution plan (all 12 sections)
 - The Aristotelian Move (strategic context)
 - Any user modifications or constraints mentioned during the gates

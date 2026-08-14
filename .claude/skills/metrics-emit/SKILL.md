@@ -184,9 +184,9 @@ requires their data.
 
 ## `jq` dependency note
 
-`emit-metric.sh` works without `jq` by skipping validation and using `sed` for
-best-effort timestamp injection. Full validation (required field checks, JSON
-structure verification) requires `jq`.
+`emit-metric.sh` works without `jq` by skipping validation and using bash
+parameter expansion for best-effort timestamp injection. Full validation
+(required field checks, JSON structure verification) requires `jq`.
 
 Install: `brew install jq` (macOS) or `apt install jq` (Linux).
 

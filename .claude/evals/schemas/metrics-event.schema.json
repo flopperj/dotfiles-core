@@ -1,0 +1,213 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Metrics Event",
+  "description": "Schema for structured metrics events emitted by agent pipeline skills to ~/.claude/tasks/<project>/metrics.jsonl",
+  "type": "object",
+  "required": ["timestamp", "event_type", "agent", "project"],
+  "properties": {
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 UTC timestamp of when the event was emitted"
+    },
+    "event_type": {
+      "type": "string",
+      "enum": ["ticket_classified", "pipeline_complete", "agent_truncated", "swarm_complete"],
+      "description": "The type of pipeline event. Extend this enum when new emit points are added with a named consumer."
+    },
+    "agent": {
+      "type": "string",
+      "description": "The agent or skill that emitted this event (e.g. 'ticket-pickup', 'cyrus-tdd-engineer', 'ticket-swarm')"
+    },
+    "project": {
+      "type": "string",
+      "description": "The project name (basename of git repo root). Used to partition metrics by project."
+    },
+    "ticket": {
+      "type": "string",
+      "description": "Jira ticket key (e.g. PROJ-1234). Optional — absent for swarm-level events with no single ticket."
+    },
+    "run_id": {
+      "type": "string",
+      "description": "Swarm run ID (e.g. 2026-04-21-001). Links emit events to a specific swarm run log."
+    },
+    "data": {
+      "type": "object",
+      "description": "Event-specific payload. Shape depends on event_type.",
+      "oneOf": [
+        {
+          "description": "ticket_classified — emitted by ticket-pickup after the classification gate resolves",
+          "required": ["classification", "pipeline", "enrichment_sources"],
+          "properties": {
+            "classification": {
+              "type": "string",
+              "enum": ["Simple", "Medium", "Complex"]
+            },
+            "pipeline": {
+              "type": "string",
+              "enum": ["cyrus", "optimus-cyrus", "aristotle-optimus-cyrus"]
+            },
+            "enrichment_sources": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Sources that contributed enrichment, e.g. [\"jira\", \"codebase\", \"gh\"]"
+            },
+            "override": {
+              "type": ["string", "null"],
+              "enum": ["simplified", "escalated", null],
+              "description": "User override: null=no override, simplified=user chose s, escalated=user chose e"
+            }
+          }
+        },
+        {
+          "description": "pipeline_complete — emitted by ticket-pickup (orchestration) or cyrus-tdd-engineer (implementation) after pipeline returns",
+          "required": ["classification", "pipeline", "duration_seconds", "tests_passed", "first_pass"],
+          "properties": {
+            "classification": {
+              "type": "string",
+              "enum": ["Simple", "Medium", "Complex"]
+            },
+            "pipeline": {
+              "type": "string",
+              "enum": ["cyrus", "optimus-cyrus", "aristotle-optimus-cyrus"]
+            },
+            "duration_seconds": {
+              "type": "number",
+              "description": "Wall-clock seconds from pipeline launch to return"
+            },
+            "tests_passed": {
+              "type": "boolean"
+            },
+            "coverage_percent": {
+              "type": ["number", "null"],
+              "description": "Test coverage percentage from Cyrus's report. Null if not reported."
+            },
+            "ci_fix_attempts": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Number of CI fix iterations. 0 if first-pass success."
+            },
+            "first_pass": {
+              "type": "boolean",
+              "description": "True if pipeline completed with 0 retries and 0 CI fix attempts"
+            },
+            "files_changed": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        {
+          "description": "agent_truncated — emitted by pipeline skills when a reasoning agent's response is missing the <<task-complete>> sentinel (suspected maxTurns truncation)",
+          "required": ["max_turns", "detection", "context"],
+          "properties": {
+            "max_turns": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "The maxTurns value set in the truncated agent's frontmatter"
+            },
+            "detection": {
+              "type": "string",
+              "enum": ["missing_completion_sentinel"],
+              "description": "How the truncation was detected"
+            },
+            "context": {
+              "type": "string",
+              "enum": ["swarm", "pipeline", "standalone"],
+              "description": "Calling context — swarm (from ticket-swarm), pipeline (non-swarm skill chain), standalone (direct invocation)"
+            },
+            "parent_skill": {
+              "type": "string",
+              "description": "Name of the skill that invoked the truncated agent. Optional."
+            }
+          }
+        },
+        {
+          "description": "swarm_complete — emitted by ticket-swarm after the run log is written",
+          "required": ["tickets_total", "completed", "blocked", "prs_created", "duration_seconds", "first_pass_rate"],
+          "properties": {
+            "tickets_total": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "completed": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "blocked": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "prs_created": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "duration_seconds": {
+              "type": "number",
+              "description": "Wall-clock seconds from swarm start to summary"
+            },
+            "first_pass_rate": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "(tickets completed on first attempt) / tickets_total"
+            },
+            "agents_spawned": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Total subagents launched across all pipelines"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "examples": [
+    {
+      "timestamp": "2026-04-21T10:00:00Z",
+      "event_type": "ticket_classified",
+      "agent": "ticket-pickup",
+      "project": "my-repo",
+      "ticket": "PROJ-1234",
+      "data": {
+        "classification": "Medium",
+        "pipeline": "optimus-cyrus",
+        "enrichment_sources": ["jira", "codebase"],
+        "override": null
+      }
+    },
+    {
+      "timestamp": "2026-04-21T10:15:00Z",
+      "event_type": "pipeline_complete",
+      "agent": "cyrus-tdd-engineer",
+      "project": "my-repo",
+      "ticket": "PROJ-1234",
+      "data": {
+        "classification": "Medium",
+        "pipeline": "optimus-cyrus",
+        "duration_seconds": 840,
+        "tests_passed": true,
+        "coverage_percent": 87.5,
+        "ci_fix_attempts": 0,
+        "first_pass": true,
+        "files_changed": 3
+      }
+    },
+    {
+      "timestamp": "2026-04-21T11:00:00Z",
+      "event_type": "swarm_complete",
+      "agent": "ticket-swarm",
+      "project": "my-repo",
+      "run_id": "2026-04-21-001",
+      "data": {
+        "tickets_total": 5,
+        "completed": 4,
+        "blocked": 1,
+        "prs_created": 4,
+        "duration_seconds": 3600,
+        "first_pass_rate": 0.75,
+        "agents_spawned": 11
+      }
+    }
+  ]
+}

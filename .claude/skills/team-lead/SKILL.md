@@ -182,6 +182,11 @@ The team lead maintains a **shared context object** that accumulates results
 across waves. This gives downstream agents awareness of what upstream agents
 built, beyond just the files on disk.
 
+> **Path note:** when Step 3's workflow path succeeds, `team-lead-waves`
+> maintains this accumulator internally (same injection, same size
+> limits) — the prose procedure below governs the **legacy fallback
+> path** only.
+
 **Initialize** the context as empty before Wave 1.
 
 **After each wave completes**, append a brief summary:
@@ -208,7 +213,90 @@ run log for swarm-retro analysis.
 
 ---
 
-## Step 3: Launch pipelines by wave
+## Step 3: Execute waves — invoke the `team-lead-waves` workflow
+
+Wave execution runs through the saved `team-lead-waves` workflow
+(`.claude/workflows/team-lead-waves.js`). The workflow owns the execution
+topology — a sequential outer loop over waves, `parallel()` over each
+wave's tickets — while this skill keeps ownership of **building** the
+dependency graph (the Step 1 sequencing rules) and injecting domain
+context (Step 2). The seam follows the same three-part contract as
+`code-auditor/SKILL.md` Step 2 (the proven canary pattern): invoke,
+validate, fall back.
+
+1. **Invoke.** Invoke the `team-lead-waves` workflow, passing a single
+   JSON object through the Workflow tool's `args`:
+   - `waves` — the Step 1 sequencing plan in the swarm-context shape:
+     an array of `{ index, tickets: [Jira keys], parallel }`. The
+     workflow executes this plan as given; it never re-sequences.
+   - `domain` — the cluster's domain tag (`backend` / `frontend` /
+     `infra` / `unknown`)
+   - `sequencing_reasons` — one entry per Step 1 ordering decision
+   - `briefs` — a map from ticket key to that ticket's full pipeline
+     brief text: the enriched ticket brief, the Step 2 domain context,
+     the branch name (and base branch for sequenced tickets), and
+     `ticket_complexity`. The workflow passes each brief verbatim to
+     that ticket's pipeline agent.
+2. **Validate.** Check the workflow's return against
+   [`.claude/workflows/schemas/swarm-context.json`](../../workflows/schemas/swarm-context.json).
+   The four required fields must be present and well-typed:
+   - `waves` (the executed wave plan, echoed back)
+   - `sequencing_reasons` (array of strings)
+   - `domain` (enum `backend` / `frontend` / `infra` / `unknown`)
+   - `blocked` (Jira keys of tickets that did not complete; empty array
+     when every ticket succeeded)
+
+   Validate **only those fields**. The workflow returns no prose — its
+   per-wave narration goes to the run journal — so do not require or
+   parse any text alongside the object. A malformed `args` payload makes
+   the workflow return null fields that **fail this validation by
+   design**, engaging the fallback below.
+3. **Fall back.** If the invocation errors, returns nothing, or the
+   return fails validation, run the **legacy prose wave execution**
+   (labelled fallback block below) and drive the waves the old way.
+   **State plainly in the output that the fallback path ran**, e.g.
+   *"Workflow invocation unavailable — waves executed via the prose
+   path."* The cluster gets processed either way; the only cost of a
+   failed seam is a line of text.
+
+**Journal diagnostic — check before declaring failure.** If the return
+*seems* empty, consult the workflow run's `journal.jsonl` before
+concluding the invocation failed. A workflow that ran correctly but
+whose return did not surface looks identical to one that never ran; the
+journal distinguishes them. Record what the journal showed alongside
+the fallback notice.
+
+**Fallback occurrences must be visible, not silent.** If the fallback
+notice appears on every run, the workflow seam is broken and should be
+treated as unproven rather than as a working feature — surface that
+pattern to ticket-swarm and the user instead of quietly absorbing it.
+
+**Concurrency ceiling.** `parallel()` caps at **16 concurrent agents**
+(1000 per run). A wave wider than 16 queues rather than erroring — the
+workflow logs each wave's width so a 40-ticket wave reads as queued, not
+mysteriously slow. The same practical ceiling applies to the legacy
+path's Agent-tool fan-out: log the wave width before launching.
+
+**Interpreting the validated return:**
+
+- The workflow maintains the swarm context accumulator internally
+  (injecting prior-wave results into each subsequent wave's pipeline
+  prompts, with the same condensation limits as the accumulator section
+  below), so on this path there is no accumulator to maintain in prose.
+- Per-wave progress narration lands in the workflow run's
+  `journal.jsonl`; mine it for the per-wave detail lines when reporting
+  to ticket-swarm.
+- For each ticket in `blocked`, run Step 3.5 smart failure analysis
+  before escalating. Any re-run this produces is a **prose-orchestrated**
+  Agent call (see Truncation handling below).
+- Feed the returned object into the Step 4 cluster report.
+
+<!-- LEGACY FALLBACK — prose wave execution. Runs ONLY when the
+     team-lead-waves workflow invocation or validation fails
+     (Step 3, part 3). Do not run this when the workflow returned a
+     valid swarm-context object. -->
+
+### Fallback: legacy prose wave execution
 
 Execute the sequencing plan from Step 1, wave by wave:
 
@@ -254,12 +342,25 @@ Execute the sequencing plan from Step 1, wave by wave:
 
 7. Proceed to the next wave.
 
+Every pipeline invocation on this path is a **prose-orchestrated** Agent
+call: verify the `<<task-complete>>` sentinel in each returned response
+and emit `agent_truncated` on suspected truncation (see Truncation
+handling below).
+
+<!-- END LEGACY FALLBACK -->
+
 ---
 
 ## Step 3.5: Smart failure analysis
 
 When a pipeline in a wave reports a blocker, auto-analyze before
 escalating to the user. This reduces unnecessary user interruptions.
+
+This applies on both Step 3 paths: on the workflow path, run it for each
+ticket in the returned `blocked` array (mining the run journal for the
+failure detail); on the legacy path, when a pipeline reports a blocker
+mid-wave. Any retry or re-run this step launches is a prose-orchestrated
+Agent call.
 
 ### Flaky test detection
 
@@ -362,6 +463,27 @@ progress dashboard.
   If found, use it — the user may have pre-created the branch manually.
   For chained tickets, verify the pre-existing branch is based on the
   correct parent (rebase onto A's branch if needed).
+
+## Truncation handling — sentinel scoping
+
+The `<<task-complete>>` sentinel requirement is scoped by who owns the
+stage:
+
+- **Workflow-owned stages are exempt.** When Step 3's `team-lead-waves`
+  workflow path succeeds, each pipeline stage runs as `agent()` with the
+  `TICKET_RESULT` schema — a schema-validated return **is** the
+  completion signal, and a dead or truncated agent surfaces as `null`
+  (attributed to its ticket and reported in `blocked`). Do not look for
+  the sentinel there; its absence means nothing.
+- **Prose-orchestrated calls still require it.** Every `Agent` tool call
+  this skill makes directly — the LEGACY FALLBACK wave execution, Step
+  3.5 retries and re-runs, and any other direct pipeline invocation —
+  must be verified to contain the `<<task-complete>>` sentinel before
+  its output is consumed. See `~/.claude/_shared/agent-turn-cap-warning.md`
+  for the detection rule and the swarm-mode response (record, mark the
+  ticket blocked with reason `agent_truncated`, move to the next
+  ticket). **Still emit the `agent_truncated` metric** for these calls —
+  see `~/.claude/skills/metrics-emit/SKILL.md` → `agent_truncated`.
 
 ## Maintenance
 

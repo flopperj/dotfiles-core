@@ -128,6 +128,89 @@ teardown() {
 }
 
 # ---------------------------------------------------------------------------
+# 5b. Normal install: evals symlinked
+# ---------------------------------------------------------------------------
+
+@test "install symlinks evals directory into ~/.claude/" {
+    _run_install
+    [ -L "$SCRATCH/home/.claude/evals" ]
+}
+
+@test "evals symlink resolves to a tree containing emit-metric.sh" {
+    _run_install
+    [ -f "$SCRATCH/home/.claude/evals/scripts/emit-metric.sh" ]
+}
+
+@test "install --check output mentions evals" {
+    _run_install
+    HOME="$SCRATCH/home" run bash "$CORE_DIR/install.sh" --check
+    echo "$output" | grep -qi "evals"
+}
+
+# ---------------------------------------------------------------------------
+# 5c. Normal install: workflows directory
+# ---------------------------------------------------------------------------
+
+@test "install creates ~/.claude/workflows/ directory" {
+    _run_install
+    [ -d "$SCRATCH/home/.claude/workflows" ]
+}
+
+@test "install removes stale workflow symlinks" {
+    mkdir -p "$SCRATCH/home/.claude/workflows"
+    ln -s "$SCRATCH/nonexistent-target.js" "$SCRATCH/home/.claude/workflows/deleted-workflow.js"
+    _run_install
+    [ ! -e "$SCRATCH/home/.claude/workflows/deleted-workflow.js" ]
+    [ ! -L "$SCRATCH/home/.claude/workflows/deleted-workflow.js" ]
+}
+
+@test "install --check output mentions workflows" {
+    _run_install
+    HOME="$SCRATCH/home" run bash "$CORE_DIR/install.sh" --check
+    echo "$output" | grep -qi "workflows"
+}
+
+@test "workflow .js files resolve at file level in ~/.claude/workflows/" {
+    _run_install
+    local wf
+    for wf in "$CORE_DIR/.claude/workflows/"*.js; do
+        [ -f "$wf" ] || continue
+        [ -f "$SCRATCH/home/.claude/workflows/$(basename "$wf")" ]
+    done
+}
+
+@test "install symlinks all four workflow schemas into ~/.claude/workflows/schemas/" {
+    _run_install
+    local name
+    for name in aristotle-to-optimus auditor-composite optimus-to-cyrus swarm-context; do
+        [ -f "$SCRATCH/home/.claude/workflows/schemas/$name.json" ]
+    done
+}
+
+@test "install removes stale workflow schema symlinks" {
+    mkdir -p "$SCRATCH/home/.claude/workflows/schemas"
+    ln -s "$SCRATCH/nonexistent-target.json" "$SCRATCH/home/.claude/workflows/schemas/deleted-schema.json"
+    _run_install
+    [ ! -e "$SCRATCH/home/.claude/workflows/schemas/deleted-schema.json" ]
+    [ ! -L "$SCRATCH/home/.claude/workflows/schemas/deleted-schema.json" ]
+}
+
+@test "install --check reports workflow schemas as ok after install" {
+    _run_install
+    HOME="$SCRATCH/home" run bash "$CORE_DIR/install.sh" --check
+    [ "$status" -eq 0 ]
+    echo "$output" | grep -q "ok    auditor-composite.json"
+}
+
+@test "install --check detects a missing workflow schema" {
+    _run_install
+    rm "$SCRATCH/home/.claude/workflows/schemas/auditor-composite.json"
+    HOME="$SCRATCH/home" run bash "$CORE_DIR/install.sh" --check
+    [ "$status" -ne 0 ]
+    echo "$output" | grep -q "MISSING auditor-composite.json"
+}
+
+# ---------------------------------------------------------------------------
 # 6. Memory seeds: seed-once behavior
 # ---------------------------------------------------------------------------
 
