@@ -123,3 +123,72 @@ _assert_schema_contract() {
         [ "$status" -eq 0 ]
     done
 }
+
+# ---------------------------------------------------------------------------
+# Data-vs-schema validation
+# ---------------------------------------------------------------------------
+# The tests above only inspect the schemas' declaration text; these validate
+# real candidate objects against a schema so the abort contract is proven by
+# behavior, not by reading the declaration. Core has no JSON Schema validator
+# and no node dependency, so this is a minimal jq structural check scoped to
+# the basic subset these schemas restrict themselves to: required presence,
+# type / type-array matching (null only passes where declared), enum
+# membership, and one level of recursion into object properties.
+
+_validate_object() {
+    # $1 = schema filename, $2 = candidate object as a JSON string.
+    # Exits 0 when the object structurally satisfies the schema, 1 otherwise.
+    echo "$2" | jq -e --slurpfile s "$SCHEMAS_DIR/$1" '
+        def check($sch):
+          . as $d
+          | (($sch.required // []) | all(. as $k | $d | has($k)))
+          and (
+              ($sch.properties // {}) | to_entries
+              | all(
+                  .key as $k | .value as $ps
+                  | if ($d | has($k)) | not then true
+                    else ($d[$k]) as $v
+                    | (if ($ps | has("enum")) then ($ps.enum | index($v)) != null
+                       elif ($ps | has("type")) then
+                         (if ($ps.type | type) == "array"
+                          then any($ps.type[]; . == ($v | type))
+                          else ($v | type) == $ps.type end)
+                       else true end)
+                    and (if (($v | type) == "object") and ($ps | has("properties"))
+                         then ($v | check($ps)) else true end)
+                    end
+                )
+            );
+        check($s[0])' > /dev/null
+}
+
+@test "auditor-composite: the abort object FAILS validation (prose fallback engages)" {
+    # Exactly what code-auditor-score.js returns on a 2+ dead-scorer abort.
+    run _validate_object "auditor-composite.json" \
+        '{"composite":null,"band":null,"recommendation":null,"components":{"structural":null,"impact":null,"scope":null},"degraded":true}'
+    [ "$status" -ne 0 ]
+}
+
+@test "auditor-composite: a valid composite object PASSES validation" {
+    run _validate_object "auditor-composite.json" \
+        '{"composite":55,"band":"Medium","recommendation":"scout","components":{"structural":50,"impact":60,"scope":55},"degraded":false}'
+    [ "$status" -eq 0 ]
+}
+
+@test "auditor-composite: degraded-but-valid object (one null component) PASSES validation" {
+    run _validate_object "auditor-composite.json" \
+        '{"composite":60,"band":"Medium","recommendation":"ranger","components":{"structural":null,"impact":60,"scope":55},"degraded":true}'
+    [ "$status" -eq 0 ]
+}
+
+@test "auditor-composite: missing required field FAILS validation (checker is not vacuous)" {
+    run _validate_object "auditor-composite.json" \
+        '{"composite":55,"band":"Medium","recommendation":"scout","degraded":false}'
+    [ "$status" -ne 0 ]
+}
+
+@test "auditor-composite: out-of-enum band FAILS validation (checker is not vacuous)" {
+    run _validate_object "auditor-composite.json" \
+        '{"composite":55,"band":"Extreme","recommendation":"scout","components":{"structural":50,"impact":60,"scope":55},"degraded":false}'
+    [ "$status" -ne 0 ]
+}
