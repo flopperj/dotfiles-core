@@ -99,6 +99,26 @@ run_core_check() {
         fi
     done
 
+    # Check workflow schemas
+    echo ""
+    echo "Workflow schemas (~/.claude/workflows/schemas/):"
+    local schema_file
+    for schema_file in "$core_dir/.claude/workflows/schemas/"*.json; do
+        [ -f "$schema_file" ] || continue
+        local schema_filename
+        schema_filename="$(basename "$schema_file")"
+        local schema_link="$HOME/.claude/workflows/schemas/$schema_filename"
+        if [ -L "$schema_link" ] && [ -e "$schema_link" ]; then
+            echo "  ok    $schema_filename"
+        elif [ -L "$schema_link" ]; then
+            echo "  BROKEN $schema_filename (dead symlink)"
+            errors=$((errors + 1))
+        else
+            echo "  MISSING $schema_filename"
+            errors=$((errors + 1))
+        fi
+    done
+
     # Check generated files (CLAUDE.md and AGENTS.md symlinks)
     echo ""
     echo "Generated files (~/.claude/):"

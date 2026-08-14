@@ -185,6 +185,22 @@ install_core_symlinks() {
             _link_file "$workflow_file" "$HOME/.claude/workflows/$workflow_name"
             echo "  Linked workflow: $workflow_name"
         done
+
+        # Handoff schemas are read at runtime from ~/.claude/workflows/schemas/
+        # by the workflow-consuming skills, so they must be linked per-file too.
+        if [ -d "$core_dir/.claude/workflows/schemas" ]; then
+            mkdir -p "$HOME/.claude/workflows/schemas"
+            _clean_stale_symlinks "$HOME/.claude/workflows/schemas"
+
+            local schema_file
+            for schema_file in "$core_dir/.claude/workflows/schemas/"*.json; do
+                [ -f "$schema_file" ] || continue
+                local schema_name
+                schema_name="$(basename "$schema_file")"
+                _link_file "$schema_file" "$HOME/.claude/workflows/schemas/$schema_name"
+                echo "  Linked workflow schema: $schema_name"
+            done
+        fi
     fi
 
     # --- Generated CLAUDE.md and AGENTS.md ---
