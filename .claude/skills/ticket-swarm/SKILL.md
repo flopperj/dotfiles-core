@@ -260,9 +260,15 @@ Dry Run Complete: N tickets analyzed
   Estimated pipelines: 6 (5 tickets + 1 best-of-N extra)
   Estimated agents: ~11
   Reviewer breakdown: 2 Scout, 2 Auditor, 2 Ranger
+  Repo roots: PROJ-1015 (repo:billing-service) -> /Users/me/dev/billing-service   [labeled tickets only]
 
   No pipelines launched. Use "Swarm, fix my bugs" to execute.
 ```
+
+For each ticket carrying a `repo:<name>` label, resolve it via
+`repo-registry.sh resolve <name>` and show the result (or the failure) on
+the `Repo roots:` line — the lookup is a read, so it stays within the
+dry-run contract below.
 
 No Jira transitions, no branches, no code changes. Pure analysis.
 Return without proceeding to Step 4.
@@ -280,15 +286,30 @@ For each approved ticket, the team lead spawns an isolated pipeline:
 
 Each ticket gets its own branch. Before launching any pipeline:
 
-1. **Determine the branch name**: `{ticket-key}-{slug}` (e.g.,
+1. **Resolve the target repo** if the ticket's labels include
+   `repo:<name>`. Run
+   `bash ~/.claude/skills/ticket-pickup/scripts/repo-registry.sh resolve <name>`.
+   On success (exit 0, absolute path on stdout), run **all** subsequent
+   branch commands in this block against that repo via
+   `git -C /abs/path ...`, and include a `Repo root: /abs/path` line in
+   the pipeline agent's prompt. On **any** non-zero exit (1 not found,
+   2 invalid, 3 no registry, 4 malformed), log the failure, mark the
+   ticket blocked, and continue with the other tickets — surface the
+   failure to the user. Never prompt through a bad registry entry: the
+   swarm runs autonomously, so a lookup failure blocks that ticket
+   rather than pausing the batch. No `repo:<name>` label → today's
+   behavior exactly: commands run in the current working directory and
+   no `Repo root:` line is passed.
+
+2. **Determine the branch name**: `{ticket-key}-{slug}` (e.g.,
    `PROJ-1001-fix-refund-npe`). Slugify from the ticket summary.
 
-2. **Check for a pre-existing branch**: Run
+3. **Check for a pre-existing branch**: Run
    `git branch --list "*{ticket-key}*"`. If a matching branch already
    exists (user pre-created it), use it instead of creating a new one.
    Ensure it is up to date with the default branch.
 
-3. **Create the branch** if no match found. Use the `newbranch` shell
+4. **Create the branch** if no match found. Use the `newbranch` shell
    alias if available (from `.aliases.local`):
    `newbranch {ticket-key}-{slug}`. This handles default branch
    detection (queries `origin/HEAD`, supports any branch name), checkout,
@@ -299,7 +320,7 @@ Each ticket gets its own branch. Before launching any pipeline:
    (fall back to `main` then `master` via `git show-ref`), then:
    `git checkout {default} && git pull origin {default} && git checkout -b {ticket-key}-{slug}`
 
-4. If using `best-of-n-runner` subagent type, the worktree isolation is
+5. If using `best-of-n-runner` subagent type, the worktree isolation is
    handled automatically by the runner. Each attempt still gets its own
    branch suffix (`-attempt-1`, `-attempt-2`).
 
@@ -310,6 +331,7 @@ Launch one `cyrus-tdd-engineer` subagent per ticket. Pass:
 - The enriched ticket brief
 - Jira ticket key
 - Branch name
+- Repo root (absolute path — only when the ticket carries a `repo:<name>` label; omit otherwise)
 - `swarm_mode: true`
 - `execution_mode: autonomous`
 - `ticket_complexity: simple`
@@ -319,6 +341,7 @@ Launch one `optimus-planner` subagent per ticket. Pass:
 - The enriched ticket brief as the problem statement
 - Jira ticket key
 - Branch name
+- Repo root (absolute path — only when the ticket carries a `repo:<name>` label; omit otherwise)
 - `swarm_mode: true`
 - `execution_mode: autonomous`
 - `ticket_complexity: medium`
@@ -332,6 +355,7 @@ Each attempt runs the full `aristotle-deconstructor` pipeline. Pass:
 - The enriched ticket brief
 - Jira ticket key
 - Branch name (each attempt gets a suffix: `-attempt-1`, `-attempt-2`)
+- Repo root (absolute path — only when the ticket carries a `repo:<name>` label; omit otherwise)
 - `swarm_mode: true`
 - `execution_mode: autonomous`
 - `ticket_complexity: complex`
