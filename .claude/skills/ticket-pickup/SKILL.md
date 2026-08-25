@@ -106,6 +106,48 @@ For company-specific Jira fallback, consult `## Jira fallback` in `~/.claude/ove
 
 ---
 
+## Step 2.4: Resolve repo label
+
+If the fetched ticket's labels include exactly one `repo:<name>` label, the
+ticket is bound to a specific repository checkout (it is typically one half
+of an earlier repo split, picked up cold in a later session). Resolve the
+binding:
+
+```
+bash ~/.claude/skills/ticket-pickup/scripts/repo-registry.sh resolve <name>
+```
+
+Handle the result by exit code:
+
+- **Exit 0** (absolute path printed): if the path differs from
+  `git rev-parse --show-toplevel`, announce the binding — "This ticket is
+  bound to `<name>` — running in `/abs/path`" — and use that path as the
+  repo root for all subsequent git operations and for the Step 6 pipeline
+  prompt (include `Repo root: /abs/path`). If it matches the current repo,
+  continue silently.
+- **Exit 1 or 3** (name not in registry / no registry): warn that the
+  `repo:<name>` label cannot be resolved, naming the missing piece (no
+  registry section vs. no entry for `<name>`), and continue in the current
+  repo.
+- **Exit 2** (entry invalid at resolution time — path missing, or not a
+  git repo):
+  - **Gated mode:** show the validation message and ask whether to continue
+    in the current repo or stop.
+  - **Autonomous mode:** treat as a blocker — stop this ticket and surface
+    the failure.
+
+If the resolved path is outside the session's authorized working
+directories: warn that permission prompts are expected (**gated mode**) or
+treat it as a blocker (**autonomous mode**).
+
+If the ticket carries **multiple** `repo:` labels: warn and ignore them all
+(ambiguous binding) — continue in the current repo.
+
+**In swarm mode:** Skip this step — ticket-swarm resolves the repo root
+before dispatching to ticket-pickup.
+
+---
+
 ## Step 2.5: Detect ticket hierarchy
 
 After fetching the ticket, check if it's a parent ticket (Story or Epic)
@@ -235,6 +277,27 @@ ticket:
 - **Related PRs**: If the ticket links to merged PRs, fetch the PR diff
   summaries via `gh pr view <number> --json title,body,files`.
 
+### Cross-repo resolution
+
+For cross-repo resolution, consult `## Repo registry` in `~/.claude/overlay-context.md`. If that file or section is absent, search only the current repo.
+
+When a registry is present, run
+`bash ~/.claude/skills/ticket-pickup/scripts/repo-registry.sh list`. For
+each ticket reference (file path, class/component name, exact error string)
+that was **not** found in the current repo, search each registered checkout
+— scope grep/glob by that entry's `prefixes` when present, whole repo
+otherwise — and record hits per repo.
+
+In the brief's `Codebase references found:` list, qualify each non-current
+hit with the repo it resolved in, e.g.
+`- [repo: other-repo] src/handlers/add_product.py — handler referenced in the stack trace`.
+Current-repo hits stay unqualified — a single-repo ticket's brief is
+byte-identical with or without a registry.
+
+If the registry helper fails (exit 2, 3, or 4), degrade to
+current-repo-only enrichment with a logged note — partial enrichment is
+better than no enrichment.
+
 Compile the enrichment into a structured brief:
 
 ```
@@ -260,6 +323,137 @@ Related:
 **If `gh` or enrichment fails:** Log the failure, continue with whatever
 context was gathered. Partial enrichment is better than no enrichment.
 Follow CLAUDE.md error handling defaults.
+
+---
+
+## Step 3.5: Detect multi-repo scope
+
+Decide whether this ticket spans more than one repository and, if so, gate
+a repo split into per-repo sub-tasks.
+
+### Skip conditions (checked first, in order)
+
+1. **Swarm mode** — skip this step entirely; splits are decided before
+   swarm dispatch.
+2. **The ticket already carries a `repo:` label** — it IS one half of an
+   earlier split; never re-split it.
+3. **Step 2.5 fired** — story decomposition takes precedence. If the
+   ticket is a Story/Epic with workable children, Step 2.5 already skipped
+   Steps 3-7, so this step is never reached; if both could ever apply,
+   Step 2.5 wins.
+
+### Detection rule
+
+Fire the gate **only on resolution evidence**: Step 3's cross-repo
+enrichment recorded at least one reference hit in a *registered,
+non-current* repo. Corroborating signals — ticket Components matching a
+registry entry's `components=`, repo names in the description, linked PRs
+in other repos — strengthen the evidence display but NEVER fire the gate
+on their own.
+
+### Notice path
+
+Corroboration-only signals, unresolved detections, or signals with no
+registry take the notice path instead of the gate. Print one line, e.g.:
+
+```
+Note: this ticket also references other-repo — no local checkout registered; handling my-repo only. To enable cross-repo splits, consult `## Repo registry` in `~/.claude/overlay-context.md` and add the missing repo there.
+```
+
+Then emit the metrics event with `mode: "notice"` (see below) and continue
+to Step 4 unchanged.
+
+### Repo decomposition gate
+
+```
+Multi-repo scope detected: PROJ-1234 — Fix product image sync
+
+  Current repo: my-repo (/Users/me/Development/my-repo)
+
+  #  Repo         Path                              Evidence
+  1  other-repo   /Users/me/Development/other-repo  2 file refs, component match
+  2  (current)    my-repo                           3 file refs
+
+  Unresolved: legacy-api — no registry entry (notice only)
+  Proposed order (provider -> consumer): other-repo -> my-repo
+  ! /Users/me/Development/other-repo is outside this session's working
+    directories — expect permission prompts, or add it before confirming.
+
+  -> split      = Create one sub-task per repo, blocks-linked, then swarm
+  -> order 2,1  = Split with a different order
+  -> only N     = Narrow to repo N (pick up normally there)
+  -> single     = Treat as single-repo in the current checkout
+  -> x          = Cancel
+```
+
+Proposed order: registry `depends_on` hints first (a repo that others
+depend on comes earlier), then cross-reference direction (the repo whose
+symbols the other references comes first), else current-repo-last. The `!`
+warning line appears only when a resolved path is outside the session's
+authorized working directories.
+
+**In gated mode:** Wait for user input.
+
+**In autonomous mode:** If any resolved repo is invalid (helper exit 2) or
+its path is outside the authorized working directories, treat it as a
+blocker — stop this ticket and surface the failure. Otherwise auto-select
+`split`.
+
+### On `split` (or `order`)
+
+1. Build one sub-task spec per repo, in the confirmed order:
+   - Summary: `<parent summary> (<repo>)`
+   - Description: the parent description, plus that repo's tagged
+     references from the Step 3 brief, plus one sentence stating the
+     interface expectation toward its counterpart repo.
+2. Invoke create-jira-ticket's "Batch mode: repo-split sub-tasks" with the
+   parent key, the project key, and the ordered `{repo, summary,
+   description}` list (provider first — the list order is the final merge
+   order).
+3. **If batch mode clean-stops** (any creation failed): surface its report
+   exactly — which keys were created, which entries were not. Do NOT
+   delegate to swarm. Do NOT report success.
+4. **On success:** delegate exactly like Step 2.5's "Delegating to
+   ticket-swarm" block — `child_tickets` = the created keys,
+   `parent_story_key` = the parent ticket key, `execution_mode` and
+   `swarm_mode` forwarded from the caller. Transition the parent to
+   "In Progress" and add a plain-language parent comment naming the split
+   and merge order, e.g.:
+   `🤖 This ticket spans two repositories, so I split it into one sub-task per repo: PROJ-1235 (other-repo), PROJ-1236 (my-repo). Merge order: other-repo first, then my-repo. Each sub-task will post its own updates.`
+   All Jira operations are best-effort.
+
+### On `only N`
+
+Continue this pickup normally, bound to repo N — reuse Step 2.4's
+repo-root binding mechanics (announce the path, use it as the repo root
+for all subsequent git operations and the Step 6 pipeline prompt).
+
+### On `single`
+
+Continue unchanged — proceed to Step 4 as a single-repo ticket in the
+current checkout.
+
+### On `x`
+
+Stop.
+
+### Metrics emit (both paths)
+
+After the gate resolves or the notice prints, emit a `multi_repo_split`
+event. See the `metrics-emit` library skill for the canonical event shape
+and emit instructions.
+
+Data to capture:
+- `mode`: "gate" or "notice"
+- `repos_detected`, `repos_resolved`, `repos_unresolved`
+- `gate_choice`: "split" / "reorder" / "only" / "single" / "cancel" —
+  null when `mode` is "notice"
+- `subtask_keys`: created keys, in final merge order (empty array when no
+  split happened)
+- `proposed_order`, `final_order`
+
+Emit via `emit-metric.sh ... || true`. If emit fails, log and continue.
+Never block the pipeline on metrics.
 
 ---
 

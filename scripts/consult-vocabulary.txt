@@ -8,3 +8,4 @@
 
 ## Jira fallback
 ## Jenkins MCP clone URL
+## Repo registry
