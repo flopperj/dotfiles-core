@@ -70,6 +70,26 @@ All Jira operations are best-effort — never block PR creation on a Jira failur
    - Code diff analysis for technical content (what changed, how to test, risk areas)
    - User-provided answers from Step 3 for anything that required asking (e.g. Slack channel)
    - Ticket number and any Jira metadata retrieved in Step 4
+
+   **2b. Merge order section (repo-split sub-tasks only).** Applies only when the ticket is a Jira sub-task carrying a `repo:<name>` label whose parent has 2+ sub-tasks with `repo:` labels. Fetch the siblings via `getJiraIssue` on the parent. Derive the order from the `blocks` links between the siblings: a sub-task that blocks another comes first. For each sibling, resolve its PR URL from the sibling ticket's remote links, or a `gh pr list --head <branch>` lookup in that sibling's repo when the repo is resolvable; if no PR exists yet, use `PR pending`.
+
+   This does not conflict with the "do not impose a fixed format" rule in item 1: the Merge order section is **appended after** the template's own sections, never replacing or restructuring them. It counts toward the body-length and heading checks in item 3.
+
+   Append exactly this shape (canonical example — the sentinels and entry-line grammar are a stable, machine-parsed contract enforced by `tests/merge-order-format.bats`, which parses this fenced block verbatim; keep it unindented):
+
+```markdown
+## Merge order
+
+<!-- merge-order:v1 -->
+1. [ ] omni-agent — PROJ-1235 — https://github.com/acme-corp/omni-agent/pull/42
+2. [ ] mc-omni-agent-ui — PROJ-1236 — this PR
+
+Built against the unmerged changes in the PR above — merge that one first.
+<!-- /merge-order:v1 -->
+```
+
+   Grammar: parsers read only lines matching `^[0-9]+\. \[[ x]\] <repo> — <TICKET-KEY> — <url | this PR | PR pending>` between the `merge-order:v1` sentinels; any other line inside the block is human prose. Field separators are em-dashes (—) surrounded by single spaces. Indices are contiguous starting at 1, in merge order; exactly one entry is `this PR` (the PR being created). The unmerged-provider caveat sentence is **mandatory** whenever any earlier entry is not `this PR` — the reviewer must know this PR was built against unmerged changes.
+
 3. **Validate body length and shape before firing `gh pr create`** (skip if the user passed `skip_body_validation: true`):
    - Compute the visible body length: strip leading/trailing whitespace, then count **bytes** with `printf '%s' "$body" | wc -c`. (Use `wc -m` if you need a true Unicode character count — but for the 100-byte threshold below, `wc -c` is sufficient and consistent across platforms. The threshold is intentionally a byte count, not a Unicode codepoint count, because thin English bodies are the failure mode this check exists to prevent.)
    - **Minimum length: 100 bytes.** A body shorter than 100 bytes is almost always a stub.
@@ -83,6 +103,13 @@ All Jira operations are best-effort — never block PR creation on a Jira failur
    gh pr create --draft --title "[{TICKET}] {Title}" --body "{populated_template}"
    ```
 5. If the user explicitly requests a non-draft PR (e.g., "open a PR for review", "create a ready PR"): use `gh pr create --title "..." --body "..."` without `--draft`. Non-draft PRs require the code auditor to run first (see CLAUDE.md PR Creation Workflow).
+
+   **5b. Parent-ticket comment (repo-split sub-tasks only, best-effort).** For the same trigger as item 2b, after the PR is created, post a comment via `addCommentToJiraIssue` on the **parent** ticket — plain language with the 🤖 prefix, stating which repo's PR this is, the full merge order, and that later PRs are built against earlier unmerged changes. Example:
+
+   > 🤖 Opened the omni-agent half of this ticket: https://github.com/acme-corp/omni-agent/pull/42. This work spans two repositories — merge order: 1) omni-agent (this PR), 2) mc-omni-agent-ui (PR pending). The second PR is being built against the first one's unmerged changes.
+
+   If a comment from a previous sub-task PR already states the merge order, post an updated comment rather than editing the old one. Like all Jira operations in this skill, this is best-effort: if the comment fails, log it and continue — never block PR creation on it.
+
 6. Return the PR URL to the user.
 
 ### 7. Promote draft PR to ready-for-review
