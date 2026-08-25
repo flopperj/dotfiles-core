@@ -2,6 +2,24 @@
 
 > **How to update:** The pre-commit hook (`scripts/pre-commit.sh`) is auto-installed by `install.sh`. It runs a fast leakage check (`scripts/check-no-leakage.sh`) and re-renders the generated `CLAUDE.md.generated` and `AGENTS.md.generated` files on every commit. A pre-push gate (`scripts/pre-push.sh`, also auto-installed) scans every outgoing commit's tree and metadata before it leaves the machine. CI runs lint, consult-grammar, and the test suite (including synthetic-token leakage mechanism tests) on every PR; the company-token scan is a separate step that runs only when guard data is present on the runner. If you bypass the hooks or work in a context where hooks cannot run, keep this file current manually. Each release heading links to the diff on the public mirror.
 
+## v1.16.0 — 2026-08-25 (multi-repo ticket decomposition)
+
+### Added
+
+- `.claude/skills/ticket-pickup/scripts/repo-registry.sh` — sole name→checkout oracle for the `## Repo registry` section in `~/.claude/overlay-context.md` (user-maintained overlay data; core never writes it). `list` and `resolve <name>` subcommands with resolution-time validation and distinct exit codes (not found / stale entry / no registry / malformed entry). Registry content is data, never executed. Covered by `tests/repo-registry.bats`.
+- `multi_repo_split` metrics event — `.claude/evals/schemas/multi-repo-split-event.schema.json`, catalog entry in the metrics-emit skill, `event_type` enum addition in `metrics-event.schema.json`, an agent-stats consumer bullet, and `tests/multi-repo-split-event.bats`. Emitted on both the decomposition-gate and notice paths so false positives are measurable.
+- `tests/merge-order-format.bats` — parses the canonical Merge order example straight out of the pr-create-from-commits SKILL.md, keeping the documented sentinel block and entry-line grammar a tested contract.
+
+### Changed
+
+- `.claude/skills/ticket-pickup/SKILL.md` — three additions: Step 2.4 resolves a cold `repo:<name>` label to a checkout via the registry helper; Step 3 enrichment becomes registry-scoped, tagging each code reference with the repo it actually resolves in; Step 3.5 detects multi-repo scope from that resolution evidence, gates decomposition into per-repo Jira sub-tasks (notice-only when no registry exists), and hands confirmed splits to the unchanged swarm path.
+- `.claude/skills/ticket-swarm/SKILL.md` — branch setup resolves `repo:<name>` labels to absolute checkout paths via the registry helper (blocked-ticket convention on any lookup failure); the three dispatch lists and the dry-run report gain a `Repo root:` line.
+- `.claude/skills/create-jira-ticket/SKILL.md` — new automation-only "Batch mode: repo-split sub-tasks": sequential creation with `repo:<name>` labels, pairwise `blocks` links added only after all creations succeed, Task+`Relates` fallback for projects without a Sub-task type, and clean-stop on any failure (never reports a partial batch as success). Tool list gains `createIssueLink`, `getIssueLinkTypes`, `getJiraProjectIssueTypesMetadata`.
+- `.claude/skills/pr-create-from-commits/SKILL.md` — sentinel-delimited, machine-parseable "Merge order" PR-body section for repo-split sub-task PRs (informational only), plus a best-effort plain-language merge-order comment on the parent ticket after PR creation.
+- `.claude/skills/overlay-init/SKILL.md` — the add-context route documents the canonical `## Repo registry` entry format as a known section.
+- `scripts/consult-vocabulary.txt` — new `## Repo registry` entry.
+- `README.md` — skill-table rows updated for create-jira-ticket, pr-create-from-commits, ticket-pickup, and ticket-swarm.
+
 ## v1.15.2 — 2026-07-29 (shape CI + mirror history scrub)
 
 ### Added

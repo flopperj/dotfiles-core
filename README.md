@@ -233,7 +233,7 @@ The submodule SHA pin is intentional — your overlay records exactly which vers
 | `/briefing` | Session-start situation report: sprint status, open PRs, CI, calendar, Slack signals |
 | `/code-auditor` | Complexity-aware PR review router — auto-routes to Scout or Ranger |
 | `/core-edit` | Edit a skill inside dotfiles-core from within an overlay repo |
-| `/create-jira-ticket` | Create Jira tickets (Stories, Bugs, Tasks, Epics) via Atlassian MCP |
+| `/create-jira-ticket` | Create Jira tickets (Stories, Bugs, Tasks, Epics) via Atlassian MCP; batch repo-split sub-tasks with `blocks` links |
 | `/create-tech-spec` | Generate a technical specification or design document |
 | `/cyrus-tdd-engineer` | TDD implementation agent — Red-Green-Refactor with 80%+ coverage |
 | `/doctor` | Health check: validates symlinks, CLI tools, MCP servers, plugins |
@@ -248,7 +248,7 @@ The submodule SHA pin is intentional — your overlay records exactly which vers
 | `/obligations` | Cross-session reminders: create, view, cancel, and evaluate |
 | `/optimus-planner` | Detailed execution plan before implementation begins |
 | `/overlay-init` | Scaffold a new overlay or extend an existing one (add skill / fragment / context section) |
-| `/pr-create-from-commits` | Create a PR from recent commits with template auto-detection |
+| `/pr-create-from-commits` | Create a PR from recent commits with template auto-detection; Merge order section for repo-split PRs |
 | `/ranger-reviewer` | Staff-level PR review with confidence scoring (Opus-tier) |
 | `/review-context` | Generate a per-project llms.txt for reviewer context |
 | `/scout-reviewer` | PR review with parallel analysis and confidence scoring (Sonnet-tier) |
@@ -257,8 +257,8 @@ The submodule SHA pin is intentional — your overlay records exactly which vers
 | `/smart-statusline` | Terminal statusline: model, cost, context usage bar |
 | `/swarm-retro` | Analyze swarm runs for misclassifications and improvement opportunities |
 | `/team-lead` | Domain coordinator for ticket-swarm (not user-invocable) |
-| `/ticket-pickup` | Fetch a Jira ticket, enrich with codebase context, route to pipeline |
-| `/ticket-swarm` | Batch-process Jira tickets with parallel agent pipelines |
+| `/ticket-pickup` | Fetch a Jira ticket, enrich with codebase context, route to pipeline; detects multi-repo tickets and gates decomposition |
+| `/ticket-swarm` | Batch-process Jira tickets with parallel agent pipelines; `repo:` labels route pipelines to registered checkouts |
 | `/to-prd` | Synthesize conversation context into a structured PRD |
 
 ## Agents — 5 reasoning agents
