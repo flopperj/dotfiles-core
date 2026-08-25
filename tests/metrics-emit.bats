@@ -180,10 +180,10 @@ teardown() {
     [[ "$output" == *"draft-07"* ]]
 }
 
-@test "schema pins the four v1 event types" {
+@test "schema pins the five known event types" {
     local schema="$DOTFILES_DIR/.claude/evals/schemas/metrics-event.schema.json"
     run jq -r '.properties.event_type.enum | sort | join(",")' "$schema"
-    [ "$output" = "agent_truncated,pipeline_complete,swarm_complete,ticket_classified" ]
+    [ "$output" = "agent_truncated,multi_repo_split,pipeline_complete,swarm_complete,ticket_classified" ]
 }
 
 # ---------------------------------------------------------------------------

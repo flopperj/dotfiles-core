@@ -1,0 +1,84 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$comment": "The multi_repo_split metrics event. Producer: ticket-pickup Step 3.5 (multi-repo detection), emitted on BOTH paths — after the gate resolves (mode 'gate') and on notice-only detection (mode 'notice'). Consumers: agent-stats (counts split by mode and gate_choice; the notice-vs-gate ratio is the detection false-positive denominator) and swarm-retro's quantitative analysis step. Enforcement lives in metrics-event.schema.json (event_type enum + data.oneOf branch); this file is the documentation and test point, validated by tests/multi-repo-split-event.bats. Uses `ticket` (the parent key), not `run_id` — the split is a per-ticket fact.",
+  "type": "object",
+  "required": ["event_type", "agent", "project", "ticket", "data"],
+  "properties": {
+    "timestamp": {
+      "$comment": "ISO 8601 UTC. Optional at emit time — emit-metric.sh injects it when absent.",
+      "type": "string"
+    },
+    "event_type": {
+      "type": "string",
+      "enum": ["multi_repo_split"]
+    },
+    "agent": {
+      "$comment": "Always ticket-pickup — the only producer of this event.",
+      "type": "string",
+      "enum": ["ticket-pickup"]
+    },
+    "project": {
+      "$comment": "Basename of the git repo root where the pickup ran.",
+      "type": "string"
+    },
+    "ticket": {
+      "$comment": "The PARENT ticket key (e.g. PROJ-1234) — the ticket the split decision was made on, not a created sub-task.",
+      "type": "string"
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "mode",
+        "repos_detected",
+        "repos_resolved",
+        "repos_unresolved",
+        "gate_choice",
+        "subtask_keys",
+        "proposed_order",
+        "final_order"
+      ],
+      "properties": {
+        "mode": {
+          "$comment": "'gate' = detection had resolution evidence and the split gate was shown; 'notice' = signals detected but no registry / no resolution evidence / corroboration-only, so only a notice printed. Notice events are the false-positive denominator.",
+          "type": "string",
+          "enum": ["gate", "notice"]
+        },
+        "repos_detected": {
+          "$comment": "All repo names the detection surfaced, resolved or not.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "repos_resolved": {
+          "$comment": "Subset of repos_detected that resolved to a registered local checkout.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "repos_unresolved": {
+          "$comment": "Subset of repos_detected with no registry entry or a stale one — registry-gap signal.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "gate_choice": {
+          "$comment": "The user's gate keypress: split / reorder / only / single / cancel. Null iff mode is 'notice' (no gate was shown); subtask_keys and final_order are empty arrays then.",
+          "type": ["string", "null"],
+          "enum": ["split", "reorder", "only", "single", "cancel", null]
+        },
+        "subtask_keys": {
+          "$comment": "Jira keys of the per-repo sub-tasks created on a 'split'/'reorder' choice (e.g. PROJ-1235). Empty when no sub-tasks were created.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "proposed_order": {
+          "$comment": "Repo names in the merge order the detection proposed (provider first).",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "final_order": {
+          "$comment": "Repo names in the merge order after the gate resolved (differs from proposed_order only on 'reorder'). Empty when mode is 'notice'.",
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}

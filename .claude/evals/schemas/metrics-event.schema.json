@@ -12,7 +12,7 @@
     },
     "event_type": {
       "type": "string",
-      "enum": ["ticket_classified", "pipeline_complete", "agent_truncated", "swarm_complete"],
+      "enum": ["ticket_classified", "pipeline_complete", "agent_truncated", "swarm_complete", "multi_repo_split"],
       "description": "The type of pipeline event. Extend this enum when new emit points are added with a named consumer."
     },
     "agent": {
@@ -156,6 +156,46 @@
               "type": "integer",
               "minimum": 0,
               "description": "Total subagents launched across all pipelines"
+            }
+          }
+        },
+        {
+          "description": "multi_repo_split — emitted by ticket-pickup on both paths of multi-repo detection: gate resolution (mode 'gate') and notice-only (mode 'notice'). Uses ticket (parent key), not run_id. Full field documentation in multi-repo-split-event.schema.json.",
+          "required": ["mode", "repos_detected", "repos_resolved", "repos_unresolved", "gate_choice", "subtask_keys", "proposed_order", "final_order"],
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": ["gate", "notice"],
+              "description": "gate = split gate shown; notice = signals detected without resolution evidence (false-positive denominator)"
+            },
+            "repos_detected": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "repos_resolved": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "repos_unresolved": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "gate_choice": {
+              "type": ["string", "null"],
+              "enum": ["split", "reorder", "only", "single", "cancel", null],
+              "description": "Null iff mode is notice; subtask_keys and final_order are empty arrays then"
+            },
+            "subtask_keys": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "proposed_order": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "final_order": {
+              "type": "array",
+              "items": { "type": "string" }
             }
           }
         }

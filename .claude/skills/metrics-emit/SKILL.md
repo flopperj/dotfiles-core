@@ -152,6 +152,41 @@ Emitted by **ticket-swarm** after the run log is written.
 
 ---
 
+### `multi_repo_split`
+
+Emitted by **ticket-pickup** (Step 3.5) on BOTH paths of multi-repo detection —
+after the gate resolves and on notice-only detection. Uses `ticket` (the parent
+key), not `run_id` — the split is a per-ticket fact. Named consumers: agent-stats
+(counts split by `mode` and `gate_choice`) and swarm-retro's quantitative step.
+
+```json
+{
+  "timestamp": "2026-08-25T10:00:00Z",
+  "event_type": "multi_repo_split",
+  "agent": "ticket-pickup",
+  "project": "my-repo",
+  "ticket": "PROJ-1234",
+  "data": {
+    "mode": "gate",
+    "repos_detected": ["my-repo", "other-repo", "legacy-api"],
+    "repos_resolved": ["my-repo", "other-repo"],
+    "repos_unresolved": ["legacy-api"],
+    "gate_choice": "split",
+    "subtask_keys": ["PROJ-1235", "PROJ-1236"],
+    "proposed_order": ["other-repo", "my-repo"],
+    "final_order": ["other-repo", "my-repo"]
+  }
+}
+```
+
+`mode` values: `gate` (resolution evidence existed, the split gate was shown),
+`notice` (signals detected but no registry / no resolution evidence /
+corroboration-only — the false-positive denominator). `gate_choice` values:
+`split`, `reorder`, `only`, `single`, `cancel`, or `null` — null iff `mode` is
+`notice`, and `subtask_keys` / `final_order` are empty arrays then.
+
+---
+
 ## Hard rules
 
 ### Fail open — never block a pipeline on metrics
