@@ -88,13 +88,14 @@ Never suggest more than one. The user is reading a dashboard, not running a tria
 
 ## Schema Reference
 
-This skill consumes events defined in `~/.claude/evals/schemas/metrics-event.schema.json`. The three event types it reads:
+This skill consumes events defined in `~/.claude/evals/schemas/metrics-event.schema.json`. The four event types it reads:
 
 - `pipeline_complete` — emitted by `cyrus-tdd-engineer` and `ticket-pickup`. Contributes to first-pass and CI-fix metrics.
 - `ticket_classified` — emitted by `ticket-pickup` after the classification gate. Contributes to classification distribution.
 - `swarm_complete` — emitted by `ticket-swarm` at run end. Contributes to swarm outcomes.
+- `multi_repo_split` — emitted by `ticket-pickup` on multi-repo detection. Contributes to the Multi-Repo Splits section: counts split by `mode` and `gate_choice`, plus the notice-vs-gate ratio — the detection false-positive denominator.
 
-If a new event type is added to the schema, this skill will silently ignore it until the script is updated. That is intentional — the dashboard prefers stability over completeness.
+All four are read by `scripts/agent-stats.sh`. If a new event type beyond these is added to the schema, this skill will silently ignore it until the script is updated. That is intentional — the dashboard prefers stability over completeness.
 
 ## Responsibility Boundaries
 

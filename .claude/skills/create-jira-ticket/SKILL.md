@@ -9,7 +9,7 @@ user-invocable: true
 Create Jira issues via MCP. All Jira operations are best-effort per CLAUDE.md.
 
 **MCP server selection:**
-1. **Primary: Atlassian MCP plugin** (`plugin-atlassian-atlassian`) — use `createJiraIssue`, `searchJiraIssuesUsingJql`, `getJiraIssue`, `getTransitionsForJiraIssue`, `transitionJiraIssue` tool names.
+1. **Primary: Atlassian MCP plugin** (`plugin-atlassian-atlassian`) — use `createJiraIssue`, `searchJiraIssuesUsingJql`, `getJiraIssue`, `getTransitionsForJiraIssue`, `transitionJiraIssue`, `createIssueLink`, `getIssueLinkTypes`, `getJiraProjectIssueTypesMetadata` tool names.
 <!-- BEGIN COMPANY-EXTENSION -->
 <!-- END COMPANY-EXTENSION -->
 
@@ -199,6 +199,51 @@ Sub-tasks are ready. What next?
 
 If the user chooses "pickup", invoke `/ticket-pickup <PARENT-KEY>`. The pickup skill will detect the 2+ children and offer the swarm gate.
 
+## Batch mode: repo-split sub-tasks
+
+This mode is invoked by upstream automation (ticket-pickup's multi-repo detection step) — **never user-triggered**, and it does not touch the interactive Step 7 decomposition gate. The decomposition decision was already gated upstream, so batch mode asks **no questions**: it receives its inputs and executes.
+
+**Input contract** (provided by the caller):
+
+- **Parent key** (e.g., `PROJ-1234`)
+- **Project key** (e.g., `PROJ`)
+- **Ordered list** of `{repo, summary, description}` entries — one per repository. The list order is the final merge order, provider (the repo others depend on) first. Do not reorder.
+
+**Behavior:**
+
+1. **Type discovery.** Call `getJiraProjectIssueTypesMetadata` for the project to check whether the `Sub-task` issue type exists.
+
+2. **Create one issue per entry, sequentially** (not in parallel — sequential creation allows error handling per item, same rule as Step 7):
+   - **If `Sub-task` exists**: reuse the Step 7 payload shape, adding a `repo:<name>` label:
+
+   ```json
+   {
+     "projectKey": "PROJ",
+     "issueType": "Sub-task",
+     "summary": "Parent summary (example-service)",
+     "description": "## Context\n\nSub-task of PROJ-1234: <parent-summary>\n\n## Scope\n\n- ...",
+     "parent": "PROJ-1234",
+     "labels": ["repo:example-service"]
+   }
+   ```
+
+   - **If `Sub-task` does not exist** (fallback): create standard `Task` issues with the same `repo:<name>` labels and **no** `parent` field. Link each Task to the parent with a `Relates` link — call `getIssueLinkTypes` to find the exact link type name, then `createIssueLink`. State the fallback explicitly in the report: "split into linked tickets — this project has no Sub-task type".
+
+3. **Add `blocks` links pairwise, only AFTER all creations succeed**: entry N blocks entry N+1, following the input order (use `getIssueLinkTypes` to resolve the `Blocks` type name, then `createIssueLink` per pair).
+
+4. **Clean-stop on failure.** If any creation fails: stop immediately — do not create the remaining entries, do not add any links, and do not attempt deletion (no delete tool is guaranteed). Report exactly which keys were created and which entries were not, and tell the user what to clean up manually. **Never summarize a partial batch as success.** If a link call fails after all creations succeeded: the issues exist — report "created, but merge-order links missing: <pairs>" and still do not report success.
+
+5. **Report back to the caller** with the created keys in final merge order, mirroring the Step 7 report format:
+
+```
+Created N sub-tasks for PROJ-1234 (merge order):
+  - PROJ-1235: Parent summary (example-service) [repo:example-service] — <url>
+  - PROJ-1236: Parent summary (example-ui) [repo:example-ui] — <url>
+  Links: PROJ-1235 blocks PROJ-1236
+```
+
+The caller (ticket-pickup) consumes these keys for swarm delegation; batch mode ends here — no handoff gate, no pickup offer.
+
 ## Description template
 
 Use this structure for Story descriptions:
@@ -266,4 +311,5 @@ Use the Atlassian plugin sprint tools to add issues to a sprint after creation.
 - Story points use the Fibonacci scale: **1, 2, 3, 5, 8** — never use other values
 - **Sub-tasks**: Use `issueType: "Sub-task"` (not "Story" or "Task"). The `parent` field takes the **Story key** (e.g., `EEE-11907`), not the Epic key. Sub-tasks inherit sprint assignment from their parent Story. Sub-task points should roughly sum to the parent Story's estimate.
 - **Decomposition**: Step 7 only triggers for Stories. It is gated (user must choose "d") and never auto-fires. The `/ticket-pickup` skill expects Stories with 2+ children to be swarmable.
+- **Batch repo-split mode**: Only invoked by upstream automation (ticket-pickup multi-repo detection), never by users, and asks no questions — the gate happened upstream. Sequential creation, `repo:<name>` labels, `blocks` links added only after all creations, Task+`Relates` fallback when the project has no Sub-task type, and clean-stop on any failure (enumerate created vs. not-created; never report a partial batch as success).
 - **Fuzzy requests**: Step 0 gates on shape. If the user arrives with a one-liner and no acceptance criteria, offer `/grill-me` first to sharpen the ticket. The user can skip the gate for trivial or quick tickets.

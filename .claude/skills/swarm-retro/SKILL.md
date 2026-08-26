@@ -178,6 +178,13 @@ compute the following from ALL events in the file (not just the current run):
 - Filter `swarm_complete` events. Show last 3-5 runs.
 - Track: tickets_total, first_pass_rate, duration trend.
 
+**Multi-repo split signal:**
+- Filter `multi_repo_split` events. Report the `data.mode` distribution
+  (gate vs notice) and the `data.gate_choice` distribution among gate events.
+- The notice-vs-gate ratio is the detection false-positive denominator:
+  a high or rising notice share means detection fires without resolution
+  evidence — a registry-coverage or detection-precision signal.
+
 Present as a compact trend table in the retro summary (Step 3):
 
 ```

@@ -186,6 +186,24 @@ Append a stub section to the overlay's `overlay-context.md`:
 TODO: Fill in your overlay-specific context for this section.
 ```
 
+**Known section: `## Repo registry`.** If `<Section>` is `Repo registry`, the
+section has a canonical machine-parsed format — it is the name→checkout oracle
+read by `.claude/skills/ticket-pickup/scripts/repo-registry.sh` — so write real
+entries in this shape instead of the TODO stub:
+
+```markdown
+## Repo registry
+
+- mc-omni-agent-ui: /Users/me/Development/mc-omni-agent-ui | components=Omni UI,Editor | prefixes=web/js/,src/ | depends_on=omni-agent
+- omni-agent: /Users/me/Development/omni-agent
+```
+
+Grammar: entries are `- <name>: <absolute-path>` optionally followed by
+pipe-separated `key=value` fields (`components`, `prefixes`, `depends_on`;
+comma-split lists). Unknown keys are ignored with a stderr warning. Paths
+must be absolute. Duplicate names resolve first-wins with a stderr warning
+naming the ignored later entry — keep names unique.
+
 ### 5b — Verify the overlay half is present
 
 Confirm the section heading now exists:

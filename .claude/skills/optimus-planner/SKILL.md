@@ -127,6 +127,24 @@ Invoke the Cyrus skill's parallel execution mode by launching the `cyrus-tdd-eng
 
 The Cyrus skill will fan out one agent per step per wave, collect results, and report between waves.
 
+### Metrics emit (direct invocations too)
+
+Swarm and ticket-pickup runs emit pipeline metrics, but directly-invoked
+Optimus→Cyrus runs historically emitted nothing, biasing metrics.jsonl
+toward swarm work. Emit in BOTH modes (see the `metrics-emit` library skill
+for format):
+
+1. **After the gate resolves** (any choice): emit `plan_gated` with
+   `data`: `ticket` (or plan slug), `verdict` (the Plan Critique verdict),
+   `gate_choice` (i/ip/r/a/x), `invocation` ("direct" | "swarm" | "pickup").
+2. **After Cyrus returns**: emit `pipeline_complete` with the same fields
+   ticket-pickup uses (`duration_seconds`, `tests_passed`,
+   `coverage_percent`, `first_pass`, `files_changed`) plus
+   `invocation: "direct"` so trend analysis can segment.
+
+If emit fails, log and continue — never block planning or implementation
+on metrics.
+
 ### Step 4: Handle revision (if requested)
 
 If the user chooses "r" or asks for changes:

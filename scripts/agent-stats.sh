@@ -240,6 +240,52 @@ else
 fi
 
 # ----------------------------------------------------------------------------
+# Multi-repo splits — mode / gate_choice distribution, false-positive signal
+# ----------------------------------------------------------------------------
+echo "## Multi-Repo Splits"
+echo
+
+SPLIT_STATS="$(jq -s '
+  map(select(.event_type == "multi_repo_split"))
+  | {
+      total: length,
+      gate: ([.[] | select(.data.mode == "gate")] | length),
+      notice: ([.[] | select(.data.mode == "notice")] | length),
+      by_gate_choice: (
+        [.[] | select(.data.mode == "gate")]
+        | group_by(.data.gate_choice)
+        | map({choice: (.[0].data.gate_choice // "unknown"), n: length})
+      )
+    }
+' "$EVENTS_TMP")"
+
+SPLIT_TOTAL="$(echo "$SPLIT_STATS" | jq -r '.total')"
+
+if [ "$SPLIT_TOTAL" = "0" ]; then
+  echo "No multi_repo_split events yet."
+  echo
+else
+  SPLIT_GATE="$(echo "$SPLIT_STATS" | jq -r '.gate')"
+  SPLIT_NOTICE="$(echo "$SPLIT_STATS" | jq -r '.notice')"
+  SPLIT_NOTICE_PCT="$(awk "BEGIN { printf \"%.0f\", ($SPLIT_NOTICE / $SPLIT_TOTAL) * 100 }")"
+
+  echo "Splits detected:        $SPLIT_TOTAL"
+  echo "Gate shown:             $SPLIT_GATE"
+  echo "Notice-only:            $SPLIT_NOTICE"
+  echo "Notice-vs-gate ratio:   $SPLIT_NOTICE/$SPLIT_TOTAL notice (${SPLIT_NOTICE_PCT}%) — detection false-positive denominator"
+  echo
+
+  if [ "$SPLIT_GATE" != "0" ]; then
+    echo "By gate choice:"
+    echo "$SPLIT_STATS" | jq -r '
+      .by_gate_choice[]
+      | "  \(.choice | tostring | (. + "                ")[0:14])  \(.n) events"
+    '
+    echo
+  fi
+fi
+
+# ----------------------------------------------------------------------------
 # Health flags — surface signals worth attention
 # ----------------------------------------------------------------------------
 echo "## Health Flags"
