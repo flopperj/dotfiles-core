@@ -201,7 +201,8 @@ entries in this shape instead of the TODO stub:
 Grammar: entries are `- <name>: <absolute-path>` optionally followed by
 pipe-separated `key=value` fields (`components`, `prefixes`, `depends_on`;
 comma-split lists). Unknown keys are ignored with a stderr warning. Paths
-must be absolute.
+must be absolute. Duplicate names resolve first-wins with a stderr warning
+naming the ignored later entry — keep names unique.
 
 ### 5b — Verify the overlay half is present
 

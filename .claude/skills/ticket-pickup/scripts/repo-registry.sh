@@ -6,6 +6,9 @@
 #   - <name>: <absolute-path> | key=value | key=value
 # Known keys: components, prefixes, depends_on (comma-split lists).
 # Unknown keys are ignored with a stderr warning. Paths must be absolute.
+# Duplicate names resolve first-wins: the first entry's path is returned and
+# each later entry with the same name is ignored with a stderr warning
+# (list still emits every row).
 # Registry content is data, never executed.
 #
 # usage: repo-registry.sh list
@@ -134,7 +137,7 @@ cmd_list() {
 cmd_resolve() {
     local want="$1"
     _require_registry
-    local section line
+    local section line found_path=""
     section="$(_registry_section)"
     while IFS= read -r line; do
         case "$line" in
@@ -143,20 +146,27 @@ cmd_resolve() {
         esac
         _parse_entry "$line"
         if [ "$ENTRY_NAME" = "$want" ]; then
-            if [ ! -d "$ENTRY_PATH" ]; then
-                echo "repo-registry: '$want': path missing: $ENTRY_PATH" >&2
-                exit 2
+            if [ -n "$found_path" ]; then
+                echo "repo-registry: duplicate entry for '$want' ignored (first entry wins): $line" >&2
+                continue
             fi
-            if ! git -C "$ENTRY_PATH" rev-parse --git-dir >/dev/null 2>&1; then
-                echo "repo-registry: '$want': not a git repo: $ENTRY_PATH" >&2
-                exit 2
-            fi
-            printf '%s\n' "$ENTRY_PATH"
-            exit 0
+            found_path="$ENTRY_PATH"
         fi
     done <<< "$section"
-    echo "repo-registry: '$want' not found in registry" >&2
-    exit 1
+    if [ -z "$found_path" ]; then
+        echo "repo-registry: '$want' not found in registry" >&2
+        exit 1
+    fi
+    if [ ! -d "$found_path" ]; then
+        echo "repo-registry: '$want': path missing: $found_path" >&2
+        exit 2
+    fi
+    if ! git -C "$found_path" rev-parse --git-dir >/dev/null 2>&1; then
+        echo "repo-registry: '$want': not a git repo: $found_path" >&2
+        exit 2
+    fi
+    printf '%s\n' "$found_path"
+    exit 0
 }
 
 main() {

@@ -71,7 +71,7 @@ All Jira operations are best-effort — never block PR creation on a Jira failur
    - User-provided answers from Step 3 for anything that required asking (e.g. Slack channel)
    - Ticket number and any Jira metadata retrieved in Step 4
 
-   **2b. Merge order section (repo-split sub-tasks only).** Applies only when the ticket is a Jira sub-task carrying a `repo:<name>` label whose parent has 2+ sub-tasks with `repo:` labels. Fetch the siblings via `getJiraIssue` on the parent. Derive the order from the `blocks` links between the siblings: a sub-task that blocks another comes first. For each sibling, resolve its PR URL from the sibling ticket's remote links, or a `gh pr list --head <branch>` lookup in that sibling's repo when the repo is resolvable; if no PR exists yet, use `PR pending`.
+   **2b. Merge order section (repo-split tickets only).** Applies only when the ticket is one half of a repo split, in either shape: (a) a Jira sub-task carrying a `repo:<name>` label whose parent has 2+ sub-tasks with `repo:` labels, or (b) a standard Task carrying a `repo:<name>` label with a `Relates` link to a parent issue that has 2+ `repo:`-labeled `Relates`-linked issues — the fallback shape create-jira-ticket's batch mode produces when the project has no Sub-task type. Fetch the siblings via `getJiraIssue` on the parent: its sub-tasks in shape (a), its `Relates`-linked `repo:`-labeled issues in shape (b). Derive the order from the `blocks` links between the siblings: a sub-task that blocks another comes first. For each sibling, resolve its PR URL from the sibling ticket's remote links, or a `gh pr list --head <branch>` lookup in that sibling's repo when the repo is resolvable; if no PR exists yet, use `PR pending`.
 
    This does not conflict with the "do not impose a fixed format" rule in item 1: the Merge order section is **appended after** the template's own sections, never replacing or restructuring them. It counts toward the body-length and heading checks in item 3.
 
@@ -104,7 +104,7 @@ Built against the unmerged changes in the PR above — merge that one first.
    ```
 5. If the user explicitly requests a non-draft PR (e.g., "open a PR for review", "create a ready PR"): use `gh pr create --title "..." --body "..."` without `--draft`. Non-draft PRs require the code auditor to run first (see CLAUDE.md PR Creation Workflow).
 
-   **5b. Parent-ticket comment (repo-split sub-tasks only, best-effort).** For the same trigger as item 2b, after the PR is created, post a comment via `addCommentToJiraIssue` on the **parent** ticket — plain language with the 🤖 prefix, stating which repo's PR this is, the full merge order, and that later PRs are built against earlier unmerged changes. Example:
+   **5b. Parent-ticket comment (repo-split tickets only, best-effort).** For the same trigger as item 2b (either shape), after the PR is created, post a comment via `addCommentToJiraIssue` on the **parent** ticket — plain language with the 🤖 prefix, stating which repo's PR this is, the full merge order, and that later PRs are built against earlier unmerged changes. Example:
 
    > 🤖 Opened the omni-agent half of this ticket: https://github.com/acme-corp/omni-agent/pull/42. This work spans two repositories — merge order: 1) omni-agent (this PR), 2) mc-omni-agent-ui (PR pending). The second PR is being built against the first one's unmerged changes.
 

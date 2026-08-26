@@ -195,6 +195,27 @@ more prose"
     [ "$output" = "$(printf 'gone\t%s\t\t\t' "$SCRATCH/checkouts/deleted-repo")" ]
 }
 
+# --- duplicate names (first entry wins, with a warning) ---
+
+@test "resolve on a duplicate name returns the first entry's path and warns on stderr" {
+    _write_registry "- dup: $GOOD_REPO
+- dup: $GOOD_REPO2"
+    run --separate-stderr bash "$REG" resolve dup
+    [ "$status" -eq 0 ]
+    [ "$output" = "$GOOD_REPO" ]
+    [[ "$stderr" == *"duplicate"* ]]
+    [[ "$stderr" == *"'dup'"* ]]
+}
+
+@test "list emits both rows for a duplicate name" {
+    _write_registry "- dup: $GOOD_REPO
+- dup: $GOOD_REPO2"
+    run bash "$REG" list
+    [ "$status" -eq 0 ]
+    expected="$(printf 'dup\t%s\t\t\t\ndup\t%s\t\t\t' "$GOOD_REPO" "$GOOD_REPO2")"
+    [ "$output" = "$expected" ]
+}
+
 # --- unknown keys ---
 
 @test "unknown key warns on stderr but the command succeeds" {

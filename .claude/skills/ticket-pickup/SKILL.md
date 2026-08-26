@@ -135,6 +135,13 @@ Handle the result by exit code:
     in the current repo or stop.
   - **Autonomous mode:** treat as a blocker — stop this ticket and surface
     the failure.
+- **Exit 4** (malformed registry entry — reachable even when the entry for
+  `<name>` is valid, because any malformed line in the section aborts the
+  parse; the registry needs a human fix):
+  - **Gated mode:** show the parser's message and ask whether to continue
+    in the current repo or stop.
+  - **Autonomous mode:** treat as a blocker — stop this ticket and surface
+    the failure.
 
 If the resolved path is outside the session's authorized working
 directories: warn that permission prompts are expected (**gated mode**) or
@@ -353,8 +360,13 @@ on their own.
 
 ### Notice path
 
-Corroboration-only signals, unresolved detections, or signals with no
-registry take the notice path instead of the gate. Print one line, e.g.:
+Corroboration-only signals, detections none of which resolved in a
+registered non-current checkout, or signals with no registry take the
+notice path instead of the gate. Partial resolution still gates: once the
+detection rule fires on at least one resolved hit, remaining unresolved
+repos appear on the gate's `Unresolved:` line (and in the event's
+`repos_unresolved`) rather than forcing the notice path. Print one line,
+e.g.:
 
 ```
 Note: this ticket also references other-repo — no local checkout registered; handling my-repo only. To enable cross-repo splits, consult `## Repo registry` in `~/.claude/overlay-context.md` and add the missing repo there.
@@ -435,7 +447,8 @@ current checkout.
 
 ### On `x`
 
-Stop.
+Emit the `multi_repo_split` event below with `gate_choice: "cancel"`, then
+stop.
 
 ### Metrics emit (both paths)
 
