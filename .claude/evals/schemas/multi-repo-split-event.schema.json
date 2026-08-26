@@ -74,7 +74,7 @@
           "items": { "type": "string" }
         },
         "final_order": {
-          "$comment": "Repo names in the merge order after the gate resolved (differs from proposed_order only on 'reorder'). Empty when mode is 'notice'.",
+          "$comment": "Repo names in the merge order after the gate resolved. Empty when mode is 'notice'. On gate_choice 'cancel'/'only'/'single' emit final_order = proposed_order (no reorder happened); it differs from proposed_order only on 'reorder'.",
           "type": "array",
           "items": { "type": "string" }
         }

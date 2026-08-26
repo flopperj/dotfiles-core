@@ -460,10 +460,14 @@ Data to capture:
 - `mode`: "gate" or "notice"
 - `repos_detected`, `repos_resolved`, `repos_unresolved`
 - `gate_choice`: "split" / "reorder" / "only" / "single" / "cancel" —
-  null when `mode` is "notice"
+  null when `mode` is "notice". Menu mapping: the `order N,M` keypress
+  emits "reorder"; `x` emits "cancel".
 - `subtask_keys`: created keys, in final merge order (empty array when no
   split happened)
-- `proposed_order`, `final_order`
+- `proposed_order`, `final_order` — `final_order` is empty when `mode` is
+  "notice"; on "cancel"/"only"/"single" emit `final_order` =
+  `proposed_order` (no reorder happened); it differs from
+  `proposed_order` only on "reorder"
 
 Emit via `emit-metric.sh ... || true`. If emit fails, log and continue.
 Never block the pipeline on metrics.
@@ -566,7 +570,15 @@ manually create a feature branch.
 4. **Create a new branch** if no matching branch exists:
    - Determine the branch name: `{ticket-key}-{slug}` (e.g.,
      `PROJ-1234-fix-campaign-preview`). Slugify from the ticket summary.
-   - Use the `newbranch` shell alias if available (from `.aliases.local`):
+   - **If a repo root was bound earlier** (Step 2.4 resolution or a
+     Step 3.5 `only N` choice, and the path differs from the current
+     working directory): do NOT use the `newbranch` alias — it is an
+     optional user-overlay alias (from `.aliases.local`, not part of
+     core) and is cwd-bound, so it would act on the wrong repo. Use the
+     fallback commands below with every command run via
+     `git -C /abs/path`.
+   - Otherwise, use the `newbranch` shell alias if available (from
+     `.aliases.local`):
      `newbranch {ticket-key}-{slug}`. This handles default branch
      detection (queries `origin/HEAD`, supports any branch name), checkout,
      `git pull origin`, and new branch creation in one command.

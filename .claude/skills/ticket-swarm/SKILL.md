@@ -309,11 +309,24 @@ Each ticket gets its own branch. Before launching any pipeline:
    exists (user pre-created it), use it instead of creating a new one.
    Ensure it is up to date with the default branch.
 
-4. **Create the branch** if no match found. Use the `newbranch` shell
-   alias if available (from `.aliases.local`):
-   `newbranch {ticket-key}-{slug}`. This handles default branch
-   detection (queries `origin/HEAD`, supports any branch name), checkout,
-   `git pull origin`, and new branch creation automatically.
+4. **Create the branch** if no match found.
+
+   **If step 1 resolved a repo root** (path differs from the current
+   working directory): do NOT use the `newbranch` alias — it is an
+   optional user-overlay alias (from `.aliases.local`, not part of
+   core) and is cwd-bound, so it would act on the wrong repo. Use the
+   plain-git commands with every command run via `git -C /abs/path`:
+   detect the default branch via
+   `git -C /abs/path symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@'`
+   (fall back to `main` then `master` via `git -C /abs/path show-ref`), then:
+   `git -C /abs/path checkout {default} && git -C /abs/path pull origin {default} && git -C /abs/path checkout -b {ticket-key}-{slug}`
+
+   **Otherwise** (unlabeled ticket, running in the current working
+   directory): use the `newbranch` shell alias if available (from
+   `.aliases.local`): `newbranch {ticket-key}-{slug}`. This handles
+   default branch detection (queries `origin/HEAD`, supports any branch
+   name), checkout, `git pull origin`, and new branch creation
+   automatically.
 
    **Fallback** if `newbranch` is not available: detect the default
    branch via `git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@'`

@@ -183,7 +183,11 @@ key), not `run_id` — the split is a per-ticket fact. Named consumers: agent-st
 `notice` (signals detected but no registry / no resolution evidence /
 corroboration-only — the false-positive denominator). `gate_choice` values:
 `split`, `reorder`, `only`, `single`, `cancel`, or `null` — null iff `mode` is
-`notice`, and `subtask_keys` / `final_order` are empty arrays then.
+`notice`, and `subtask_keys` / `final_order` are empty arrays then. Gate menu
+mapping: the `order N,M` keypress maps to `gate_choice: "reorder"`; `x` maps
+to `"cancel"`. On `cancel`/`only`/`single` emit `final_order` equal to
+`proposed_order` (no reorder happened) — `final_order` differs from
+`proposed_order` only on `reorder`.
 
 ---
 

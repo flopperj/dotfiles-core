@@ -81,6 +81,28 @@ _seed_pipelines() {
     done
 }
 
+# Write a fixture metrics.jsonl for project $1 with $2 gate-mode
+# multi_repo_split events carrying gate_choice $3, and $4 notice-mode events.
+_seed_splits() {
+    local project="$1" gate_count="$2" choice="$3" notice_count="$4"
+    local now i
+    now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    mkdir -p "$TASKS_DIR/$project"
+    : > "$TASKS_DIR/$project/metrics.jsonl"
+    i=0
+    while [ "$i" -lt "$gate_count" ]; do
+        echo "{\"timestamp\":\"$now\",\"event_type\":\"multi_repo_split\",\"agent\":\"ticket-pickup\",\"project\":\"$project\",\"ticket\":\"PROJ-$((2000 + i))\",\"data\":{\"mode\":\"gate\",\"repos_detected\":[\"a\",\"b\"],\"repos_resolved\":[\"a\",\"b\"],\"repos_unresolved\":[],\"gate_choice\":\"$choice\",\"subtask_keys\":[],\"proposed_order\":[\"a\",\"b\"],\"final_order\":[\"a\",\"b\"]}}" \
+            >> "$TASKS_DIR/$project/metrics.jsonl"
+        i=$((i + 1))
+    done
+    i=0
+    while [ "$i" -lt "$notice_count" ]; do
+        echo "{\"timestamp\":\"$now\",\"event_type\":\"multi_repo_split\",\"agent\":\"ticket-pickup\",\"project\":\"$project\",\"ticket\":\"PROJ-$((3000 + i))\",\"data\":{\"mode\":\"notice\",\"repos_detected\":[\"a\",\"b\"],\"repos_resolved\":[],\"repos_unresolved\":[\"a\",\"b\"],\"gate_choice\":null,\"subtask_keys\":[],\"proposed_order\":[],\"final_order\":[]}}" \
+            >> "$TASKS_DIR/$project/metrics.jsonl"
+        i=$((i + 1))
+    done
+}
+
 # ---------------------------------------------------------------------------
 # Script exists
 # ---------------------------------------------------------------------------
@@ -167,6 +189,54 @@ _seed_pipelines() {
     run /bin/bash "$STATS" --bogus
     [ "$status" -eq 1 ]
     [[ "$output" == *"Usage:"* ]]
+}
+
+# ---------------------------------------------------------------------------
+# Multi-repo splits section
+# ---------------------------------------------------------------------------
+# agent-stats is a named consumer of the multi_repo_split event (see the
+# schema's $comment and metrics-emit/SKILL.md): counts split by data.mode
+# ("gate" vs "notice") and by data.gate_choice, plus the notice-vs-gate
+# ratio — the detection false-positive denominator.
+
+# Assertions inside each test are &&-chained into a single final command:
+# bats on this machine runs under /bin/bash 3.2, where a failing standalone
+# [[ ]] mid-test does NOT abort the test — only the last command's status
+# counts. Chaining keeps every assertion load-bearing.
+
+@test "no multi_repo_split events: section renders its placeholder" {
+    _seed_project "proj"
+    run /bin/bash "$STATS"
+    [ "$status" -eq 0 ] &&
+        [[ "$output" == *"## Multi-Repo Splits"* ]] &&
+        [[ "$output" == *"No multi_repo_split events yet."* ]]
+}
+
+@test "split events: mode counts and notice-vs-gate ratio render" {
+    _seed_splits "proj" 3 "split" 1
+    run /bin/bash "$STATS"
+    [ "$status" -eq 0 ] &&
+        [[ "$output" == *"Splits detected:        4"* ]] &&
+        [[ "$output" == *"Gate shown:             3"* ]] &&
+        [[ "$output" == *"Notice-only:            1"* ]] &&
+        [[ "$output" == *"Notice-vs-gate ratio:   1/4 notice (25%)"* ]]
+}
+
+@test "split events: gate_choice distribution renders" {
+    _seed_splits "proj" 2 "reorder" 0
+    run /bin/bash "$STATS"
+    [ "$status" -eq 0 ] &&
+        [[ "$output" == *"By gate choice:"* ]] &&
+        [[ "$output" == *"reorder"* ]] &&
+        [[ "$output" == *"2 events"* ]]
+}
+
+@test "notice-only split events: no gate-choice block, ratio is 100%" {
+    _seed_splits "proj" 0 "" 2
+    run /bin/bash "$STATS"
+    [ "$status" -eq 0 ] &&
+        [[ "$output" == *"Notice-vs-gate ratio:   2/2 notice (100%)"* ]] &&
+        [[ "$output" != *"By gate choice:"* ]]
 }
 
 # ---------------------------------------------------------------------------
