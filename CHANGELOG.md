@@ -2,7 +2,7 @@
 
 > **How to update:** The pre-commit hook (`scripts/pre-commit.sh`) is auto-installed by `install.sh`. It runs a fast leakage check (`scripts/check-no-leakage.sh`) and re-renders the generated `CLAUDE.md.generated` and `AGENTS.md.generated` files on every commit. A pre-push gate (`scripts/pre-push.sh`, also auto-installed) scans every outgoing commit's tree and metadata before it leaves the machine. CI runs lint, consult-grammar, and the test suite (including synthetic-token leakage mechanism tests) on every PR; the company-token scan is a separate step that runs only when guard data is present on the runner. If you bypass the hooks or work in a context where hooks cannot run, keep this file current manually. Each release heading links to the diff on the public mirror.
 
-## v1.16.0 — 2026-08-25 (multi-repo ticket decomposition)
+## v1.17.0 — 2026-08-25 (multi-repo ticket decomposition)
 
 ### Added
 
@@ -19,6 +19,22 @@
 - `.claude/skills/overlay-init/SKILL.md` — the add-context route documents the canonical `## Repo registry` entry format as a known section.
 - `scripts/consult-vocabulary.txt` — new `## Repo registry` entry.
 - `README.md` — skill-table rows updated for create-jira-ticket, pr-create-from-commits, ticket-pickup, and ticket-swarm.
+
+## v1.16.0 — 2026-08-13 (ADK workflow conversion + eval gates)
+
+> Retroactive entry: this release was tagged at the PR #25 merge without a
+> changelog entry; recorded 2026-08-25 when the gap was found during the
+> v1.17.0 release.
+
+### Added
+
+- Typed handoff schemas for the agent pipeline (`aristotle-to-optimus.json`, `optimus-to-cyrus.json`, `auditor-composite.json`, `swarm-context.json`) with schema-contract tests, plus real-object validation in `tests/workflows`.
+- Classifier answer key + conformance runner under `.claude/evals/`, with a ratcheting CI gate and eval-accuracy gating for swarm-retro memory promotion.
+- Saved workflows: code-auditor scoring (`code-auditor-score`) and team-lead wave execution (`team-lead-waves`); staged-chain workflow conversion.
+
+### Fixed
+
+- Stats health gate fails closed on non-numeric input; metrics emit valid JSON on the bash 3.2 jq-absent path; install links workflow schemas and checks them in core-check; `parallel()` documented as taking thunk arrays; `<<task-complete>>` sentinel scoped to prose-orchestrated calls.
 
 ## v1.15.2 — 2026-07-29 (shape CI + mirror history scrub)
 
