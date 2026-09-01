@@ -117,6 +117,7 @@ Severity mapping:
 ### Step 2b: Verify findings before drafting
 
 <!-- BEGIN VERIFY-THEN-DRAFT -->
+<!-- REVIEWER_BLOCK: verify-then-draft -->
 #### Verify findings before drafting comments
 
 The reviewer agent (Scout or Ranger) returns confidence-scored findings. **A confidence score is the agent's self-assessment, not verification.** Before drafting any comment text, the orchestrator must trace each finding to the code:
@@ -139,6 +140,7 @@ If verification cannot be completed (file no longer exists in the diff, trace bl
 ### Step 2c: Stress-test findings against the senior-staff bar
 
 <!-- BEGIN FINDINGS-CRITIQUE -->
+<!-- REVIEWER_BLOCK: findings-critique -->
 #### Findings Critique: bar-fit pass
 
 After verifying each finding against the code (VERIFY-THEN-DRAFT) and before drafting any comment, stress-test each surviving finding against the senior-staff peer-review bar. Verification answers *"is this claim true?"*; this step answers *"does this claim matter?"* They are independent filters and both must pass.
@@ -187,6 +189,7 @@ Show the user Ranger's complete review (summary, merge readiness, blockers, impo
 Omit this section entirely when no ticket context was provided.
 
 <!-- BEGIN TONE-CALIBRATION -->
+<!-- REVIEWER_BLOCK: tone-calibration -->
 #### Calibrate tone to author seniority
 
 The reviewer agent's default voice is "staff-level explanatory" — restate context, prescribe an A/B fix, frame findings as "verified concern is...". This voice is **correct** for reviewing junior or unfamiliar contributors and **wrong** for peer-to-peer review of a senior-staff PR, where a one-sentence question often lands better than a multi-paragraph explanation.
@@ -263,6 +266,7 @@ If the user chooses "fix":
 Launch the `cyrus-tdd-engineer` agent with Ranger's findings as the task. Cyrus implements fixes with TDD discipline. Ranger does not fix anything himself.
 
 <!-- BEGIN ANCHOR-CONSTRAINTS -->
+<!-- REVIEWER_BLOCK: anchor-constraints -->
 #### GitHub review comment anchoring rules
 
 The GitHub `POST /repos/{owner}/{repo}/pulls/{number}/reviews` endpoint enforces hunk-locality on multi-line comments. Violating the rules returns HTTP 422 and the entire review (not just the offending comment) fails to post.
