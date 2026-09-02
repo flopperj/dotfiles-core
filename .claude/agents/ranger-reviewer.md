@@ -274,9 +274,11 @@ If you identify comments worth posting to GitHub:
 3. **Explicitly ask**: "Do you approve posting these N comment(s) to the PR on your behalf?"
 4. Wait for clear confirmation before executing any `gh pr review`, `gh api`, or comment-posting commands.
 5. **Re-verify PR eligibility** before posting — run `gh pr view <number>` to confirm the PR is still open (not closed or merged while the review was running). If it's no longer open, report this instead of posting.
-6. **Always post as inline diff comments** — use `gh api repos/{owner}/{repo}/pulls/{number}/reviews` with a `comments` array containing `path`, `line`, and `body` for each comment, anchored to the specific line in the diff. This is preferred over general PR comments as it is easier to follow in context.
-   - Use `gh pr diff <number>` to identify the correct file path and line number for each comment before posting
-   - Fall back to `gh pr comment` only if a comment cannot be anchored to a specific line
+6. **Always post as inline diff comments** — use `gh api repos/{owner}/{repo}/pulls/{number}/reviews` with a `comments` array containing `path`, `start_line`, `line`, `side`, and `body` for each comment, anchored to the affected block range. This is preferred over general PR comments as it is easier to follow in context.
+   - Anchor to the **affected block range** using `start_line` + `line` when the block spans multiple lines within one hunk; single-line (`line` only) is the fallback when the range collapses to one line. **Both endpoints must be in the same `@@` hunk.**
+   - Use `gh pr diff <number>` to identify the correct file path and line range for each comment before posting
+   - Fall back to `gh pr comment` only when no inline anchor is possible
+   - The full anchoring contract (block definition, hunk clamp rule, pre-flight check) lives in the ranger-reviewer SKILL.md § ANCHOR-CONSTRAINTS
 7. Never post, approve, request-changes, or merge without explicit user approval.
 
 ## Tool Usage

@@ -119,6 +119,22 @@ SCOUT_AGENT="$DOTFILES_DIR/.claude/agents/scout-reviewer.md"
     [ -f "$ANCHOR_FRAGMENT" ] && grep -Fq '"start_line"' "$ANCHOR_FRAGMENT"
 }
 
+# ---------------------------------------------------------------------------
+# Agent files — the posting instructions must not contradict the orchestrator
+# ---------------------------------------------------------------------------
+
+@test "agents: both reviewer agent files anchor with start_line" {
+    [ -f "$RANGER_AGENT" ] && [ -f "$SCOUT_AGENT" ] \
+        && grep -Fq 'start_line' "$RANGER_AGENT" \
+        && grep -Fq 'start_line' "$SCOUT_AGENT"
+}
+
+@test "agents: stale single-line-only fallback framing is gone" {
+    [ -f "$RANGER_AGENT" ] && [ -f "$SCOUT_AGENT" ] \
+        && ! grep -Fq 'only if a comment cannot be anchored to a specific line' "$RANGER_AGENT" \
+        && ! grep -Fq 'only if a comment cannot be anchored to a specific line' "$SCOUT_AGENT"
+}
+
 @test "anchor: all hard constraints and the 422 warning survive verbatim" {
     # Regression guard: widening the default anchor must not erode the
     # constraints that prevent a 422 from killing the entire review.
