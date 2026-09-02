@@ -2,6 +2,22 @@
 
 > **How to update:** The pre-commit hook (`scripts/pre-commit.sh`) is auto-installed by `install.sh`. It runs a fast leakage check (`scripts/check-no-leakage.sh`) and re-renders the generated `CLAUDE.md.generated` and `AGENTS.md.generated` files on every commit. A pre-push gate (`scripts/pre-push.sh`, also auto-installed) scans every outgoing commit's tree and metadata before it leaves the machine. CI runs lint, consult-grammar, and the test suite (including synthetic-token leakage mechanism tests) on every PR; the company-token scan is a separate step that runs only when guard data is present on the runner. If you bypass the hooks or work in a context where hooks cannot run, keep this file current manually. Each release heading links to the diff on the public mirror.
 
+## v1.18.0 — 2026-09-02 (peer-toned, block-anchored reviewer comments)
+
+### Changed
+
+- **Reviewer comment defaults flipped** (Scout and Ranger). Behavior changes visible on every review:
+  - **Tone: peer is now the default voice** — short, question-led, no restated context, no A/B prescription. Explanatory survives as the opt-in for authors with fewer than 10 contributions; ambiguous or unavailable author signal resolves to peer instead of deferring to the user. Minimal (bot authors) unchanged.
+  - **Density budget** — a default comment body is at most two sentences, with prohibitions on restated context, A/B prescription menus, and positives padding. Blocking findings whose mechanism needs more room may exceed the ceiling (actionable beats terse).
+  - **Anchoring: comments anchor to the affected block, not a single line** — the contiguous changed-line run plus its smallest enclosing syntactic construct, clamped to the `@@` hunk. Ranges crossing a hunk edge are truncated to the edge; single-line becomes the fallback shape. The four hard anchor constraints and the 422-fails-whole-review warning are kept verbatim.
+- `.claude/agents/ranger-reviewer.md` / `.claude/agents/scout-reviewer.md` — posting sections updated to block-range anchoring with a pointer to the SKILL.md § ANCHOR-CONSTRAINTS contract; `.claude/skills/code-auditor/SKILL.md` descriptive prose updated to the new defaults (sentinel pointers unchanged).
+
+### Added
+
+- `.claude/_shared/reviewer-blocks/` — canonical home for the four reviewer contract blocks (`tone-calibration`, `anchor-constraints`, `findings-critique`, `verify-then-draft`) that were previously hand-synced byte-identical copies in both reviewer SKILL.md files. Spliced by the new `scripts/reviewer-blocks-gen.sh` (modeled on `role-guard-gen.sh`, multi-directive-per-file), enforced by drift tests per the existing generator convention — no hook call.
+- `tests/reviewer-shared-blocks.bats` — fragment existence, generator idempotence/drift, cross-reviewer parity, fragment fidelity, directive presence.
+- `tests/reviewer-tone-anchor-defaults.bats` — semantic guards for the peer default, density budget, affected-block anchoring, clamp rule, and the hard-constraint/422-warning regression guard.
+
 ## v1.17.0 — 2026-08-25 (multi-repo ticket decomposition)
 
 ### Added
