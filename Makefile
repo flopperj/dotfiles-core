@@ -1,4 +1,4 @@
-.PHONY: test lint lint-agents check-leakage check-leakage-shapes gen-docs gen-boundaries gen-role-guards gen eval all
+.PHONY: test lint lint-agents check-leakage check-leakage-shapes gen-docs gen-boundaries gen-role-guards gen-reviewer-blocks gen eval all
 
 DOTFILES_DIR := $(shell realpath .)
 
@@ -39,7 +39,10 @@ gen-boundaries:                         ## Regenerate responsibility boundary ta
 gen-role-guards:                        ## Regenerate role-guard blocks in agent files
 	bash scripts/role-guard-gen.sh
 
-gen: gen-docs gen-boundaries gen-role-guards   ## Run all generators
+gen-reviewer-blocks:                    ## Regenerate shared reviewer contract blocks in reviewer SKILL.md files
+	bash scripts/reviewer-blocks-gen.sh
+
+gen: gen-docs gen-boundaries gen-role-guards gen-reviewer-blocks   ## Run all generators
 
 EVAL_SET := .claude/evals/sets/classifier-v1.jsonl
 
