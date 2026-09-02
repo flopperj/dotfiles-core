@@ -6,6 +6,14 @@
 # and are generated from .claude/_shared/reviewer-blocks/ fragments by
 # scripts/reviewer-blocks-gen.sh.
 #
+# Hermeticity: every generator run and every committed-state check happens in
+# a scratch clone of HEAD (_make_scratch_repo), never against the real working
+# tree. This keeps the drift guard live — a generator run against the real
+# repo would silently repair the very drift the guard exists to catch — and
+# keeps `make test` from leaving modified SKILL.md files behind. The
+# setup_file/teardown_file pair asserts the real tree is byte-identical before
+# and after the suite.
+#
 # bash 3.2 note: assertions are &&-chained into each test's final command, and
 # every sed/awk extraction is guarded with a non-empty check so a mistyped
 # sentinel cannot produce a vacuous pass.
@@ -20,6 +28,42 @@ RANGER_SKILL="$DOTFILES_DIR/.claude/skills/ranger-reviewer/SKILL.md"
 SCOUT_SKILL="$DOTFILES_DIR/.claude/skills/scout-reviewer/SKILL.md"
 
 REVIEWER_BLOCK_KEYS="tone-calibration anchor-constraints findings-critique verify-then-draft"
+
+# setup_file/teardown_file override the test_helper versions: same exports,
+# plus a snapshot of the real tree so teardown_file can prove the suite
+# mutated nothing. Generator runs happen only in scratch clones (below), so
+# this guard should never fire — it exists to keep that invariant tested.
+setup_file() {
+    CORE_DIR="$(realpath "$BATS_TEST_DIRNAME/..")"
+    export CORE_DIR
+    DOTFILES_DIR="$CORE_DIR"
+    export DOTFILES_DIR
+    git -C "$DOTFILES_DIR" status --porcelain > "$BATS_FILE_TMPDIR/tree-before" \
+        && git -C "$DOTFILES_DIR" diff > "$BATS_FILE_TMPDIR/diff-before"
+}
+
+teardown_file() {
+    git -C "$DOTFILES_DIR" status --porcelain > "$BATS_FILE_TMPDIR/tree-after" \
+        && git -C "$DOTFILES_DIR" diff > "$BATS_FILE_TMPDIR/diff-after" \
+        && cmp -s "$BATS_FILE_TMPDIR/tree-before" "$BATS_FILE_TMPDIR/tree-after" \
+        && cmp -s "$BATS_FILE_TMPDIR/diff-before" "$BATS_FILE_TMPDIR/diff-after" || {
+        echo "reviewer-shared-blocks.bats mutated the real working tree:" >&2
+        diff "$BATS_FILE_TMPDIR/tree-before" "$BATS_FILE_TMPDIR/tree-after" >&2 || true
+        return 1
+    }
+}
+
+# Clone the repo's committed state (HEAD) into $SCRATCH so generator runs
+# never touch the real working tree. Sets SCRATCH_REPO. The drift guard
+# compares generator output against this committed state, so it fires on both
+# drift classes: a hand-edit of a generated block, and a fragment edit
+# committed without regeneration. Uncommitted local WIP is invisible here by
+# design — it is validated once committed (and on CI, HEAD is the checkout).
+_make_scratch_repo() {
+    SCRATCH_REPO="$SCRATCH/repo"
+    git clone --quiet --no-hardlinks "$DOTFILES_DIR" "$SCRATCH_REPO" \
+        && [ -f "$SCRATCH_REPO/scripts/reviewer-blocks-gen.sh" ]
+}
 
 # Derive the sentinel label from a fragment key: tone-calibration -> TONE-CALIBRATION
 _label_for_key() {
@@ -55,39 +99,39 @@ _extract_block() {
 }
 
 # ---------------------------------------------------------------------------
-# Test 3: Generator runs successfully on current repo
+# Test 3: Generator runs successfully on a scratch clone (never the real tree)
 # ---------------------------------------------------------------------------
-@test "reviewer-blocks-gen.sh runs successfully on current repo" {
-    run bash "$GEN"
+@test "reviewer-blocks-gen.sh runs successfully on a scratch clone" {
+    _make_scratch_repo
+    run bash "$SCRATCH_REPO/scripts/reviewer-blocks-gen.sh"
     [ "$status" -eq 0 ]
 }
 
 # ---------------------------------------------------------------------------
-# Test 4: Generator is idempotent and produces no drift vs. committed state
+# Test 4: Drift guard — gen(committed) == committed — plus idempotence
 # ---------------------------------------------------------------------------
-@test "reviewer-blocks-gen.sh is idempotent (second run produces no diff)" {
-    local before after
-    before="$(git -C "$DOTFILES_DIR" diff)"
+@test "reviewer-blocks-gen.sh output matches committed state (drift guard) and is idempotent" {
+    _make_scratch_repo
 
-    bash "$GEN"
-    bash "$GEN"
-
-    after="$(git -C "$DOTFILES_DIR" diff)"
-
-    # Second-run stability: gen(gen(x)) == gen(x).
-    if [ "$before" != "$after" ]; then
-        echo "Second run of reviewer-blocks-gen.sh produced changes:"
-        echo "$after"
+    # Drift guard: regenerating from committed fragments must reproduce the
+    # committed SKILL.md files byte-for-byte. A non-empty diff means either a
+    # hand-edit of a generated block or a fragment edit without regeneration.
+    local drift
+    bash "$SCRATCH_REPO/scripts/reviewer-blocks-gen.sh"
+    drift="$(git -C "$SCRATCH_REPO" diff)"
+    if [ -n "$drift" ]; then
+        echo "reviewer-blocks-gen.sh output differs from committed state (drift):"
+        echo "$drift"
+        echo "Run 'make gen-reviewer-blocks' and commit the result."
         return 1
     fi
 
-    # Drift guard from committed state: gen(committed) == committed.
-    # Catches a hand-edit of a generated block or a fragment edit without
-    # regeneration. Skipped when the tree was already dirty before the test
-    # (local WIP); effective on CI's clean checkout.
-    if [ -z "$before" ] && [ -n "$after" ]; then
-        echo "reviewer-blocks-gen.sh produced changes relative to committed state (drift):"
-        echo "$after"
+    # Second-run stability: gen(gen(x)) == gen(x).
+    bash "$SCRATCH_REPO/scripts/reviewer-blocks-gen.sh"
+    drift="$(git -C "$SCRATCH_REPO" diff)"
+    if [ -n "$drift" ]; then
+        echo "Second run of reviewer-blocks-gen.sh produced changes:"
+        echo "$drift"
         return 1
     fi
 }
@@ -96,11 +140,16 @@ _extract_block() {
 # Test 5: Each block is byte-identical across ranger and scout SKILL.md
 # ---------------------------------------------------------------------------
 @test "each reviewer block is identical across ranger and scout SKILL.md" {
-    local key label r s
+    # Committed state via scratch clone: the parity check must see the files
+    # as committed, never a version freshly repaired by a generator run.
+    _make_scratch_repo
+    local ranger scout key label r s
+    ranger="$SCRATCH_REPO/.claude/skills/ranger-reviewer/SKILL.md"
+    scout="$SCRATCH_REPO/.claude/skills/scout-reviewer/SKILL.md"
     for key in $REVIEWER_BLOCK_KEYS; do
         label="$(_label_for_key "$key")"
-        r="$(_extract_block "$RANGER_SKILL" "$label")"
-        s="$(_extract_block "$SCOUT_SKILL" "$label")"
+        r="$(_extract_block "$ranger" "$label")"
+        s="$(_extract_block "$scout" "$label")"
         # Non-empty guards are load-bearing: two empty extractions compare equal.
         [ -n "$r" ] && [ -n "$s" ] && [ "$r" = "$s" ] || {
             echo "Block $label empty or differs between ranger and scout"
@@ -114,12 +163,17 @@ _extract_block() {
 # Test 6: Each spliced block body matches its fragment (modulo directive line)
 # ---------------------------------------------------------------------------
 @test "each spliced block body matches its fragment" {
+    # Committed state via scratch clone, same rationale as the parity test:
+    # fidelity is checked between committed fragments and committed SKILL.md,
+    # so a fragment edit committed without regeneration fails here.
+    _make_scratch_repo
     local key label file body fragment
     for key in $REVIEWER_BLOCK_KEYS; do
         label="$(_label_for_key "$key")"
-        fragment="$(cat "$FRAGMENTS_DIR/${key}.md" 2>/dev/null)"
+        fragment="$(cat "$SCRATCH_REPO/.claude/_shared/reviewer-blocks/${key}.md" 2>/dev/null)"
         [ -n "$fragment" ] || { echo "Fragment for $key is empty or missing"; return 1; }
-        for file in "$RANGER_SKILL" "$SCOUT_SKILL"; do
+        for file in "$SCRATCH_REPO/.claude/skills/ranger-reviewer/SKILL.md" \
+                    "$SCRATCH_REPO/.claude/skills/scout-reviewer/SKILL.md"; do
             # Block body: between the sentinels, minus sentinel lines, minus
             # the leading REVIEWER_BLOCK directive line.
             body="$(_extract_block "$file" "$label" | sed '1d;$d' | sed '/<!-- REVIEWER_BLOCK:/d')"
