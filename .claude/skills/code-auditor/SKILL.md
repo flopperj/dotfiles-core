@@ -279,12 +279,12 @@ disciplines that the auditor does NOT re-implement:
    than bend the codebase, that the author cannot act on, or whose
    severity tier is indefensible — surfacing the per-finding verdicts
    above the gate menu. See the chosen reviewer's SKILL.md (`scout-reviewer` / `ranger-reviewer`) § FINDINGS-CRITIQUE.
-3. **Calibrate tone to author seniority.** Default is "staff-level
-   explanatory"; the reviewer offers peer / minimal alternatives at draft
-   time based on PR author signal. See the chosen reviewer's SKILL.md (`scout-reviewer` / `ranger-reviewer`) § TONE-CALIBRATION.
-4. **Respect GitHub anchor constraints.** Multi-line comments must sit
-   in the diff and in the same hunk; the reviewer pre-flights against
-   `gh pr diff` before posting. See the chosen reviewer's SKILL.md (`scout-reviewer` / `ranger-reviewer`) § ANCHOR-CONSTRAINTS.
+3. **Calibrate tone to author seniority.** Default is **peer**; the
+   reviewer offers explanatory / minimal alternatives at draft time
+   based on PR author signal. See the chosen reviewer's SKILL.md (`scout-reviewer` / `ranger-reviewer`) § TONE-CALIBRATION.
+4. **Respect GitHub anchor constraints.** Comments anchor to the
+   affected block, clamped to the `@@` hunk; the reviewer pre-flights
+   against `gh pr diff` before posting. See the chosen reviewer's SKILL.md (`scout-reviewer` / `ranger-reviewer`) § ANCHOR-CONSTRAINTS.
 
 When presenting the routing recommendation (Step 3), the auditor can
 reference these by name — e.g. *"Routing to Ranger; he will verify each

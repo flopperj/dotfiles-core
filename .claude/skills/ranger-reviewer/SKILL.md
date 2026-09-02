@@ -117,6 +117,7 @@ Severity mapping:
 ### Step 2b: Verify findings before drafting
 
 <!-- BEGIN VERIFY-THEN-DRAFT -->
+<!-- REVIEWER_BLOCK: verify-then-draft -->
 #### Verify findings before drafting comments
 
 The reviewer agent (Scout or Ranger) returns confidence-scored findings. **A confidence score is the agent's self-assessment, not verification.** Before drafting any comment text, the orchestrator must trace each finding to the code:
@@ -139,6 +140,7 @@ If verification cannot be completed (file no longer exists in the diff, trace bl
 ### Step 2c: Stress-test findings against the senior-staff bar
 
 <!-- BEGIN FINDINGS-CRITIQUE -->
+<!-- REVIEWER_BLOCK: findings-critique -->
 #### Findings Critique: bar-fit pass
 
 After verifying each finding against the code (VERIFY-THEN-DRAFT) and before drafting any comment, stress-test each surviving finding against the senior-staff peer-review bar. Verification answers *"is this claim true?"*; this step answers *"does this claim matter?"* They are independent filters and both must pass.
@@ -187,21 +189,22 @@ Show the user Ranger's complete review (summary, merge readiness, blockers, impo
 Omit this section entirely when no ticket context was provided.
 
 <!-- BEGIN TONE-CALIBRATION -->
+<!-- REVIEWER_BLOCK: tone-calibration -->
 #### Calibrate tone to author seniority
 
-The reviewer agent's default voice is "staff-level explanatory" — restate context, prescribe an A/B fix, frame findings as "verified concern is...". This voice is **correct** for reviewing junior or unfamiliar contributors and **wrong** for peer-to-peer review of a senior-staff PR, where a one-sentence question often lands better than a multi-paragraph explanation.
+The reviewer's default voice is **peer** — a short question or observation, with no restated context and no A/B prescription. A one-sentence question lands better with a senior author than a multi-paragraph explanation. **Explanatory** is the opt-in voice for junior or unfamiliar contributors: it restates context, prescribes a fix, and explains rationale — correct for that audience, condescending noise for a peer.
 
-The orchestrator detects the author signal and offers a tone choice at draft time. **The default Ranger voice is not changed everywhere — the choice is made per review.**
+The default is peer for both reviewers; the per-review tone prompt can override it.
 
 ### Author signal detection (best-effort)
 
 Before drafting comments, infer the author signal from PR metadata. Order of preference:
 
 1. **Bot author** (`author.is_bot` true, or username contains `dependabot`, `renovate`, etc.) → use **minimal** tone: state the issue and stop. No prescription, no positives section.
-2. **Contributor history available** — run `gh api repos/{owner}/{repo}/contributors --jq '.[] | select(.login == "{author}") | .contributions'`. If the author has >=50 merged PRs in this repo, lean **peer**. If <10, lean **explanatory**.
-3. **Otherwise**, defer to the user: ask before drafting (see prompt below).
+2. **Contributor history available** — run `gh api repos/{owner}/{repo}/contributors --jq '.[] | select(.login == "{author}") | .contributions'`. If the author has fewer than 10 contributions in this repo, lean **explanatory** — this is the case the explanatory voice exists for. Otherwise stay **peer**.
+3. **Otherwise** (history unavailable, `gh` failed or rate-limited), stay **peer**. Do not block on the lookup.
 
-If `gh` calls fail or are rate-limited, skip to step 3 (defer). Do not block on the lookup.
+An explicit user choice of `e` or `m` always wins over the detected signal.
 
 ### Tone choice prompt
 
@@ -209,20 +212,31 @@ Before showing comment drafts, ask:
 
 ```
 Tone for review comments:
-  -> p = Peer (senior author) — short, question-led, no restated context, no A/B prescription
-  -> e = Explanatory (default) — staff-level voice with context, A/B fix, rationale
+  -> p = Peer (default) — short, question-led, no restated context, no A/B prescription
+  -> e = Explanatory (junior or unfamiliar author) — staff-level voice with context, prescribed fix, rationale
   -> m = Minimal (bot or terse author) — state the issue and stop
   -> ? = I'll guess from author signal: <detected signal here>
 ```
 
-In autonomous/swarm mode: auto-select based on detected signal. Default to explanatory if signal is ambiguous.
+In autonomous/swarm mode: auto-select based on detected signal. Default to peer if signal is ambiguous.
+
+### Density budget
+
+The default (peer) voice obeys a hard budget on ceremony:
+
+1. **Ceiling: a comment body is at most two sentences.** One is better.
+2. **No restated context.** Do not describe what the code does — the reader is looking at it, anchored. Skip the "Verified concern: when the user clicks X, the handler calls Y…" opener and go straight to the concern.
+3. **No A/B prescription by default.** Do not offer "(A) … or (B) …" menus. State the concern; if a fix is obvious, name it in a clause, not a section. Prescribe options only when the fix is genuinely ambiguous *and* the choice is consequential.
+4. **No positives or nitpick padding** in a comment body. Praise and summary belong in the review summary, not on an inline anchor.
+
+**Escape hatch:** a **Blocking** finding whose mechanism cannot be conveyed in two sentences may exceed the ceiling — lead with the concern in sentence one and keep the mechanism to a short second paragraph. The budget is a bar on ceremony, never on information needed to act: when in doubt between terse and actionable, choose actionable.
 
 ### Tone reference patterns
 
-**Peer (one-sentence question or observation):**
+**Peer (default — one-sentence question or observation, within the density budget):**
 > Does `editComplete()` here also persist? I read the trace as in-memory-only — flagging in case I missed a write.
 
-**Explanatory (default Ranger):**
+**Explanatory (opt-in voice — intentionally exceeds the density budget for a junior or unfamiliar author):**
 > Verified concern: when the user clicks Save and exit, the handler calls `editComplete()` but does not propagate to the backend. Two ways forward: (A) add a `persistDraft()` call before `editComplete()`, or (B) move persistence into `editComplete()` itself. Either is fine; (A) is the smaller diff.
 
 **Minimal (bot/terse):**
@@ -263,6 +277,7 @@ If the user chooses "fix":
 Launch the `cyrus-tdd-engineer` agent with Ranger's findings as the task. Cyrus implements fixes with TDD discipline. Ranger does not fix anything himself.
 
 <!-- BEGIN ANCHOR-CONSTRAINTS -->
+<!-- REVIEWER_BLOCK: anchor-constraints -->
 #### GitHub review comment anchoring rules
 
 The GitHub `POST /repos/{owner}/{repo}/pulls/{number}/reviews` endpoint enforces hunk-locality on multi-line comments. Violating the rules returns HTTP 422 and the entire review (not just the offending comment) fails to post.
@@ -272,15 +287,29 @@ The GitHub `POST /repos/{owner}/{repo}/pulls/{number}/reviews` endpoint enforces
 - **Both endpoints must be inside the diff.** `start_line` and `line` must each correspond to a line that appears in the unified diff for the PR (with the correct `side` — `LEFT` for removed/context-on-old, `RIGHT` for added/context-on-new). A line that is "untouched" but visible as context in the diff is in the diff; a line that does not appear at all is not.
 - **Both endpoints must be in the same hunk.** A hunk is a `@@ -a,b +c,d @@` block. Two separate hunks in the same file are two separate hunks even if they are visually adjacent in the rendered diff. Anchoring across an untouched block (lines not shown in the diff because GitHub elided them) crosses hunks.
 - **`side` must be consistent.** A multi-line comment cannot start on `LEFT` and end on `RIGHT`.
-- **Single-line comments** (`line` only, no `start_line`) are the safest fallback.
+- **Single-line comments** (`line` only, no `start_line`) are the fallback shape, used when the clamped range collapses to one line — not the default.
+
+### Affected block
+
+The default anchor is the **affected block**, not a single line.
+
+> **Affected block.** The contiguous run of changed lines the finding concerns, extended to the smallest *syntactically complete* construct that encloses it — the `if`/`for`/`try` body, the object or array literal, the JSX element, the statement group — then clamped to the enclosing `@@` hunk.
+
+It is **not** the whole enclosing function unless the function fits inside the hunk. A function is a useful unit for a human reader and a poor one for the GitHub API: it routinely exceeds a hunk, and exceeding a hunk means HTTP 422, which fails the **entire** review.
+
+**The clamp rule.** Anchoring is a narrowing operation, never a widening gamble. In order:
+
+1. Compute the ideal block range.
+2. **Intersect it with the enclosing hunk.** If the block extends past either hunk edge, truncate to the hunk edge — do **not** drop straight to single-line. A partial block still shows the reader more than one line, and it is 422-safe.
+3. If after clamping the range is a single line, emit a single-line comment (omit `start_line`).
+4. If the changed lines the finding concerns are split across two hunks, anchor to the hunk containing the line where the issue first manifests — do not span, do not post twice.
+5. If no inline anchor is possible, fall back to a general PR comment referencing `file:line`.
 
 ### Fallback order
 
-When drafting an anchor, attempt in order and use the first one that satisfies the constraints:
-
-1. **Narrow multi-line within one hunk.** If the relevant logic is more than one line, anchor to the smallest contiguous range that captures it AND is fully inside one hunk.
-2. **Single-line on the most relevant touched line.** If the multi-line range crosses a hunk boundary, drop to a single line — pick the most representative changed line (the line where the issue first manifests, not the line that ends the block).
-3. **General PR conversation comment.** If neither inline anchor works (e.g. the issue spans untouched context that is not in any hunk), post as a `gh pr comment` general comment and reference file:line in the body text.
+1. **Affected block range, clamped to the hunk** (the default). Anchor with `start_line` + `line` spanning the block, both endpoints inside one hunk.
+2. **Single line**, when the clamp collapses the range to one line — pick the line where the issue first manifests.
+3. **General PR conversation comment.** If no inline anchor works (e.g. the issue spans untouched context that is not in any hunk), post as a `gh pr comment` general comment and reference file:line in the body text.
 
 ### Pending review semantics
 
@@ -291,11 +320,14 @@ POST /repos/{owner}/{repo}/pulls/{number}/reviews
 {
   "body": "...",
   "comments": [
+    { "path": "...", "start_line": 38, "line": 45, "side": "RIGHT", "body": "..." },
     { "path": "...", "line": 42, "side": "RIGHT", "body": "..." }
   ]
   // no "event" field — this leaves the review in PENDING state
 }
 ```
+
+The first comment shows the default shape — a block anchor spanning `start_line`..`line` within one hunk; the second is the single-line fallback shape.
 
 To submit a pending review afterwards:
 
@@ -306,7 +338,7 @@ POST /repos/{owner}/{repo}/pulls/{number}/reviews/{review_id}/events
 
 ### Pre-flight check (orchestrator-side)
 
-Before posting, the orchestrator should run `gh pr diff <number>` and verify, for each drafted comment, that the `start_line` and `line` both appear in the same `@@` block. If they do not, downgrade per the fallback order above and re-draft the anchor (not the comment body) before sending. A 422 from GitHub is a process failure, not a content failure — it means the orchestrator skipped this check.
+Before posting, the orchestrator should run `gh pr diff <number>` and verify, for each drafted comment, that the `start_line` and `line` both appear in the same `@@` block. If they do not, clamp per the rule above — truncate to the hunk edge, collapsing to single-line only when the clamp leaves one line — and re-draft the anchor (not the comment body) before sending. A 422 from GitHub is a process failure, not a content failure — it means the orchestrator skipped this check.
 <!-- END ANCHOR-CONSTRAINTS -->
 
 ### Gate rules

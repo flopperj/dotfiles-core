@@ -292,10 +292,12 @@ Do not post, submit, or push any review comments until the user responds with ex
 Once approved:
 - **Prefix every comment body with `🤖 `** (robot emoji + single space) per `~/.claude/AGENTS.md` § "Automated Comment Marker — 🤖 prefix" — this holds even for comments the user approved, since authorship is still the agent. The 🤖 must already be visible in the draft the user approved. Omit only on explicit user instruction.
 - **Re-verify PR eligibility** before posting — run `gh pr view <number>` to confirm the PR is still open (not closed or merged while the review was running). If it's no longer open, report this instead of posting.
-- **Always post as inline diff comments** — use `gh api` to create a pull request review with line-level comments attached to the specific file and line in the diff. This is preferred over general PR comments as it is easier to follow in context.
-  - Use `gh pr diff <number>` to get the diff and identify the correct `position` or `line` for each comment
-  - Post via `gh api repos/{owner}/{repo}/pulls/{number}/reviews` with `comments` array containing `path`, `line`, and `body` for each comment
-- Fall back to `gh pr comment` only if a comment cannot be anchored to a specific line
+- **Always post as inline diff comments** — use `gh api` to create a pull request review with comments anchored to the affected block range in the diff. This is preferred over general PR comments as it is easier to follow in context.
+  - Anchor to the **affected block range** using `start_line` + `line` when the block spans multiple lines within one hunk; single-line (`line` only) is the fallback when the range collapses to one line. **Both endpoints must be in the same `@@` hunk.**
+  - Use `gh pr diff <number>` to get the diff and identify the correct line range for each comment
+  - Post via `gh api repos/{owner}/{repo}/pulls/{number}/reviews` with `comments` array containing `path`, `start_line`, `line`, `side`, and `body` for each comment
+  - The full anchoring contract (block definition, hunk clamp rule, pre-flight check) lives in the scout-reviewer SKILL.md § ANCHOR-CONSTRAINTS
+- Fall back to `gh pr comment` only when no inline anchor is possible
 - If the user asks to modify comments before posting, update them and confirm the final version before submitting
 - Report back which comments were successfully posted
 
