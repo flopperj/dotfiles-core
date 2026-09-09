@@ -277,6 +277,10 @@ Data to include:
 - `tests_passed`: true (checklist wouldn't pass otherwise)
 - `coverage_percent`: the coverage number from the test run
 - `ci_fix_attempts`: value of `ci_fix_attempt` from plan frontmatter (0 if none)
+- `first_pass`: `tests_passed && ci_fix_attempts == 0` — always include it;
+  agent-stats counts a missing field as a first-pass miss
+- `classification`: the ticket's classification from pipeline context
+  (ticket-pickup / swarm); `null` on direct invocations — always include the key
 - `files_changed`: count of files modified in this implementation
 - `duration_seconds`: approximate wall-clock from first test write to verification complete
 

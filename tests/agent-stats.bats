@@ -169,6 +169,35 @@ _seed_splits() {
     [[ "$output" == *"## Health Flags"* ]]
 }
 
+@test "missing first_pass derives from tests_passed and ci_fix_attempts" {
+    local now
+    now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    mkdir -p "$TASKS_DIR/legacy"
+    # Legacy events without a first_pass field: green run derives true,
+    # failed-tests run derives false.
+    cat > "$TASKS_DIR/legacy/metrics.jsonl" <<EOF
+{"timestamp":"$now","event_type":"pipeline_complete","agent":"cyrus-tdd-engineer","project":"legacy","ticket":"PROJ-1","data":{"tests_passed":true,"ci_fix_attempts":0,"duration_seconds":100}}
+{"timestamp":"$now","event_type":"pipeline_complete","agent":"cyrus-tdd-engineer","project":"legacy","ticket":"PROJ-2","data":{"tests_passed":false,"ci_fix_attempts":0,"duration_seconds":100}}
+{"timestamp":"$now","event_type":"pipeline_complete","agent":"cyrus-tdd-engineer","project":"legacy","ticket":"PROJ-3","data":{"tests_passed":true,"ci_fix_attempts":2,"duration_seconds":100}}
+EOF
+    run /bin/bash "$STATS" --project legacy
+    [ "$status" -eq 0 ] &&
+        [[ "$output" == *"First-pass success:     1 / 3"* ]] &&
+        [[ "$output" == *"cyrus-tdd-engineer"*"3 runs, 1/3 first-pass"* ]]
+}
+
+@test "explicit first_pass false is not overridden by derivation" {
+    local now
+    now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    mkdir -p "$TASKS_DIR/explicit"
+    cat > "$TASKS_DIR/explicit/metrics.jsonl" <<EOF
+{"timestamp":"$now","event_type":"pipeline_complete","agent":"cyrus-tdd-engineer","project":"explicit","ticket":"PROJ-1","data":{"first_pass":false,"tests_passed":true,"ci_fix_attempts":0,"duration_seconds":100}}
+EOF
+    run /bin/bash "$STATS" --project explicit
+    [ "$status" -eq 0 ] &&
+        [[ "$output" == *"First-pass success:     0 / 1"* ]]
+}
+
 @test "--project filter scopes to one project" {
     _seed_project "alpha"
     _seed_project "beta"
@@ -276,6 +305,35 @@ _seed_splits() {
     [ "$status" -eq 0 ]
     [[ "$output" != *"exceed pipeline count"* ]]
     [[ "$output" != *"unparseable"* ]]
+}
+
+# ---------------------------------------------------------------------------
+# Health gate: contradictory explicit first_pass vs tests_passed
+# ---------------------------------------------------------------------------
+# tests_failed counts .data.tests_passed == false directly, while first-pass
+# success goes through the fp derivation (which trusts an explicit
+# first_pass). A malformed event with first_pass:true and tests_passed:false
+# lands in BOTH buckets with no signal that the emit data disagrees with
+# itself — this flag surfaces that contradiction explicitly.
+
+@test "contradictory first_pass true with tests_passed false raises a health flag" {
+    local now
+    now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    mkdir -p "$TASKS_DIR/contradict"
+    cat > "$TASKS_DIR/contradict/metrics.jsonl" <<EOF
+{"timestamp":"$now","event_type":"pipeline_complete","agent":"cyrus-tdd-engineer","project":"contradict","ticket":"PROJ-1","data":{"first_pass":true,"tests_passed":false,"ci_fix_attempts":0,"duration_seconds":100}}
+EOF
+    run /bin/bash "$STATS" --project contradict
+    [ "$status" -eq 0 ] &&
+        [[ "$output" == *"1 pipeline_complete event(s) have first_pass: true but tests_passed: false"* ]] &&
+        [[ "$output" == *"contradictory emit data"* ]]
+}
+
+@test "no contradictory first_pass/tests_passed events: no contradiction flag" {
+    _seed_pipelines "proj" 3 "0"
+    run /bin/bash "$STATS"
+    [ "$status" -eq 0 ] &&
+        [[ "$output" != *"contradictory emit data"* ]]
 }
 
 # ---------------------------------------------------------------------------
