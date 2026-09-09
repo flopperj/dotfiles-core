@@ -163,9 +163,11 @@ payload for Step 5.
 **Risk to monitor:** if `/to-prd` re-asks decisions that are already
 locked (despite the preamble), surface that as a blocker — the preamble
 mechanism is failing. The fallback is to re-author `/to-prd` to accept an
-explicit `locked_decisions` argument. Tracked under obligation
-`ob-20260502-001` (`forge-preamble-mechanism-check`), which fires monthly
-to prompt a review of recent `/forge` sessions.
+explicit `locked_decisions` argument.
+<!-- BEGIN CORE-ONLY -->
+Tracked under obligation `ob-20260502-001` (`forge-preamble-mechanism-check`),
+which fires monthly to prompt a review of recent `/forge` sessions.
+<!-- END CORE-ONLY -->
 
 ## Step 4: Gate 2 — challenge with Aristotle?
 

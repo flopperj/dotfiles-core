@@ -41,8 +41,15 @@ else
     done
 fi
 
+# An empty resolved list (no bundle skill dirs found, or an explicit empty
+# argument list) is a usage error, not a vacuous "clean" pass.
+if [ -z "$(echo "$CHECK_SKILLS" | tr -d '[:space:]')" ]; then
+    echo "check-portable-refs: no skills to check in $SKILLS_DIR" >&2
+    exit 1
+fi
+
 # shellcheck disable=SC2088 # literal tilde is the pattern we search for
-FORBIDDEN='~/\.claude/_shared|~/\.claude/evals|~/\.claude/workflows|~/\.claude/skills/|\.\./\.\./agents/|\.\./\.\./workflows/|\.\./skills/|overlay-context|\.cursor/hooks\.json|parity-ignore|managed via dotfiles|CORE-ONLY|PORTABLE-ONLY|metrics-emit'
+FORBIDDEN='~/\.claude/_shared|~/\.claude/evals|~/\.claude/workflows|~/\.claude/skills/|\.\./\.\./agents/|\.\./\.\./workflows/|\.\./skills/|overlay-context|\.cursor/hooks\.json|parity-ignore|managed via dotfiles|CORE-ONLY|PORTABLE-ONLY|metrics-emit|ob-[0-9]'
 
 # Slash tokens that are paths or prose, never skill names.
 ALLOW_SLASH='skill|plans|prds|archive|dev|tmp|llms|repos|metrics|wrong|api|users|app|data|src|test|tests|lib|bin|etc|usr|home|var|opt|Users|claude|cursor|agents|skills|workflows|schemas|references|scripts|or|and|to|from|the|a|an|in|on|by|per|of|with|then|else|ip|i|r|p|x|n|y|g|s|d|c|e|f|dist|node_modules|build|docs|components|styles|pages|hooks|utils|mv|rm'
@@ -71,17 +78,45 @@ for skill in $CHECK_SKILLS; do
             fail=1
         fi
 
-        # 2. slash tokens must be bundle skills unless the optional paragraph is present
-        has_optional=0
-        grep -qE 'Optional external skills|Skills are optional' "$md" && has_optional=1
+        # 1b. the unqualified "Follow CLAUDE.md error handling defaults"
+        # phrase must not survive export un-rewritten (grep lacks
+        # lookahead, so check the qualified form's absence directly on any
+        # line matching the bare phrase).
+        while IFS=: read -r lineno line; do
+            case "$line" in
+                *"defaults when defined"*) ;;  # qualified — fine
+                *) _violation "$rel: unqualified phrase (line $lineno) — Follow CLAUDE.md error handling defaults"; fail=1 ;;
+            esac
+        done < <(grep -noE 'Follow CLAUDE\.md error.handling defaults[^,.]*' "$md" || true)
+
+        # 2. slash tokens must be bundle skills, or the exact token (or its
+        # namespace wildcard, e.g. `/mc-*`) must literally appear in an
+        # "Optional external skills" / "Skills are optional" paragraph.
+        # Extract that paragraph's text once so the excuse can only match
+        # what it actually names, not merely that such a paragraph exists.
+        optional_para="$(awk '
+            /Optional external skills|Skills are optional/ { p = 1 }
+            p { print }
+            p && /^[[:space:]]*$/ && NR > 1 && seen { exit }
+            p { seen = 1 }
+        ' "$md")"
         # shellcheck disable=SC2016 # single quotes are literal grep alternatives, not expansions
         for tok in $(grep -oE '(^|[ (`"'"'"'])/[a-z][a-z0-9-]+' "$md" | sed -E 's|^[^/]*/||' | sort -u); do
             echo "$tok" | grep -qE "^($ALLOW_SLASH)$" && continue
             case "$tok" in *-) continue ;; esac   # wildcard like /create-* in prose
-            echo "$tok" | grep -qE '^(pr-create-from-commits|review-context|swarm-retro|smart-compact|briefing|create-[a-z-]+|mc-[a-z-]+|google-[a-z-]+|mermaid-diagrams|code-review|handoff)$' && optional_kind=1 || optional_kind=0
             if _is_bundle_skill "$tok"; then continue; fi
-            if [ "$optional_kind" -eq 1 ] && [ "$has_optional" -eq 1 ]; then continue; fi
-            _violation "$rel: unresolved skill reference /$tok (not in bundle; optional paragraph $( [ "$has_optional" -eq 1 ] && echo present || echo absent ))"
+            excused=0
+            if [ -n "$optional_para" ]; then
+                # exact token named literally
+                echo "$optional_para" | grep -qF -- "/$tok" && excused=1
+                # or its namespace wildcard, e.g. token mc-lint -> /mc-*
+                ns="${tok%%-*}"
+                if [ "$excused" -eq 0 ] && [ "$ns" != "$tok" ]; then
+                    echo "$optional_para" | grep -qF -- "/$ns-*" && excused=1
+                fi
+            fi
+            if [ "$excused" -eq 1 ]; then continue; fi
+            _violation "$rel: unresolved skill reference /$tok (not in bundle; not named or wildcard-covered in the optional paragraph)"
         done
 
         # 3. relative markdown links must resolve

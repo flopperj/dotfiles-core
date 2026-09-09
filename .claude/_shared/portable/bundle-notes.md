@@ -4,17 +4,21 @@ This skill is one of a bundle exported from the maintainer's canonical
 `dotfiles-core` repository. Read these notes before following the rest of the
 document.
 
-- **Sibling skills.** Skills named in this document that belong to the bundle
-  (`aristotle-deconstructor`, `optimus-planner`, `cyrus-tdd-engineer`, `forge`,
-  `grill-me`, `to-prd`, `code-auditor`, `scout-reviewer`, `ranger-reviewer`)
-  are installed as siblings of this directory. If one is named but missing
-  from your available-skills list, stop and tell the user to install it from
-  the same skills repository this bundle came from. If the host has no Skill
-  tool, read `SKILL_DIR/../<skill>/SKILL.md` and follow it inline.
+{{DEPS}}
+
+- **Sibling dependencies.** Skills listed above (if any) that belong to the
+  bundle are installed as siblings of this directory. If one is named but
+  missing from your available-skills list, stop and tell the user to install
+  it from the same skills repository this bundle came from. If the host has
+  no Skill tool, read `SKILL_DIR/../<skill>/SKILL.md` and follow it inline.
+  **Resolving `SKILL_DIR`:** it is the path shown as "Base directory for this skill" when this skill loaded; if the host does not show one, it is the
+  directory containing this `SKILL.md` (e.g. `.claude/skills/<name>/` on a
+  project install, `~/.agents/skills/<name>/` on a global install).
 - **Optional external skills.** Any other `/skill` named here
   (`/pr-create-from-commits`, `/review-context`, `/swarm-retro`,
   `/smart-compact`, `/create-*`, `/mc-*`, `/google-*`, `/mermaid-diagrams`,
-  the `frontend-design` plugin) is optional and not part of this bundle. Use
+  `/code-review`, the `frontend-design` plugin) is optional and not part of
+  this bundle. Use
   it only if it appears in your available-skills list; otherwise perform the
   action directly. For PR creation that means `gh pr create --draft`,
   honouring the repository's PR template.

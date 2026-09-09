@@ -15,6 +15,31 @@
 
 load 'test_helper'
 
+# setup_file/teardown_file override the test_helper versions: same exports,
+# plus a snapshot of the real tree so teardown_file can prove the suite
+# mutated nothing. Every render happens into $SCRATCH or a scratch core copy
+# (see _scratch_core), so this guard should never fire — it exists to keep
+# that invariant tested, matching the pattern in reviewer-shared-blocks.bats.
+setup_file() {
+    CORE_DIR="$(realpath "$BATS_TEST_DIRNAME/..")"
+    export CORE_DIR
+    DOTFILES_DIR="$CORE_DIR"
+    export DOTFILES_DIR
+    git -C "$DOTFILES_DIR" status --porcelain > "$BATS_FILE_TMPDIR/tree-before" \
+        && git -C "$DOTFILES_DIR" diff > "$BATS_FILE_TMPDIR/diff-before"
+}
+
+teardown_file() {
+    git -C "$DOTFILES_DIR" status --porcelain > "$BATS_FILE_TMPDIR/tree-after" \
+        && git -C "$DOTFILES_DIR" diff > "$BATS_FILE_TMPDIR/diff-after" \
+        && cmp -s "$BATS_FILE_TMPDIR/tree-before" "$BATS_FILE_TMPDIR/tree-after" \
+        && cmp -s "$BATS_FILE_TMPDIR/diff-before" "$BATS_FILE_TMPDIR/diff-after" || {
+        echo "export-skills.bats mutated the real working tree:" >&2
+        diff "$BATS_FILE_TMPDIR/tree-before" "$BATS_FILE_TMPDIR/tree-after" >&2 || true
+        return 1
+    }
+}
+
 EXPORT="$DOTFILES_DIR/scripts/export-skills.sh"
 REFS="$DOTFILES_DIR/scripts/check-portable-refs.sh"
 INSTALL_TPL="$DOTFILES_DIR/scripts/templates/install-agent.sh"
@@ -30,6 +55,19 @@ _render_target() {
     printf -- '---\nname: hand-written-skill\ndescription: untouched\n---\n' > "$TARGET/skills/hand-written-skill/SKILL.md"
     printf '# Team Skills\n\nIntro prose kept verbatim.\n' > "$TARGET/README.md"
     bash "$EXPORT" "$TARGET" --owner-team test-team --owner-slack '#test-chan' "$@"
+}
+
+# Build a scratch copy of the subset of dotfiles-core that export-skills.sh
+# reads from (skills, agents, workflows, _shared/portable, turn-cap doc), so a
+# test can mutate a source file (e.g. inject an unterminated CORE-ONLY marker)
+# without touching the real canonical tree. Sets SCRATCH_CORE.
+_scratch_core() {
+    SCRATCH_CORE="$SCRATCH/core"
+    mkdir -p "$SCRATCH_CORE/.claude"
+    cp -R "$DOTFILES_DIR/.claude/skills" "$SCRATCH_CORE/.claude/skills"
+    cp -R "$DOTFILES_DIR/.claude/agents" "$SCRATCH_CORE/.claude/agents"
+    cp -R "$DOTFILES_DIR/.claude/workflows" "$SCRATCH_CORE/.claude/workflows"
+    cp -R "$DOTFILES_DIR/.claude/_shared" "$SCRATCH_CORE/.claude/_shared"
 }
 
 # --- CLI surface ------------------------------------------------------------
@@ -48,6 +86,33 @@ _render_target() {
     [ -x "$REFS" ]
     run bash "$REFS"
     [ "$status" -eq 2 ]
+}
+
+@test "render: 'managed via dotfiles' rewrite does not eat 'dotfiles-core'" {
+    _scratch_core
+    printf '\nThis skill is managed via dotfiles-core tooling.\nA separate note is managed via dotfiles, nothing else.\n' \
+        >> "$SCRATCH_CORE/.claude/skills/to-prd/SKILL.md"
+    TARGET="$SCRATCH/target-mvd"; mkdir -p "$TARGET"
+    EXPORT_SKILLS_CORE_DIR="$SCRATCH_CORE" bash "$EXPORT" "$TARGET"
+    grep -q 'managed via dotfiles-core tooling' "$TARGET/skills/to-prd/SKILL.md"
+    grep -q 'is if present, nothing else' "$TARGET/skills/to-prd/SKILL.md"
+}
+
+@test "export-skills: unterminated CORE-ONLY marker errors instead of silently truncating" {
+    _scratch_core
+    printf '<!-- BEGIN CORE-ONLY -->\nnever terminated\n' >> "$SCRATCH_CORE/.claude/skills/to-prd/SKILL.md"
+    TARGET="$SCRATCH/target-bad"; mkdir -p "$TARGET"
+    run env EXPORT_SKILLS_CORE_DIR="$SCRATCH_CORE" bash "$EXPORT" "$TARGET"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"CORE-ONLY"* ]]
+}
+
+@test "check-portable-refs: empty resolved skill list errors instead of reporting clean" {
+    mkdir -p "$SCRATCH/empty-dir"
+    run bash "$REFS" "$SCRATCH/empty-dir"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"no skills to check"* ]]
+    [[ "$output" != *"clean (0 skills)"* ]]
 }
 
 # --- Render shape -------------------------------------------------------------
@@ -95,6 +160,30 @@ _render_target() {
     ! grep -rq 'parity-ignore' "$TARGET/skills"
 }
 
+@test "export-skills: _insert_before_first_h2 aborts when a skill's SKILL.md has no ## heading" {
+    _scratch_core
+    printf -- '---\nname: to-prd\ndescription: x\nuser-invocable: true\n---\n\nNo H2 heading anywhere in this file, only prose.\n' \
+        > "$SCRATCH_CORE/.claude/skills/to-prd/SKILL.md"
+    TARGET="$SCRATCH/target-noh2"; mkdir -p "$TARGET"
+    run env EXPORT_SKILLS_CORE_DIR="$SCRATCH_CORE" bash "$EXPORT" "$TARGET"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"no ## heading found"* ]]
+}
+
+@test "check: README table drift is detected even when every skills/ dir is up to date" {
+    _render_target
+    run bash "$EXPORT" "$TARGET" --owner-team test-team --owner-slack '#test-chan' --check
+    [ "$status" -eq 0 ]
+
+    # hand-edited prose outside the sentinels is preserved, not drift (see the
+    # "hand-written content preserved on re-run" README test) — but a
+    # hand-edit *inside* the generated table is real drift.
+    sed -i.bak 's/^| `forge` |.*$/| `forge` | tampered row |/' "$TARGET/README.md" && rm -f "$TARGET/README.md.bak"
+    run bash "$EXPORT" "$TARGET" --owner-team test-team --owner-slack '#test-chan' --check
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"DRIFT  README.md"* ]]
+}
+
 # --- Idempotency / --check -----------------------------------------------------
 
 @test "check: clean after render; drift after mutation; drift when a skill dir is missing" {
@@ -109,6 +198,14 @@ _render_target() {
     rm -rf "$TARGET/skills/to-prd"
     run bash "$EXPORT" "$TARGET" --owner-team test-team --owner-slack '#test-chan' --check
     [ "$status" -eq 1 ] && [[ "$output" == *"skills/to-prd — missing"* ]]
+}
+
+@test "check: executable-bit drift on shipped scripts is detected" {
+    _render_target
+    chmod -x "$TARGET/skills/optimus-planner/scripts/install-agent.sh"
+    run bash "$EXPORT" "$TARGET" --owner-team test-team --owner-slack '#test-chan' --check
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"skills/optimus-planner/scripts/install-agent.sh"* ]]
 }
 
 @test "check: metadata flags are part of the rendered state (different flags = drift)" {
@@ -141,6 +238,39 @@ _render_target() {
         && [[ "$output" == *"unresolved skill reference /not-a-bundle-skill"* ]]
 }
 
+@test "portable refs: checker catches a broken relative markdown link" {
+    _render_target
+    printf '\nSee [missing doc](references/does-not-exist.md) for details.\n' >> "$TARGET/skills/to-prd/SKILL.md"
+    run bash "$REFS" "$TARGET/skills" to-prd
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"broken relative link"* ]]
+    [[ "$output" == *"does-not-exist.md"* ]]
+}
+
+@test "portable refs: checker catches a nested SKILL.md (phantom skill registration)" {
+    _render_target
+    mkdir -p "$TARGET/skills/to-prd/nested/SKILL.md.dir"
+    printf -- '---\nname: nested\ndescription: x\n---\n' > "$TARGET/skills/to-prd/nested/SKILL.md"
+    run bash "$REFS" "$TARGET/skills" to-prd
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"2 SKILL.md files"* ]]
+}
+
+@test "portable refs: optional-paragraph excuse requires the exact token or its namespace wildcard, not mere paragraph presence" {
+    mkdir -p "$SCRATCH/refs/to-prd"
+    printf -- '---\nname: to-prd\ndescription: x\n---\n\nOptional external skills: /pr-create-from-commits is optional.\n\nAlso try /mc-totally-made-up.\n' \
+        > "$SCRATCH/refs/to-prd/SKILL.md"
+    run bash "$REFS" "$SCRATCH/refs" to-prd
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"unresolved skill reference /mc-totally-made-up"* ]]
+
+    mkdir -p "$SCRATCH/refs2/mc-lint"
+    printf -- '---\nname: mc-lint\ndescription: x\n---\n\nOptional external skills: /mc-* skills are optional.\n\nAlso try /mc-lint.\n' \
+        > "$SCRATCH/refs2/mc-lint/SKILL.md"
+    run bash "$REFS" "$SCRATCH/refs2" mc-lint
+    [ "$status" -eq 0 ]
+}
+
 @test "portable refs: no export markers, metrics plumbing, or Cursor hook notes survive" {
     _render_target
     ! grep -rqE 'CORE-ONLY|PORTABLE-ONLY|metrics-emit|emit-metric\.sh|\.cursor/hooks\.json|managed via dotfiles|not a dotfiles skill' "$TARGET/skills"
@@ -148,6 +278,26 @@ _render_target() {
     grep -q 'No editor hook is required' "$TARGET/skills/cyrus-tdd-engineer/SKILL.md"
     ! grep -q 'Metrics emit (direct invocations too)' "$TARGET/skills/optimus-planner/SKILL.md"
     ! grep -q '^## Metrics Emit' "$TARGET/skills/cyrus-tdd-engineer/agent.md"
+    # the "managed via dotfiles" rewrite must not eat "dotfiles-core"
+    grep -q 'dotfiles-core' "$TARGET/skills/forge/SKILL.md"
+}
+
+@test "agent.md: every rendered agent emits the <<task-complete>> sentinel instruction (portable consumers have no maintainer AGENTS.md)" {
+    _render_target
+    for s in $AGENT_SET; do
+        f="$TARGET/skills/$s/agent.md"
+        grep -q '<<task-complete>>' "$f" || { echo "no sentinel instruction in $s/agent.md"; return 1; }
+    done
+}
+
+@test "turn-cap doc and cyrus SKILL.md state Cyrus's actual maxTurns (300), not the stale 100" {
+    _render_target > /dev/null
+    ! grep -q 'Cyrus 100' "$DOTFILES_DIR/.claude/_shared/agent-turn-cap-warning.md"
+    grep -q 'Cyrus 300' "$DOTFILES_DIR/.claude/_shared/agent-turn-cap-warning.md"
+    ! grep -q 'maxTurns. (100)' "$DOTFILES_DIR/.claude/skills/cyrus-tdd-engineer/SKILL.md"
+    grep -q 'maxTurns. (300)' "$DOTFILES_DIR/.claude/skills/cyrus-tdd-engineer/SKILL.md"
+    ! grep -q 'Cyrus 100' "$TARGET/skills/cyrus-tdd-engineer/references/agent-turn-cap-warning.md"
+    grep -q 'Cyrus 300' "$TARGET/skills/cyrus-tdd-engineer/references/agent-turn-cap-warning.md"
 }
 
 @test "shared assets: turn-cap doc is duplicated (transformed) into every citing skill; links resolve" {
@@ -165,7 +315,13 @@ _render_target() {
 @test "shipped assets: workflow, schemas, heuristics byte-identical to core; scripts executable" {
     _render_target
     cmp "$DOTFILES_DIR/.claude/workflows/code-auditor-score.js" "$TARGET/skills/code-auditor/workflows/code-auditor-score.js"
-    cmp "$DOTFILES_DIR/.claude/workflows/schemas/auditor-composite.json" "$TARGET/skills/code-auditor/references/schemas/auditor-composite.json"
+    # auditor-composite.json's $comment cites the core-only path
+    # `.claude/workflows/code-auditor-score.js`; the rendered copy has that
+    # sed-rewritten to the shipped-alongside path, so compare after applying
+    # the same rewrite rather than expecting byte-identity.
+    sed 's|\.claude/workflows/code-auditor-score\.js|workflows/code-auditor-score.js|' \
+        "$DOTFILES_DIR/.claude/workflows/schemas/auditor-composite.json" \
+        | cmp - "$TARGET/skills/code-auditor/references/schemas/auditor-composite.json"
     cmp "$DOTFILES_DIR/.claude/workflows/schemas/aristotle-to-optimus.json" "$TARGET/skills/aristotle-deconstructor/references/schemas/aristotle-to-optimus.json"
     cmp "$DOTFILES_DIR/.claude/workflows/schemas/optimus-to-cyrus.json" "$TARGET/skills/aristotle-deconstructor/references/schemas/optimus-to-cyrus.json"
     cmp "$DOTFILES_DIR/.claude/skills/code-auditor/references/review-heuristics.md" "$TARGET/skills/code-auditor/references/review-heuristics.md"
@@ -174,6 +330,23 @@ _render_target() {
     done
     # forge links to the sibling copy of the schemas, which exists post-render
     grep -q '](../aristotle-deconstructor/references/schemas/optimus-to-cyrus.json)' "$TARGET/skills/forge/SKILL.md"
+}
+
+@test "rendered auditor-composite.json: \$comment no longer cites the core-only .claude/workflows/ path" {
+    _render_target
+    ! grep -q '(\.claude/workflows/code-auditor-score\.js)' "$TARGET/skills/code-auditor/references/schemas/auditor-composite.json"
+    grep -q '(workflows/code-auditor-score\.js)' "$TARGET/skills/code-auditor/references/schemas/auditor-composite.json"
+}
+
+@test "shipped assets: review-heuristics.md is duplicated into every skill whose agent cites it, not just code-auditor" {
+    _render_target
+    for s in cyrus-tdd-engineer scout-reviewer ranger-reviewer; do
+        f="$TARGET/skills/$s/references/review-heuristics.md"
+        [ -f "$f" ] || { echo "missing review-heuristics.md in $s"; return 1; }
+        cmp "$DOTFILES_DIR/.claude/skills/code-auditor/references/review-heuristics.md" "$f" || return 1
+        grep -q 'references/review-heuristics.md' "$TARGET/skills/$s/agent.md" \
+            || { echo "$s agent.md does not cite the local copy"; return 1; }
+    done
 }
 
 @test "code-auditor: Workflow seam uses scriptPath, keeps the legacy fallback, notes hosts without the tool" {
@@ -228,6 +401,42 @@ _render_target() {
     [ "$first_h2" = "## Portable bundle notes" ]
 }
 
+@test "SKILL_DIR resolution is stated explicitly and user-facing install snippets use <SKILL_DIR>" {
+    _render_target
+    for s in $AGENT_SET; do
+        f="$TARGET/skills/$s/SKILL.md"
+        grep -q 'Base directory for this skill' "$f" \
+            || { echo "no SKILL_DIR resolution instruction in $s/SKILL.md"; return 1; }
+        grep -q '<SKILL_DIR>/scripts/install-agent.sh' "$f" \
+            || { echo "install snippet not using <SKILL_DIR> in $s/SKILL.md"; return 1; }
+        grep -q 'substitute the resolved path' "$f" \
+            || { echo "no substitution note in $s/SKILL.md"; return 1; }
+    done
+    for s in forge grill-me to-prd code-auditor; do
+        f="$TARGET/skills/$s/SKILL.md"
+        grep -q 'Base directory for this skill' "$f" \
+            || { echo "no SKILL_DIR resolution instruction in $s/SKILL.md (bundle-notes)"; return 1; }
+    done
+}
+
+@test "fallback mode: launch.md instructs enforcing disallowedTools; agent-notes.md carries the enforcement bullet; the harness-blocked phrase is rewritten" {
+    _render_target
+    for s in $AGENT_SET; do
+        f="$TARGET/skills/$s/SKILL.md"
+        grep -q 'disallowedTools' "$f" && grep -q 'Treat them as unavailable' "$f" \
+            || { echo "no fallback tool-restriction instruction in $s/SKILL.md"; return 1; }
+        af="$TARGET/skills/$s/agent.md"
+        grep -q 'Tool restrictions in this file.s frontmatter' "$af" \
+            || { echo "no disallowedTools enforcement bullet in $s/agent.md"; return 1; }
+    done
+    for s in scout-reviewer ranger-reviewer; do
+        af="$TARGET/skills/$s/agent.md"
+        grep -q 'blocked by .disallowedTools. when registered' "$af" \
+            || { echo "harness-blocked phrase not rewritten in $s/agent.md"; return 1; }
+        ! grep -q 'blocked by harness' "$af" || { echo "old phrase survived in $s/agent.md"; return 1; }
+    done
+}
+
 @test "optional context: personal-file citations are marked, PR-creation fallback stated" {
     _render_target
     grep -q '`~/.claude/DoD.md` (if present' "$TARGET/skills/scout-reviewer/agent.md"
@@ -241,7 +450,70 @@ _render_target() {
     ! grep -rq 'ask me to confirm before saving it' "$TARGET/skills"
 }
 
+@test "optional context: the two-line 'error handling'/'defaults.' wrap is joined and qualified, no unqualified phrase survives" {
+    _render_target
+    for s in scout-reviewer ranger-reviewer; do
+        f="$TARGET/skills/$s/agent.md"
+        grep -q 'Follow CLAUDE.md error-handling defaults when defined (otherwise: surface the failure and stop, never retry silently)' "$f" \
+            || { echo "qualified phrase missing in $s"; return 1; }
+    done
+    run bash "$REFS" "$TARGET/skills" $EXPORT_SET
+    [ "$status" -eq 0 ]
+}
+
+@test "portable refs: checker flags an unqualified 'Follow CLAUDE.md error handling defaults' phrase" {
+    mkdir -p "$SCRATCH/unq/to-prd"
+    printf -- '---\nname: to-prd\ndescription: x\n---\n\nFollow CLAUDE.md error handling defaults for everything.\n' \
+        > "$SCRATCH/unq/to-prd/SKILL.md"
+    run bash "$REFS" "$SCRATCH/unq" to-prd
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"unqualified phrase"* ]]
+}
+
 # --- README -------------------------------------------------------------------
+
+@test "bundle-notes: per-skill dependency declarations replace the generic Sibling-skills bullet" {
+    _render_target
+    f="$TARGET/skills/forge/SKILL.md"
+    grep -q '^\*\*Requires (install alongside):\*\* `grill-me`, `to-prd`, `aristotle-deconstructor`, `optimus-planner`, `cyrus-tdd-engineer`$' "$f" \
+        || { echo "forge deps line wrong or missing"; return 1; }
+
+    f="$TARGET/skills/to-prd/SKILL.md"
+    grep -q '^\*\*Requires:\*\* none — this skill is standalone$' "$f" \
+        || { echo "to-prd standalone line wrong or missing"; return 1; }
+
+    f="$TARGET/skills/aristotle-deconstructor/SKILL.md"
+    grep -q '^\*\*Requires (install alongside):\*\* `optimus-planner`, `cyrus-tdd-engineer`$' "$f" \
+        || { echo "aristotle deps line wrong or missing"; return 1; }
+
+    f="$TARGET/skills/cyrus-tdd-engineer/SKILL.md"
+    grep -q '^\*\*Requires (install alongside):\*\* `code-auditor`, `scout-reviewer`, `ranger-reviewer`$' "$f" \
+        || { echo "cyrus deps line wrong or missing"; return 1; }
+
+    f="$TARGET/skills/code-auditor/SKILL.md"
+    grep -q '^\*\*Requires (install alongside):\*\* `scout-reviewer`, `ranger-reviewer`$' "$f" \
+        || { echo "code-auditor deps line wrong or missing"; return 1; }
+
+    f="$TARGET/skills/scout-reviewer/SKILL.md"
+    grep -q '^\*\*Requires (install alongside):\*\* `ranger-reviewer`, `cyrus-tdd-engineer`$' "$f" \
+        || { echo "scout deps line wrong or missing"; return 1; }
+
+    f="$TARGET/skills/ranger-reviewer/SKILL.md"
+    grep -q '^\*\*Requires (install alongside):\*\* `scout-reviewer`, `cyrus-tdd-engineer`$' "$f" \
+        || { echo "ranger deps line wrong or missing"; return 1; }
+
+    f="$TARGET/skills/optimus-planner/SKILL.md"
+    grep -q '^\*\*Requires (install alongside):\*\* `cyrus-tdd-engineer`, `aristotle-deconstructor`$' "$f" \
+        || { echo "optimus deps line wrong or missing"; return 1; }
+
+    f="$TARGET/skills/grill-me/SKILL.md"
+    grep -q '^\*\*Requires (install alongside):\*\* `to-prd`, `scout-reviewer`, `ranger-reviewer`$' "$f" \
+        || { echo "grill-me deps line wrong or missing"; return 1; }
+
+    # stopping-with-install-hint sentence is retained
+    grep -q 'stop and tell the user to install' "$TARGET/skills/forge/SKILL.md"
+    ! grep -rq '\*\*Sibling skills\.\*\*' "$TARGET/skills"
+}
 
 @test "README: sentinel block appended on first run with 9 rows; hand-written content preserved on re-run" {
     _render_target
@@ -296,4 +568,52 @@ _render_target() {
     cp "$INSTALL_TPL" "$SCRATCH/lonely/scripts/install-agent.sh"
     run bash "$SCRATCH/lonely/scripts/install-agent.sh"
     [ "$status" -eq 1 ] && [[ "$output" == *"no agent.md"* ]]
+}
+
+@test "install-agent.sh: fails clearly when name: is missing from agent.md frontmatter" {
+    export HOME="$SCRATCH/home"; mkdir -p "$HOME"
+    mkdir -p "$SCRATCH/nameless/scripts"
+    printf -- '---\ndescription: x\n---\nbody\n' > "$SCRATCH/nameless/agent.md"
+    cp "$INSTALL_TPL" "$SCRATCH/nameless/scripts/install-agent.sh"
+    run bash "$SCRATCH/nameless/scripts/install-agent.sh"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"no name:"* ]]
+}
+
+@test "install-agent.sh: rejects a path-traversal name and trims/quote-strips a valid one" {
+    export HOME="$SCRATCH/home"; mkdir -p "$HOME"
+
+    mkdir -p "$SCRATCH/pwned/scripts"
+    printf -- '---\nname: ../../pwned\ndescription: x\n---\nbody\n' > "$SCRATCH/pwned/agent.md"
+    cp "$INSTALL_TPL" "$SCRATCH/pwned/scripts/install-agent.sh"
+    run bash "$SCRATCH/pwned/scripts/install-agent.sh"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"invalid"* ]] || [[ "$output" == *"unsafe"* ]]
+    [ ! -e "$HOME/.claude/agents/pwned.md" ]
+    [ ! -e "$SCRATCH/home/.claude/pwned" ]
+
+    mkdir -p "$SCRATCH/trimmed/scripts"
+    printf -- '---\nname:   "my-agent"   \ndescription: x\n---\nbody\n' > "$SCRATCH/trimmed/agent.md"
+    cp "$INSTALL_TPL" "$SCRATCH/trimmed/scripts/install-agent.sh"
+    run bash "$SCRATCH/trimmed/scripts/install-agent.sh"
+    [ "$status" -eq 0 ]
+    [ -f "$HOME/.claude/agents/my-agent.md" ]
+}
+
+@test "optimus agent.md: the mandatory memory step is qualified for fallback runs" {
+    _render_target
+    grep -q '^\*\*Step C — Check agent memory (registered-subagent mode only)\.\*\*' "$TARGET/skills/optimus-planner/agent.md"
+    # the agent'"'"'s Persistent Memory section itself is left verbatim
+    grep -q 'persistent memory directory at `~/.claude/agent-memory/optimus-planner/`' "$TARGET/skills/optimus-planner/agent.md"
+}
+
+@test "install-agent.sh --project: resolves the git root from a subdirectory" {
+    _render_target
+    export HOME="$SCRATCH/home"; mkdir -p "$HOME"
+    mkdir -p "$SCRATCH/repo/deep/er" && git -C "$SCRATCH/repo" init -q
+    cd "$SCRATCH/repo/deep/er"
+    run bash "$TARGET/skills/optimus-planner/scripts/install-agent.sh" --project
+    [ "$status" -eq 0 ]
+    [ -f "$SCRATCH/repo/.claude/agents/optimus-planner.md" ]
+    [ ! -e "$SCRATCH/repo/deep/er/.claude" ]
 }

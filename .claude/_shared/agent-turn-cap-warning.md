@@ -1,6 +1,6 @@
 # Agent Turn-Cap Truncation Handling
 
-The five reasoning agents have `maxTurns` set in their frontmatter — Aristotle 20, Optimus 30, Cyrus 100, Ranger 40, Scout 35. When the harness terminates a run at the cap, the agent's final message returns without any explicit signal, so the pipeline can silently consume partial output.
+The five reasoning agents have `maxTurns` set in their frontmatter — Aristotle 20, Optimus 30, Cyrus 300, Ranger 40, Scout 35. When the harness terminates a run at the cap, the agent's final message returns without any explicit signal, so the pipeline can silently consume partial output.
 
 ## Scope — prose-orchestrated calls only
 

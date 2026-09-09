@@ -20,6 +20,13 @@
 #   --bundle <value>      metadata.bundle      (default: reasoning-pipeline)
 #   -h, --help            Show this help.
 #
+# Environment:
+#   EXPORT_SKILLS_CORE_DIR   Override the canonical dotfiles-core root this
+#                            script reads skills/agents/workflows/_shared
+#                            assets from (default: the repo containing this
+#                            script). Tests use this to render from a scratch
+#                            copy of the repo instead of the real tree.
+#
 # Transforms applied to every rendered markdown file:
 #   1. `<!-- BEGIN CORE-ONLY -->` … `<!-- END CORE-ONLY -->` blocks are dropped.
 #   2. `<!-- PORTABLE-ONLY` … `-->` wrappers are stripped so their body is live.
@@ -34,7 +41,11 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CORE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+# EXPORT_SKILLS_CORE_DIR overrides the canonical dotfiles-core root this
+# script reads skills/agents/workflows/_shared assets from. Tests use it to
+# point at a scratch copy of the repo so a fixture (e.g. an unterminated
+# CORE-ONLY marker) never touches the real canonical tree.
+CORE_DIR="${EXPORT_SKILLS_CORE_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 # shellcheck source=_lib.sh
 source "$SCRIPT_DIR/_lib.sh"
 
@@ -129,7 +140,7 @@ _needs_turncap() {
 # Does the skill (SKILL.md or agent) cite review-heuristics.md?
 _needs_heuristics() {
     case "$1" in
-        code-auditor) return 0 ;;
+        code-auditor|cyrus-tdd-engineer|scout-reviewer|ranger-reviewer) return 0 ;;
         *) return 1 ;;
     esac
 }
@@ -167,11 +178,46 @@ _mcp_for() {
     esac
 }
 
+# Space-separated sibling-skill dependencies (install-alongside list), in the
+# order they should render. Empty means standalone.
+_deps_for() {
+    case "$1" in
+        forge) echo "grill-me to-prd aristotle-deconstructor optimus-planner cyrus-tdd-engineer" ;;
+        aristotle-deconstructor) echo "optimus-planner cyrus-tdd-engineer" ;;
+        cyrus-tdd-engineer) echo "code-auditor scout-reviewer ranger-reviewer" ;;
+        code-auditor) echo "scout-reviewer ranger-reviewer" ;;
+        scout-reviewer) echo "ranger-reviewer cyrus-tdd-engineer" ;;
+        ranger-reviewer) echo "scout-reviewer cyrus-tdd-engineer" ;;
+        optimus-planner) echo "cyrus-tdd-engineer aristotle-deconstructor" ;;
+        grill-me) echo "to-prd scout-reviewer ranger-reviewer" ;;
+        to-prd) echo "" ;;
+    esac
+}
+
+# Render the "Requires (install alongside): ..." / "Requires: none" line for
+# a skill's declared dependencies.
+_deps_line() {
+    local skill="$1" deps dep out=""
+    deps="$(_deps_for "$skill")"
+    if [ -z "$deps" ]; then
+        echo "**Requires:** none — this skill is standalone"
+        return 0
+    fi
+    for dep in $deps; do
+        if [ -z "$out" ]; then out="\`$dep\`"; else out="$out, \`$dep\`"; fi
+    done
+    echo "**Requires (install alongside):** $out"
+}
+
 # ---------------------------------------------------------------------------
 # Transform primitives
 # ---------------------------------------------------------------------------
 
 # Drop CORE-ONLY blocks; unwrap PORTABLE-ONLY blocks. Reads stdin, writes stdout.
+# An unterminated `<!-- BEGIN CORE-ONLY -->` (no matching END before EOF) is a
+# source error, not something to silently truncate at — it means every line
+# to EOF (potentially including later headings the insertion/metadata steps
+# depend on) would vanish without a trace. Fail loudly instead.
 _strip_markers() {
     awk '
         /^<!-- BEGIN CORE-ONLY -->[[:space:]]*$/ { skip = 1; next }
@@ -180,6 +226,31 @@ _strip_markers() {
         /^<!-- PORTABLE-ONLY[[:space:]]*$/       { next }
         /^-->[[:space:]]*$/                      { next }
         { print }
+        END {
+            if (skip) {
+                print "export-skills.sh: unterminated <!-- BEGIN CORE-ONLY --> marker (no matching END before EOF)" > "/dev/stderr"
+                exit 1
+            }
+        }
+    '
+}
+
+# Join the specific two-line wrap "Follow CLAUDE.md error handling\ndefaults."
+# into one line before the sed rewrite table runs, so the rewrite only ever
+# needs the single-line rule. A bare `s|^defaults\.$|...|` rule (no context)
+# would misfire on any unrelated line that happens to read "defaults." —
+# keying the join on the specific preceding line keeps this robust. Reads
+# stdin, writes stdout.
+_join_error_handling_wrap() {
+    awk '
+        prev ~ /Follow CLAUDE\.md error handling$/ && /^defaults\.$/ {
+            print prev " defaults."
+            prev = ""
+            next
+        }
+        NR > 1 { print prev }
+        { prev = $0 }
+        END { if (NR > 0) print prev }
     '
 }
 
@@ -210,14 +281,23 @@ _sed_program() {
         echo 's|^pattern to the user instead of quietly absorbing it\.$|pattern to the user instead of quietly absorbing it. On hosts without the Workflow tool (e.g. Cursor) the fallback is the normal path, not a broken seam — say so once and continue.|'
     fi
     # --- optional personal context ---
+    # The two-line wrap ("Follow CLAUDE.md error handling" / "defaults.") is
+    # joined into one line by _join_error_handling_wrap before this program
+    # runs, so this single rule covers both the one-line and wrapped forms.
     echo 's|Follow CLAUDE\.md error handling defaults|Follow CLAUDE.md error-handling defaults when defined (otherwise: surface the failure and stop, never retry silently)|g'
-    # "Follow CLAUDE.md error handling" / "defaults." split across two lines (reviewer agents)
-    echo 's|^defaults\.$|defaults when defined (otherwise: surface the failure and stop, never retry silently).|'
     echo 's|Check `~/\.claude/project-templates/` for|If `~/.claude/project-templates/` exists (optional personal context), check it for|g'
-    echo 's|managed via dotfiles|if present|g'
+    # anchored so "managed via dotfiles-core" (a deliberate mention of the
+    # canonical repo) is not eaten by the generic "managed via dotfiles" note.
+    # Two rules (not \|-alternation) for BSD/macOS sed BRE compatibility.
+    echo 's|managed via dotfiles\([^-]\)|if present\1|g'
+    echo 's|managed via dotfiles$|if present|g'
     echo 's|`~/\.claude/DoD\.md`|`~/.claude/DoD.md` (if present)|g'
     echo 's|`~/\.claude/DoD\.md` (if present) (|`~/.claude/DoD.md` (if present; |g'
     echo 's|`~/\.claude/AGENTS\.md`|`~/.claude/AGENTS.md` (if present)|g'
+    # scout/ranger memory-write note: the harness only enforces disallowedTools
+    # for a *registered* subagent; in fallback (general-purpose) mode it is
+    # not enforced by the harness and must be self-enforced (see agent-notes.md).
+    echo 's|(note: these are blocked by harness `disallowedTools`; memory writes will not persist from this agent until that constraint is lifted or routed via an orchestrator)|(note: these are blocked by `disallowedTools` when registered; in fallback mode you must refrain yourself — memory writes will not persist from this agent until that constraint is lifted or routed via an orchestrator)|g'
     echo 's|run /review-context to create one|create one (the `/review-context` skill does this, if installed)|g'
     echo 's|^- \*\*Review-context skill\*\* — |- **Review-context skill** (optional, not part of this bundle) — |'
     echo 's|not a dotfiles skill|not part of this bundle|g'
@@ -229,16 +309,23 @@ _sed_program() {
     # --- agent memory is a registered-subagent feature (SKILL.md only) ---
     if [ "$kind" = "skill" ]; then
         echo 's|`~/\.claude/agent-memory/\([a-z-]*\)/`|`~/.claude/agent-memory/\1/` (registered-subagent mode only)|g'
+    else
+        # Agents keep their Persistent Memory section verbatim (valid when
+        # registered); only the mandatory numbered step in Optimus needs the
+        # qualifier so a fallback run does not treat it as required.
+        echo 's|^\*\*Step C — Check agent memory\.\*\* Consult|**Step C — Check agent memory (registered-subagent mode only).** Consult|'
     fi
     # --- core-only housekeeping ---
     echo '/^# parity-ignore:/d'
     echo 's|propose the change and ask me to confirm before saving it\.|propose it against the canonical source: this copy is generated from the maintainer'"'"'s dotfiles-core repository and is overwritten on the next export.|'
 }
 
-# Render a template, substituting {{AGENT}} / {{SKILL}}.
+# Render a template, substituting {{AGENT}} / {{SKILL}} / {{DEPS}}.
 _render_template() {
-    local tpl="$1" skill="$2"
-    sed -e "s|{{AGENT}}|$skill|g" -e "s|{{SKILL}}|$skill|g" "$tpl"
+    local tpl="$1" skill="$2" deps_line
+    deps_line="$(_deps_line "$skill")"
+    awk -v deps="$deps_line" '{ gsub(/\{\{DEPS\}\}/, deps); print }' "$tpl" \
+        | sed -e "s|{{AGENT}}|$skill|g" -e "s|{{SKILL}}|$skill|g"
 }
 
 # Insert file $2 (plus surrounding blank lines) before the first "## " heading
@@ -346,6 +433,7 @@ _render_skill() {
         sedprog="$(mktemp)"; _sed_program "$skill" agent > "$sedprog"
         tmp_insert="$(mktemp)"; _render_template "$PORTABLE_DIR/agent-notes.md" "$skill" > "$tmp_insert"
         _strip_markers < "$AGENTS_SRC/$skill.md" \
+            | _join_error_handling_wrap \
             | sed -f "$sedprog" \
             | _insert_after_skill_ref "$tmp_insert" \
             > "$out/agent.md"
@@ -370,7 +458,11 @@ _render_skill() {
     for schema in $(_schemas_for "$skill"); do
         mkdir -p "$out/references/schemas"
         [ -f "$SCHEMAS_SRC/$schema" ] || { echo "export-skills.sh: missing schema $SCHEMAS_SRC/$schema" >&2; return 1; }
-        cp "$SCHEMAS_SRC/$schema" "$out/references/schemas/$schema"
+        # The only rewrite applied to a shipped schema: its $comment cites the
+        # core layout (.claude/workflows/…); the portable copy lives in the
+        # skill's own workflows/ directory.
+        sed 's|(\.claude/workflows/code-auditor-score\.js)|(workflows/code-auditor-score.js)|' \
+            "$SCHEMAS_SRC/$schema" > "$out/references/schemas/$schema"
     done
 
     # workflows/ (code-auditor only)
@@ -448,6 +540,19 @@ if [ "$CHECK" -eq 1 ]; then
             # diff exits 1 on differences; under pipefail that would abort the report
             diff -r -q "$RENDER/skills/$skill" "$TARGET/skills/$skill" | sed 's/^/       /' || true
         fi
+        # diff -q compares content only; a script that lost (or gained) its
+        # executable bit reads as identical to `diff` but would silently fail
+        # for a user invoking it. Check every shipped scripts/*.sh explicitly.
+        while IFS= read -r rendered_script; do
+            script_rel="${rendered_script#"$RENDER/skills/$skill"/}"
+            target_script="$TARGET/skills/$skill/$script_rel"
+            [ -f "$target_script" ] || continue
+            if [ -x "$rendered_script" ] && [ ! -x "$target_script" ]; then
+                echo "DRIFT  skills/$skill/$script_rel (executable bit missing)"; drift=1
+            elif [ ! -x "$rendered_script" ] && [ -x "$target_script" ]; then
+                echo "DRIFT  skills/$skill/$script_rel (unexpected executable bit)"; drift=1
+            fi
+        done < <(find "$RENDER/skills/$skill" -path '*/scripts/*.sh' 2>/dev/null)
     done
     if [ ! -f "$TARGET/README.md" ] || ! cmp -s "$RENDER/README.md" "$TARGET/README.md"; then
         echo "DRIFT  README.md (reasoning pipeline table)"; drift=1

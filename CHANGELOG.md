@@ -19,6 +19,15 @@
 
 - The `metrics-emit` library skill is deliberately **not** exported: its only consumer (`/agent-stats`) is not part of the bundle, so emission instructions are stripped rather than guarded.
 
+### Fixed (review follow-up)
+
+- **`check-portable-refs.sh` no longer passes vacuously.** An empty resolved skill list is an error, not "clean (0 skills)"; a non-bundle `/skill` token is excused only when that exact token or its namespace wildcard (`/mc-*`, `/create-*`, …) literally appears in the file's optional-skills paragraph. Forbidden list gains the unqualified "Follow CLAUDE.md error handling defaults" phrase and `ob-[0-9]` obligation ids.
+- **`export-skills.sh`:** an unterminated `CORE-ONLY` block aborts the render instead of truncating the file; `--check` also detects executable-bit drift on shipped scripts; the two-line "Follow CLAUDE.md error handling / defaults." wrap in the reviewer agents is rewritten robustly; `managed via dotfiles` is anchored so `dotfiles-core` survives; `EXPORT_SKILLS_CORE_DIR` lets tests render from a scratch copy.
+- **Rendered bundle:** every `agent.md` is told to end completed runs with `<<task-complete>>` (the instruction previously lived only in the maintainer's global AGENTS.md); `review-heuristics.md` ships with every skill that cites it (cyrus, scout, ranger, code-auditor); `SKILL_DIR` resolution is spelled out; the fallback brief restates `disallowedTools` and the agent notes tell the agent to self-enforce them; per-skill *Requires* lists replace the all-nine sibling boilerplate; Optimus's memory step is qualified as registered-mode only; the shipped `auditor-composite.json` `$comment` cites `workflows/code-auditor-score.js`.
+- **Canonical docs:** `agent-turn-cap-warning.md` and `cyrus-tdd-engineer/SKILL.md` now say Cyrus `maxTurns` is 300 (was 100); forge's private obligation id is `CORE-ONLY`.
+- **`install-agent.sh`:** `name:` is sanitized (`^[A-Za-z0-9][A-Za-z0-9_-]*$`, whitespace/quotes stripped); `--project` resolves the git root instead of `$PWD`.
+- `tests/export-skills.bats`: 43 tests, with a real-tree snapshot guard (`setup_file`/`teardown_file`) and coverage for every path above.
+
 ## v1.18.1 — 2026-09-09 (pipeline_complete emit contract: first_pass/classification)
 
 ### Fixed
