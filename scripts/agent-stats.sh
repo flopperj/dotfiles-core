@@ -127,6 +127,9 @@ echo
 # first-pass predicate: trust an explicit first_pass; for legacy events that
 # omit the field, derive it as tests_passed && ci_fix_attempts == 0 (per the
 # metrics-emit skill's convention) so a missing field is not counted as a miss.
+# An explicit "first_pass": null is treated as absent and falls through to
+# derivation too — intentional asymmetry with the "classification": null
+# convention, where null is a meaningful value rather than "missing".
 PIPELINE_STATS="$(jq -s '
   def fp:
     if .data.first_pass != null then .data.first_pass == true
@@ -331,6 +334,21 @@ fi
 
 if [ "$PIPE_TOTAL" -lt 5 ] && [ "$SWARM_TOTAL" -lt 1 ]; then
   FLAGS+=("Sample size is small ($PIPE_TOTAL pipelines) — trends are not yet meaningful. Re-run after more activity.")
+fi
+
+# Contradiction gate: tests_failed counts .data.tests_passed == false directly
+# while first-pass success goes through the fp derivation (which trusts an
+# explicit first_pass). A malformed event with first_pass:true and
+# tests_passed:false lands in both buckets with no signal — surface it.
+CONTRADICT_COUNT="$(jq -s '
+  map(select(.event_type == "pipeline_complete"
+    and .data.first_pass == true
+    and .data.tests_passed == false))
+  | length
+' "$EVENTS_TMP")"
+
+if _is_uint "$CONTRADICT_COUNT" && [ "$((10#$CONTRADICT_COUNT))" -gt 0 ]; then
+  FLAGS+=("$CONTRADICT_COUNT pipeline_complete event(s) have first_pass: true but tests_passed: false — contradictory emit data; check the emitter.")
 fi
 
 if [ "${#FLAGS[@]}" -eq 0 ]; then

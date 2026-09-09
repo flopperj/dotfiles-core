@@ -635,7 +635,10 @@ Data to capture:
 - `tests_passed`: true/false from Cyrus's report
 - `coverage_percent`: coverage number from Cyrus's report (null if not reported)
 - `ci_fix_attempts`: number of CI fix iterations (0 if none)
-- `first_pass`: true if pipeline completed with 0 retries and 0 CI fix attempts
+- `first_pass`: derived as `tests_passed && ci_fix_attempts == 0`, per the
+  metrics-emit skill's canonical rule — additionally `false` when the
+  pipeline needed a retry (ticket-pickup's better-information case, since it
+  sees retries that predate CI and Cyrus's own report may not capture)
 - `files_changed`: count of files modified
 
 If emit fails, log and continue.
