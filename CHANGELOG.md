@@ -2,6 +2,22 @@
 
 > **How to update:** The pre-commit hook (`scripts/pre-commit.sh`) is auto-installed by `install.sh`. It runs a fast leakage check (`scripts/check-no-leakage.sh`) and re-renders the generated `CLAUDE.md.generated` and `AGENTS.md.generated` files on every commit. A pre-push gate (`scripts/pre-push.sh`, also auto-installed) scans every outgoing commit's tree and metadata before it leaves the machine. CI runs lint, consult-grammar, and the test suite (including synthetic-token leakage mechanism tests) on every PR; the company-token scan is a separate step that runs only when guard data is present on the runner. If you bypass the hooks or work in a context where hooks cannot run, keep this file current manually. Each release heading links to the diff on the public mirror.
 
+## v1.18.1 — 2026-09-09 (pipeline_complete emit contract: first_pass/classification)
+
+### Fixed
+
+- **Emitter drift produced a false 50% first-pass rate in `/agent-stats`.** `pipeline_complete` events from the Cyrus agent omitted `first_pass` and `classification`, and the aggregator counted a missing `first_pass` as a miss. Both sides fixed:
+  - `.claude/agents/cyrus-tdd-engineer.md` — `first_pass` (derived `tests_passed && ci_fix_attempts == 0`) and `classification` (explicit `null` on direct invocations) are now required emit fields.
+  - `.claude/skills/optimus-planner/SKILL.md` — direct-invocation emit includes `classification: null`.
+  - `.claude/skills/ticket-pickup/SKILL.md` — `first_pass` wording aligned to the canonical rule, retry-awareness kept as the better-information case.
+  - `.claude/skills/metrics-emit/SKILL.md` — documents both fields as required on `pipeline_complete`, with the derivation rule and the legacy-only consumer fallback.
+  - `scripts/agent-stats.sh` — `def fp:` jq predicate derives `first_pass` for legacy events missing the field (explicit `first_pass: false` respected; explicit `null` treated as absent, documented at the decision site), applied to totals and both breakdowns.
+
+### Added
+
+- `scripts/agent-stats.sh` — health flag for contradictory emits (`first_pass: true` with `tests_passed: false`), fail-closed per the numeric-gate convention.
+- `tests/agent-stats.bats` — four new tests: derivation from `tests_passed`/`ci_fix_attempts` (including the `By agent:` breakdown line), explicit-`false` no-override, and contradiction-flag positive/negative cases.
+
 ## v1.18.0 — 2026-09-02 (peer-toned, block-anchored reviewer comments)
 
 ### Changed
