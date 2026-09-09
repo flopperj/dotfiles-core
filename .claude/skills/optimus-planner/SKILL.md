@@ -140,7 +140,8 @@ for format):
 2. **After Cyrus returns**: emit `pipeline_complete` with the same fields
    ticket-pickup uses (`duration_seconds`, `tests_passed`,
    `coverage_percent`, `first_pass`, `files_changed`) plus
-   `invocation: "direct"` so trend analysis can segment.
+   `invocation: "direct"` and `classification: null` (direct invocations
+   are unclassified) so trend analysis can segment.
 
 If emit fails, log and continue — never block planning or implementation
 on metrics.

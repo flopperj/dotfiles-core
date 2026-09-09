@@ -101,6 +101,14 @@ them. Swarm-retro can use either depending on the question being answered.
 }
 ```
 
+**Required data fields:** `first_pass` and `classification` must always be
+present. `first_pass` is derived as `tests_passed && ci_fix_attempts == 0`
+unless the emitter has better information (e.g. a retry that predates CI).
+`classification` is `null` on direct invocations (no ticket-pickup in the
+chain) — emit the key with `null`, don't omit it. Consumers (agent-stats)
+derive `first_pass` from `tests_passed`/`ci_fix_attempts` for legacy events
+that lack the field, but new emitters must not rely on that fallback.
+
 ---
 
 ### `agent_truncated`

@@ -169,6 +169,34 @@ _seed_splits() {
     [[ "$output" == *"## Health Flags"* ]]
 }
 
+@test "missing first_pass derives from tests_passed and ci_fix_attempts" {
+    local now
+    now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    mkdir -p "$TASKS_DIR/legacy"
+    # Legacy events without a first_pass field: green run derives true,
+    # failed-tests run derives false.
+    cat > "$TASKS_DIR/legacy/metrics.jsonl" <<EOF
+{"timestamp":"$now","event_type":"pipeline_complete","agent":"cyrus-tdd-engineer","project":"legacy","ticket":"PROJ-1","data":{"tests_passed":true,"ci_fix_attempts":0,"duration_seconds":100}}
+{"timestamp":"$now","event_type":"pipeline_complete","agent":"cyrus-tdd-engineer","project":"legacy","ticket":"PROJ-2","data":{"tests_passed":false,"ci_fix_attempts":0,"duration_seconds":100}}
+{"timestamp":"$now","event_type":"pipeline_complete","agent":"cyrus-tdd-engineer","project":"legacy","ticket":"PROJ-3","data":{"tests_passed":true,"ci_fix_attempts":2,"duration_seconds":100}}
+EOF
+    run /bin/bash "$STATS" --project legacy
+    [ "$status" -eq 0 ] &&
+        [[ "$output" == *"First-pass success:     1 / 3"* ]]
+}
+
+@test "explicit first_pass false is not overridden by derivation" {
+    local now
+    now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    mkdir -p "$TASKS_DIR/explicit"
+    cat > "$TASKS_DIR/explicit/metrics.jsonl" <<EOF
+{"timestamp":"$now","event_type":"pipeline_complete","agent":"cyrus-tdd-engineer","project":"explicit","ticket":"PROJ-1","data":{"first_pass":false,"tests_passed":true,"ci_fix_attempts":0,"duration_seconds":100}}
+EOF
+    run /bin/bash "$STATS" --project explicit
+    [ "$status" -eq 0 ] &&
+        [[ "$output" == *"First-pass success:     0 / 1"* ]]
+}
+
 @test "--project filter scopes to one project" {
     _seed_project "alpha"
     _seed_project "beta"

@@ -124,11 +124,18 @@ echo
 echo "## Pipeline Outcomes"
 echo
 
+# first-pass predicate: trust an explicit first_pass; for legacy events that
+# omit the field, derive it as tests_passed && ci_fix_attempts == 0 (per the
+# metrics-emit skill's convention) so a missing field is not counted as a miss.
 PIPELINE_STATS="$(jq -s '
+  def fp:
+    if .data.first_pass != null then .data.first_pass == true
+    else (.data.tests_passed == true) and ((.data.ci_fix_attempts // 0) == 0)
+    end;
   map(select(.event_type == "pipeline_complete"))
   | {
       total: length,
-      first_pass: ([.[] | select(.data.first_pass == true)] | length),
+      first_pass: ([.[] | select(fp)] | length),
       tests_failed: ([.[] | select(.data.tests_passed == false)] | length),
       ci_fix_total: ([.[] | (.data.ci_fix_attempts // 0)] | add // 0),
       avg_duration: (if length == 0 then 0 else ([.[] | (.data.duration_seconds // 0)] | add) / length end),
@@ -137,7 +144,7 @@ PIPELINE_STATS="$(jq -s '
         map({
           classification: (.[0].data.classification // "unknown"),
           n: length,
-          first_pass: ([.[] | select(.data.first_pass == true)] | length)
+          first_pass: ([.[] | select(fp)] | length)
         })
       ),
       by_agent: (
@@ -145,7 +152,7 @@ PIPELINE_STATS="$(jq -s '
         map({
           agent: .[0].agent,
           n: length,
-          first_pass: ([.[] | select(.data.first_pass == true)] | length)
+          first_pass: ([.[] | select(fp)] | length)
         })
       )
     }
