@@ -106,12 +106,19 @@ When `swarm_mode: true` is set, Cyrus adjusts its completion behavior:
   If the reviewer passes with no blocking issues, report success to the
   swarm orchestrator. If it finds issues, report them as blockers.
 
+<!-- BEGIN CORE-ONLY -->
 **Reviewer dedup:** In swarm mode, Cyrus auto-launches the reviewer per
 these instructions. The `subagentStop` hook in `.cursor/hooks.json` is a
 redundant safety net for environments where skill instructions may not
 execute. **If both fire:** the first reviewer to complete is the
 authoritative result. If a second review starts, check whether a review
 result already exists for this ticket — if so, skip the duplicate.
+<!-- END CORE-ONLY -->
+<!-- PORTABLE-ONLY
+**Reviewer dedup:** In swarm mode, Cyrus auto-launches the reviewer per
+these instructions. If a review result already exists for this ticket,
+skip the duplicate — the first reviewer to complete is authoritative.
+-->
 
 - **Do not present interactive menus** — the swarm orchestrator handles
   user interaction.
@@ -119,12 +126,19 @@ result already exists for this ticket — if so, skip the duplicate.
 All other TDD discipline remains identical. Swarm mode changes *reporting*,
 not *implementation quality*.
 
+<!-- BEGIN CORE-ONLY -->
 **Environment note:** In Cursor, the `subagentStop` hook in
 `.cursor/hooks.json` provides a secondary trigger for reviewer auto-launch.
 In Claude Code (or if hooks are unavailable), the skill instructions above
 are the primary mechanism — Cyrus launches the reviewer directly per these
 instructions. Both paths produce the same result; the hook is a redundant
 safety net, not a required dependency.
+<!-- END CORE-ONLY -->
+<!-- PORTABLE-ONLY
+**Environment note:** The skill instructions above are the only reviewer
+auto-launch mechanism in this bundle — Cyrus launches the reviewer directly
+per these instructions. No editor hook is required.
+-->
 
 ---
 

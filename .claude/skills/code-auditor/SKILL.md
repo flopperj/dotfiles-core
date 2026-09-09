@@ -185,10 +185,17 @@ Diff-level metrics:
 - Score: 0-100
 
 **Subagent failure handling:**
+<!-- BEGIN CORE-ONLY -->
 If a subagent fails, times out, returns empty, or returns without the
 `<<task-complete>>` sentinel (suspected turn-cap truncation — see
 `~/.claude/_shared/agent-turn-cap-warning.md`, including the
 `agent_truncated` metric to emit):
+<!-- END CORE-ONLY -->
+<!-- PORTABLE-ONLY
+If a subagent fails, times out, returns empty, or returns without the
+`<<task-complete>>` sentinel (suspected turn-cap truncation — see
+`~/.claude/_shared/agent-turn-cap-warning.md`):
+-->
 - Log the failure and which agent it was
 - Continue with results from the remaining agents
 - Note the gap in the scoring (e.g., "Impact: unavailable — subagent
