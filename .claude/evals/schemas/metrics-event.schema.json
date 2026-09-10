@@ -105,6 +105,23 @@
               "type": "string",
               "description": "One-line verdict when outcome is advisory. Absent otherwise."
             }
+          },
+          "if": {
+            "properties": { "outcome": { "const": "advisory" } },
+            "required": ["outcome"]
+          },
+          "then": {
+            "properties": {
+              "tests_passed": { "type": "null" },
+              "first_pass": { "type": "null" }
+            },
+            "required": ["advisory_reason"]
+          },
+          "else": {
+            "properties": {
+              "tests_passed": { "type": "boolean" },
+              "first_pass": { "type": "boolean" }
+            }
           }
         },
         {

@@ -642,8 +642,11 @@ Data to capture:
 - `files_changed`: count of files modified
 - `outcome`: `implemented` normally. `advisory` when the pipeline ended
   deliberately with no code change (see below); then `tests_passed` and
-  `first_pass` are `null`, `files_changed` is 0, and `advisory_reason`
-  carries the one-line verdict.
+  `first_pass` are `null`, `ci_fix_attempts` is 0, `files_changed` is 0,
+  and `advisory_reason` carries the one-line verdict. The Aristotle skill
+  returns that verdict under the key `verdict`; the metrics event names it
+  `advisory_reason`. Copy the value across — an event that carries
+  `verdict` instead of `advisory_reason` validates but loses the field.
 
 If emit fails, log and continue.
 

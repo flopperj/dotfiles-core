@@ -198,6 +198,10 @@ teardown() {
           and (.properties.first_pass.type == ["boolean","null"])
           and (.properties.tests_passed.type == ["boolean","null"])
           and (.properties | has("advisory_reason"))
+          and (.if.properties.outcome.const == "advisory")
+          and (.then.properties.first_pass.type == "null")
+          and (.then.required == ["advisory_reason"])
+          and (.else.properties.first_pass.type == "boolean")
     ' "$schema"
     [ "$status" -eq 0 ] || return 1
 }

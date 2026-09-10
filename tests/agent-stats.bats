@@ -207,6 +207,43 @@ EOF
     [[ "$output" == *"Medium"*"2 runs, 1/2 first-pass"* ]] || return 1
 }
 
+@test "an all-advisory cohort of 5+ raises no first-pass or CI-attempts flag" {
+    local now i
+    now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    mkdir -p "$TASKS_DIR/alladv"
+    : > "$TASKS_DIR/alladv/metrics.jsonl"
+    i=0
+    while [ "$i" -lt 6 ]; do
+        echo "{\"timestamp\":\"$now\",\"event_type\":\"pipeline_complete\",\"agent\":\"ticket-pickup\",\"project\":\"alladv\",\"ticket\":\"PROJ-$i\",\"data\":{\"classification\":\"Complex\",\"first_pass\":null,\"tests_passed\":null,\"ci_fix_attempts\":0,\"files_changed\":0,\"duration_seconds\":30,\"outcome\":\"advisory\",\"advisory_reason\":\"not code\"}}" >> "$TASKS_DIR/alladv/metrics.jsonl"
+        i=$((i + 1))
+    done
+    run /bin/bash "$STATS" --project alladv
+    [ "$status" -eq 0 ] || return 1
+    [[ "$output" == *"Advisory outcomes:      6"* ]] || return 1
+    [[ "$output" == *"First-pass success:     0 / 0"* ]] || return 1
+    [[ "$output" != *"First-pass rate is"* ]] || return 1
+    [[ "$output" != *"CI fix attempts"*"exceed"* ]] || return 1
+}
+
+@test "advisory events do not pad the CI-attempts denominator" {
+    local now i
+    now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    mkdir -p "$TASKS_DIR/cipad"
+    : > "$TASKS_DIR/cipad/metrics.jsonl"
+    # Five implemented pipelines carrying 12 CI attempts between them (must flag),
+    # plus five advisory events that would have hidden it under a total of 10.
+    i=0
+    while [ "$i" -lt 5 ]; do
+        echo "{\"timestamp\":\"$now\",\"event_type\":\"pipeline_complete\",\"agent\":\"cyrus-tdd-engineer\",\"project\":\"cipad\",\"ticket\":\"IMPL-$i\",\"data\":{\"classification\":\"Medium\",\"first_pass\":false,\"tests_passed\":true,\"ci_fix_attempts\":$(( i == 0 ? 4 : 2 )),\"duration_seconds\":100}}" >> "$TASKS_DIR/cipad/metrics.jsonl"
+        echo "{\"timestamp\":\"$now\",\"event_type\":\"pipeline_complete\",\"agent\":\"ticket-pickup\",\"project\":\"cipad\",\"ticket\":\"ADV-$i\",\"data\":{\"classification\":\"Complex\",\"first_pass\":null,\"tests_passed\":null,\"ci_fix_attempts\":0,\"files_changed\":0,\"duration_seconds\":30,\"outcome\":\"advisory\",\"advisory_reason\":\"not code\"}}" >> "$TASKS_DIR/cipad/metrics.jsonl"
+        i=$((i + 1))
+    done
+    run /bin/bash "$STATS" --project cipad
+    [ "$status" -eq 0 ] || return 1
+    [[ "$output" == *"CI fix attempts (12) exceed implemented pipeline count (5)"* ]] || return 1
+    [[ "$output" == *"First-pass rate is 0% (<60%) over 5 implemented pipelines"* ]] || return 1
+}
+
 @test "advisory swarm_complete counts render on their own line" {
     local now
     now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"

@@ -246,9 +246,11 @@ validate, fall back.
    - `blocked` (Jira keys of tickets that did not complete; empty array
      when every ticket succeeded)
 
-   The optional `advisory` array (Jira keys of tickets whose pipeline ended
-   with a correct no-code answer, each with its one-line verdict) may also
-   be present. Do not require it; treat absence as empty.
+   The optional `advisory` array may also be present. Unlike `blocked`, its
+   items are objects, not bare keys: `{ "ticket": "PROJ-1234", "verdict":
+   "one-line ruling" }`, one per ticket whose pipeline ended with a correct
+   no-code answer. Do not require it; treat absence as empty. Do not reject
+   a payload for carrying it.
 
    Validate **only those fields**. The workflow returns no prose — its
    per-wave narration goes to the run journal — so do not require or

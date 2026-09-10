@@ -65,6 +65,9 @@ Read the full run log. The expected format is:
 ## Blockers
 - {ticket}: {description} (retry N: {outcome})
 
+## Advisory
+- {ticket}: {verdict}
+
 ## Sequencing
 - {domain}: {sequence description}
 
@@ -72,9 +75,12 @@ Read the full run log. The expected format is:
 - {ticket}: {action taken} (outcome: {result})
 
 ## Summary
-- Launched: N | Completed: N | Blocked: N
+- Launched: N | Completed: N | Advisory: N | Blocked: N
 - PRs: N | Time: Nm | Agents: N
 ```
+
+Older run logs predate the `## Advisory` section and the `Advisory: N`
+field; treat both as absent-means-zero.
 
 ---
 

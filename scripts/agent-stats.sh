@@ -331,10 +331,15 @@ _is_uint() {
   esac
 }
 
-if [ "$PIPE_TOTAL" -ge 5 ]; then
+# Both pipeline health gates run over IMPLEMENTED pipelines (PIPE_IMPL), not
+# PIPE_TOTAL: advisory outcomes contribute no tests and no CI attempts, so
+# counting them would both fire the first-pass flag on a cohort with zero
+# implementations and pad the CI-attempts denominator until that flag is
+# suppressed. PIPE_IMPL is only assigned when PIPE_TOTAL != 0.
+if [ "$PIPE_TOTAL" != "0" ] && _is_uint "$PIPE_IMPL" && [ "$((10#$PIPE_IMPL))" -ge 5 ]; then
   PIPE_FP_PCT_INT="$PIPE_FP_PCT"
   if [ "$PIPE_FP_PCT_INT" -lt 60 ]; then
-    FLAGS+=("First-pass rate is ${PIPE_FP_PCT_INT}% (<60%) over $PIPE_TOTAL pipelines — investigate Optimus plan quality or Cyrus retries.")
+    FLAGS+=("First-pass rate is ${PIPE_FP_PCT_INT}% (<60%) over $PIPE_IMPL implemented pipelines — investigate Optimus plan quality or Cyrus retries.")
   fi
 fi
 
@@ -342,10 +347,10 @@ fi
 # degradation flag instead of silently skipping. Overall exit stays 0 per
 # the SKILL.md contract. CI_TOTAL is only assigned when PIPE_TOTAL != 0.
 if [ "$PIPE_TOTAL" != "0" ]; then
-  if ! _is_uint "$PIPE_TOTAL" || ! _is_uint "$CI_TOTAL"; then
-    FLAGS+=("Health data unparseable: CI fix attempts total ('$CI_TOTAL') or pipeline count ('$PIPE_TOTAL') is not a non-negative integer — CI-attempts gate skipped; check ci_fix_attempts values in the emitted metrics.")
-  elif [ "$((10#$PIPE_TOTAL))" -ge 5 ] && [ "$((10#$CI_TOTAL))" -gt "$((10#$PIPE_TOTAL))" ]; then
-    FLAGS+=("CI fix attempts ($CI_TOTAL) exceed pipeline count ($PIPE_TOTAL) — Cyrus is hitting CI more than once per pipeline on average.")
+  if ! _is_uint "$PIPE_IMPL" || ! _is_uint "$CI_TOTAL"; then
+    FLAGS+=("Health data unparseable: CI fix attempts total ('$CI_TOTAL') or implemented pipeline count ('$PIPE_IMPL') is not a non-negative integer — CI-attempts gate skipped; check ci_fix_attempts values in the emitted metrics.")
+  elif [ "$((10#$PIPE_IMPL))" -ge 5 ] && [ "$((10#$CI_TOTAL))" -gt "$((10#$PIPE_IMPL))" ]; then
+    FLAGS+=("CI fix attempts ($CI_TOTAL) exceed implemented pipeline count ($PIPE_IMPL) — Cyrus is hitting CI more than once per pipeline on average.")
   fi
 fi
 

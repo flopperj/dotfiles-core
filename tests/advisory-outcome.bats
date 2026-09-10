@@ -35,7 +35,7 @@ SWARM_CONTEXT="$DOTFILES_DIR/.claude/workflows/schemas/swarm-context.json"
 
 @test "ticket-swarm has an ADVISORY dashboard state and an Advisory summary line" {
     grep -q '\[ADVISORY\]' "$SWARM" || return 1
-    grep -qE '^  Advisory:   1' "$SWARM" || return 1
+    grep -qE '^  Advisory: +1 \(' "$SWARM" || return 1
     grep -q 'Launched: {N} | Completed: {N} | Advisory: {N} | Blocked: {N}' "$SWARM" || return 1
 }
 
@@ -50,7 +50,7 @@ SWARM_CONTEXT="$DOTFILES_DIR/.claude/workflows/schemas/swarm-context.json"
 }
 
 @test "team-lead reports Advisory apart from Blocked and skips failure analysis for it" {
-    grep -qE '^  Advisory:  1' "$LEAD" || return 1
+    grep -qE '^  Advisory: +1 \(' "$LEAD" || return 1
     grep -q 'Tickets in `advisory` are \*\*not\*\* blocked' "$LEAD" || return 1
 }
 

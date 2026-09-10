@@ -435,8 +435,6 @@ PROJ-1003  [BLOCKED]  Cyrus hit a test failure — needs input
   -> status    = Refresh progress
 ```
 
-### Handling blockers
-
 ### Handling an advisory outcome
 
 A pipeline can end with a correct answer that is not a code change: the
@@ -450,8 +448,12 @@ swarm's third terminal outcome — a success, not a blocker:
 - Count it under `Advisory` in the summary, run log, and `swarm_complete`.
 - Best-of-N: if every attempt returns advisory, the ticket is advisory (take
   the clearest verdict). If one attempt implements and another returns
-  advisory, prefer the implementation only if its tests pass; otherwise
-  surface both to the user.
+  advisory, the attempts disagree on whether this is a code change at all;
+  surface both to the user with the verdict alongside the implementation's
+  test result. Do not auto-select — the existing best-of-N gate ("wait for
+  user choice on complex tickets") applies.
+
+### Handling blockers
 
 When a pipeline reports a blocker:
 1. Surface the blocker immediately with context (error message, failing test,
@@ -574,7 +576,7 @@ Ticket Swarm Complete
 
   Launched:   5 tickets
   Completed:  3 (3 PRs created)
-  Advisory:   1 (PROJ-1015 — first principles says this is a vendor-config change, not code)
+  Advisory:   1 (PROJ-1030 — first principles says this is a vendor-config change, not code)
   Blocked:    1 (PROJ-1003 — test failure, needs manual fix)
 
   PRs created:
