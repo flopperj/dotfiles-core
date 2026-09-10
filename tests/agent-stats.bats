@@ -353,30 +353,30 @@ EOF
     _seed_pipelines "proj" 5 "1.5"
     run /bin/bash "$STATS"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"unparseable"* ]]
+    [[ "$output" == *"unparseable"* ]] || return 1
 }
 
 @test "float ci_fix_attempts sum does not fire the CI-attempts flag" {
     _seed_pipelines "proj" 5 "1.5"
     run /bin/bash "$STATS"
     [ "$status" -eq 0 ]
-    [[ "$output" != *"exceed pipeline count"* ]]
+    [[ "$output" != *"exceed implemented pipeline count"* ]] || return 1
 }
 
 @test "integer ci_fix_attempts exceeding pipeline count fires the CI-attempts flag" {
     _seed_pipelines "proj" 5 "2"
     run /bin/bash "$STATS"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"CI fix attempts (10) exceed pipeline count (5)"* ]]
-    [[ "$output" != *"unparseable"* ]]
+    [[ "$output" == *"CI fix attempts (10) exceed implemented pipeline count (5)"* ]] || return 1
+    [[ "$output" != *"unparseable"* ]] || return 1
 }
 
 @test "integer ci_fix_attempts within pipeline count raises neither flag" {
     _seed_pipelines "proj" 5 "0"
     run /bin/bash "$STATS"
     [ "$status" -eq 0 ]
-    [[ "$output" != *"exceed pipeline count"* ]]
-    [[ "$output" != *"unparseable"* ]]
+    [[ "$output" != *"exceed implemented pipeline count"* ]] || return 1
+    [[ "$output" != *"unparseable"* ]] || return 1
 }
 
 # ---------------------------------------------------------------------------
