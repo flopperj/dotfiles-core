@@ -475,7 +475,7 @@ _scratch_core() {
 @test "bundle-notes: per-skill dependency declarations replace the generic Sibling-skills bullet" {
     _render_target
     f="$TARGET/skills/forge/SKILL.md"
-    grep -q '^\*\*Requires (install alongside):\*\* `grill-me`, `to-prd`, `aristotle-deconstructor`, `optimus-planner`, `cyrus-tdd-engineer`$' "$f" \
+    grep -q '^\*\*Requires (install alongside):\*\* `grill-me`, `to-prd`, `aristotle-deconstructor`, `optimus-planner`$' "$f" \
         || { echo "forge deps line wrong or missing"; return 1; }
 
     f="$TARGET/skills/to-prd/SKILL.md"

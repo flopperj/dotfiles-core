@@ -184,7 +184,7 @@ _mcp_for() {
 # "when not to use" note or a "companion" pointer is not a dependency.
 _deps_for() {
     case "$1" in
-        forge) echo "grill-me to-prd aristotle-deconstructor optimus-planner cyrus-tdd-engineer" ;;
+        forge) echo "grill-me to-prd aristotle-deconstructor optimus-planner" ;;   # Cyrus runs inside the aristotle/optimus pipelines
         aristotle-deconstructor) echo "optimus-planner cyrus-tdd-engineer" ;;
         cyrus-tdd-engineer) echo "code-auditor scout-reviewer ranger-reviewer" ;;
         code-auditor) echo "scout-reviewer ranger-reviewer" ;;
