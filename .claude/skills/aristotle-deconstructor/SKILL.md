@@ -22,11 +22,21 @@ This skill supports two execution modes, determined by the caller:
 - **`gated`** (default) — every stage transition requires explicit user
   approval. Used when invoked directly by the user ("Aristotle, ..." or
   `/aristotle-deconstructor`).
-- **`autonomous`** — Aristotle still runs the full 5-phase analysis (quality
-  is non-negotiable), but gates auto-approve for Optimus and Cyrus
+- **`autonomous`** — Aristotle still runs its Phase 0 framing check and then
+  either the full 5-phase analysis (quality is non-negotiable) or a Phase 0
+  stop (see below), but gates auto-approve for Optimus and Cyrus
   transitions. The orchestrator logs each gate decision instead of blocking.
   Only PR creation gates on user approval. Used when invoked by `ticket-swarm`
   or `ticket-pickup` with `execution_mode: autonomous`.
+
+In both modes Aristotle has two legal outcomes:
+
+- **Full analysis** — Phase 0 passed, followed by Phases 1-5, the Aristotelian
+  Move, and (when code work follows) an Implementation Handoff.
+- **Phase 0 stop** — Aristotle judged first principles the wrong tool for the
+  question and returned a short analogy-based answer instead of the five
+  phases. There is no Move and no handoff. Step 2 handles this outcome
+  explicitly; do not treat it as a truncated or failed run.
 
 When `swarm_mode: true` is also passed (typically from `ticket-swarm`),
 forward both flags to all downstream skills (Optimus, Cyrus) so they know
@@ -132,22 +142,58 @@ Extract the user's problem from their prompt (strip any "Aristotle" prefix,
 `aristotle-deconstructor` agent via the Agent tool with the user's problem
 as the prompt.
 
-Wait for the full analysis (5 phases + Aristotelian Move).
+Wait for Aristotle's response: either the full analysis (5 phases +
+Aristotelian Move) or a Phase 0 stop.
+
+**Override re-invocation.** If the user rejects a Phase 0 stop and wants the
+full deconstruction anyway, launch Aristotle again with the original problem
+plus this line prepended: `Override: the user has reviewed your Phase 0
+"wrong tool" verdict and wants the full five-phase analysis regardless.` The
+agent is memoryless, so the override must be in the prompt — it cannot
+remember a prior verdict.
 
 **Subagent failure handling:** Follow CLAUDE.md error handling defaults.
 If a subagent fails or times out, surface the failure and stop — do not
 present partial strategic analysis.
 
 **Validate output before presenting:** If Aristotle's response contains code
-blocks, file paths, or implementation specifics beyond its Implementation
-Handoff section, note this to the user as a boundary violation and present
-only the strategic analysis.
+blocks, file paths, or implementation specifics anywhere other than its
+Implementation Handoff section (a Phase 0 stop has no such section, so on a
+stop any of these is a violation), note this to the user as a boundary
+violation and present only the strategic analysis.
 
 ## Step 2: Present analysis and gate
 
 Show the user Aristotle's complete output.
 
-**In gated mode:** Ask:
+**Phase 0 stop (either mode):** If the response ended at Phase 0 with a
+"wrong tool" verdict — no Phase 1-5 sections, no Aristotelian Move — do not
+present the menu below; three of its four options assume a Move exists.
+
+- *Gated:* present the short answer and ask:
+
+  ```
+  Aristotle judged first principles the wrong tool here and answered by analogy.
+
+    -> o = Override — run the full five-phase deconstruction anyway
+    -> x = Done
+  ```
+
+  On `o`, re-invoke per the override rule in Step 1 and return to Step 2.
+
+- *Autonomous:* do not proceed to Optimus. Report back to the caller with
+  the Phase 0 verdict and the analogy answer as the outcome text. Neither
+  `ticket-pickup` nor `ticket-swarm` has a "no code changes" outcome today:
+  both classify any pipeline that ends without a PR as **blocked**, and the
+  swarm's ticket comment reads "Had to stop on this one. What happened:
+  {reason}". Put the verdict in `{reason}` so a human sees a correct answer,
+  not a failure. Known consequence: the ticket counts as blocked and
+  `first_pass` reads false for what was a correct outcome. This is a
+  pre-existing gap shared with the "no code changes needed" halt below;
+  closing it means teaching both callers a third terminal outcome, which is
+  out of scope here.
+
+**In gated mode (full analysis):** Ask:
 
 ```
 Aristotle has identified the highest-leverage path. What next?
@@ -260,7 +306,8 @@ waves, and aggregate final results.
 - **In autonomous mode: gates auto-approve.** The orchestrator logs each
   decision and proceeds. Only PR creation (handled downstream by
   `/pr-create-from-commits`) gates on user approval. If Aristotle's
-  analysis concludes no code changes are needed, halt and report back.
+  analysis concludes no code changes are needed, or ends in a Phase 0
+  stop, halt and report back.
 - **Aristotle-only is valid.** Strategic questions may not need code.
 - **Optimus can be skipped.** If Aristotle identifies a trivial, fully-specified
   change (single function rename, one-line config), offer to skip straight
@@ -276,7 +323,7 @@ waves, and aggregate final results.
 
 ## Truncation handling
 
-When this skill invokes Aristotle, Optimus, or Cyrus via the `Agent` tool, the orchestrator must verify the returned response contains the `<<task-complete>>` sentinel before consuming its output. See `~/.claude/_shared/agent-turn-cap-warning.md` for the detection rule, halt/skip behavior, and the `agent_truncated` metric to emit. Aristotle-truncation is especially load-bearing here — a truncated Implementation Handoff section silently corrupts Optimus's brief.
+When this skill invokes Aristotle, Optimus, or Cyrus via the `Agent` tool, the orchestrator must verify the returned response contains the `<<task-complete>>` sentinel before consuming its output. See `~/.claude/_shared/agent-turn-cap-warning.md` for the detection rule, halt/skip behavior, and the `agent_truncated` metric to emit. Aristotle-truncation is especially load-bearing here — a truncated Implementation Handoff section silently corrupts Optimus's brief. A missing handoff is not by itself the truncation signature: a Phase 0 stop legitimately has no handoff and no Phases 1-5. The sentinel is the test — a Phase 0 stop that ends with `<<task-complete>>` is complete; a five-phase analysis that stops mid-handoff without the sentinel is truncated.
 
 ## Maintenance
 
