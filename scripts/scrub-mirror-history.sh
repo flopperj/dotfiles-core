@@ -17,10 +17,13 @@
 #
 # The audit has two identity passes. The mailmap pass counts what the mailmap
 # will (or did) rewrite. The allowlist pass is the one to trust before a push:
-# it flags every author, committer, and tagger email whose domain is not in
-# SCRUB_ALLOWED_EMAIL_DOMAINS (default: users.noreply.github.com github.com),
-# so an address the mailmap forgot still fails the audit. Domains and addresses
-# are withheld from output; set SCRUB_SHOW_UNLISTED=1 to print the offending
+# it flags every author, committer, and tagger email whose domain is not
+# allowed, so an address the mailmap forgot still fails the audit. Allowed
+# domains are the defaults (users.noreply.github.com github.com) plus one per
+# line from ${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles-guard/mirror-allowed-domains
+# (override the path with SCRUB_ALLOWED_DOMAINS_FILE). Setting
+# SCRUB_ALLOWED_EMAIL_DOMAINS replaces the whole list. Domains and addresses are
+# withheld from output; set SCRUB_SHOW_UNLISTED=1 to print the offending
 # domains when diagnosing locally.
 #
 # Run this against a fresh mirror clone on a machine that may force-push to the
@@ -33,7 +36,13 @@
 #   bash scripts/scrub-mirror-history.sh scrub  <clone>   # destructive rewrite
 #   bash scripts/scrub-mirror-history.sh push   <clone> <remote-url>
 #
-# Clone may be a normal working tree or a bare mirror (preferred for --mirror push).
+# Clone may be a normal working tree or a bare mirror.
+#
+# push publishes only the branches in SCRUB_PUSH_BRANCHES (default: main) plus
+# all tags. Feature branches are not mirrored: they may carry unscrubbed
+# ancestry, and the mirror exists to publish releases, not work in progress.
+# Any other branch already on the remote is reported, not deleted — remove it
+# by hand once you have confirmed it is unwanted.
 #
 # After scrub + push:
 #   Notify fork owners; re-tag release SHAs if tags pointed at pre-scrub commits.
@@ -43,7 +52,18 @@ set -euo pipefail
 TARGET_PATH='scripts/leakage-tokens.txt'
 GUARD_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles-guard"
 MAILMAP_FILE="${SCRUB_MAILMAP_FILE:-$GUARD_DIR/mirror-mailmap}"
-ALLOWED_DOMAINS="${SCRUB_ALLOWED_EMAIL_DOMAINS:-users.noreply.github.com github.com}"
+ALLOWED_DOMAINS_FILE="${SCRUB_ALLOWED_DOMAINS_FILE:-$GUARD_DIR/mirror-allowed-domains}"
+if [ -n "${SCRUB_ALLOWED_EMAIL_DOMAINS:-}" ]; then
+    ALLOWED_DOMAINS="$SCRUB_ALLOWED_EMAIL_DOMAINS"
+else
+    ALLOWED_DOMAINS="users.noreply.github.com github.com"
+    if [ -f "$ALLOWED_DOMAINS_FILE" ]; then
+        # one domain per line; '#' comments and blank lines ignored; CRLF tolerated
+        _extra=$(tr -d '\r' < "$ALLOWED_DOMAINS_FILE" | sed -e 's/#.*//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e '/^$/d' | tr '\n' ' ')
+        ALLOWED_DOMAINS="$ALLOWED_DOMAINS $_extra"
+    fi
+fi
+PUSH_BRANCHES="${SCRUB_PUSH_BRANCHES:-main}"
 MODE="${1:-}"
 CLONE="${2:-}"
 REMOTE="${3:-}"
@@ -61,7 +81,8 @@ audit — list commits that touched ${TARGET_PATH}; count identity fields that
 scrub — run git filter-repo --invert-paths, plus --mailmap when the mailmap
         file is present (rewrites history in <clone>)
 Mailmap: ${MAILMAP_FILE}
-push  — force-push a scrubbed bare clone (--mirror if bare, else --force --all)
+push  — force-push SCRUB_PUSH_BRANCHES (default: main) and all tags; report
+        any other branch present on the remote
 EOF
 }
 
@@ -185,14 +206,29 @@ _scrub() {
 
 _push() {
     [ -n "$REMOTE" ] || { echo "ERROR: remote URL required for push" >&2; exit 1; }
-    if [ -f "$CLONE/HEAD" ] && [ -d "$CLONE/objects" ]; then
-        echo "Force-pushing branches and tags to $REMOTE ..."
-        git -C "$CLONE" push --force "$REMOTE" 'refs/heads/*:refs/heads/*'
-        git -C "$CLONE" push --force "$REMOTE" 'refs/tags/*:refs/tags/*'
+    local b
+    local -a refspecs=()
+    for b in $PUSH_BRANCHES; do
+        git -C "$CLONE" rev-parse -q --verify "refs/heads/$b" >/dev/null \
+            || { echo "ERROR: branch '$b' not found in $CLONE" >&2; exit 1; }
+        refspecs+=("refs/heads/$b:refs/heads/$b")
+    done
+    echo "Force-pushing branch(es) [$PUSH_BRANCHES] and all tags to $REMOTE ..."
+    git -C "$CLONE" push --force "$REMOTE" "${refspecs[@]}"
+    git -C "$CLONE" push --force "$REMOTE" 'refs/tags/*:refs/tags/*'
+    echo ""
+    echo "=== Other branches on the remote (not pushed, not deleted) ==="
+    local others
+    others=$(git ls-remote -q --heads "$REMOTE" | awk '{print $2}' | sed 's#^refs/heads/##')
+    for b in $PUSH_BRANCHES; do
+        others=$(printf '%s\n' "$others" | grep -vxF -- "$b" || true)
+    done
+    others=$(printf '%s\n' "$others" | sed '/^$/d')
+    if [ -z "$others" ]; then
+        echo "none"
     else
-        echo "Force-pushing all refs from working clone to $REMOTE ..."
-        git -C "$CLONE" push --force --all "$REMOTE"
-        git -C "$CLONE" push --force --tags "$REMOTE"
+        printf '%s\n' "$others"
+        echo "Delete with: git push $REMOTE --delete <branch>"
     fi
 }
 

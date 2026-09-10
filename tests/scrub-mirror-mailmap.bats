@@ -36,6 +36,8 @@ _repo_fixture() {
 
 # Pin the allowlist too: the fixture's public identity is under example.com.
 export SCRUB_ALLOWED_EMAIL_DOMAINS="users.noreply.example.com"
+# Pin the allowed-domains file away from any real one in the guard dir.
+export SCRUB_ALLOWED_DOMAINS_FILE="/nonexistent/mirror-allowed-domains"
 
 _mailmap_fixture() {
     MAILMAP="$SCRATCH/mirror-mailmap"
@@ -201,4 +203,58 @@ EOF
     [ "$status" -eq 0 ] || return 1
     [[ "$output" == *"total matching identity fields: 0"* ]] || return 1
     [[ "$output" == *"all identity fields use allowed domains"* ]] || return 1
+}
+
+@test "allowed-domains file extends the defaults when the env override is unset" {
+    _repo_fixture
+    _mailmap_fixture
+    unset SCRUB_ALLOWED_EMAIL_DOMAINS
+    ALLOWED="$SCRATCH/mirror-allowed-domains"
+    printf '# personal\r\n  users.noreply.example.com  \nxyzzy.example.com # company fixture\n' > "$ALLOWED"
+    export SCRUB_ALLOWED_DOMAINS_FILE="$ALLOWED"
+    run bash "$SCRUB" audit "$REPO"
+    [[ "$output" == *"allowed: users.noreply.github.com github.com users.noreply.example.com xyzzy.example.com"* ]] || return 1
+    [[ "$output" == *"all identity fields use allowed domains"* ]] || return 1
+}
+
+@test "env override replaces the allowed-domains file entirely" {
+    _repo_fixture
+    _mailmap_fixture
+    ALLOWED="$SCRATCH/mirror-allowed-domains"
+    echo 'xyzzy.example.com' > "$ALLOWED"
+    export SCRUB_ALLOWED_DOMAINS_FILE="$ALLOWED"
+    export SCRUB_ALLOWED_EMAIL_DOMAINS="users.noreply.example.com"
+    run bash "$SCRUB" audit "$REPO"
+    [[ "$output" == *"4 identity field(s) across 1 unlisted domain(s)"* ]] || return 1
+}
+
+
+@test "push publishes only main and tags, and reports other remote branches" {
+    _repo_fixture
+    git -C "$REPO" branch -q main 2>/dev/null || git -C "$REPO" branch -q -M main
+    git -C "$REPO" branch -q feature/wip
+    git -C "$REPO" tag v0.1
+    REMOTE="$SCRATCH/remote.git"
+    git init -q --bare "$REMOTE"
+    # A stale branch already on the remote that the push must leave alone.
+    git -C "$REPO" push -q "$REMOTE" 'refs/heads/feature/wip:refs/heads/stale'
+    run bash "$SCRUB" push "$REPO" "$REMOTE"
+    [ "$status" -eq 0 ] || return 1
+    local heads
+    heads=$(git -C "$REMOTE" for-each-ref --format='%(refname:short)' refs/heads | sort | tr '\n' ' ')
+    [ "$heads" = "main stale " ] || return 1
+    [ "$(git -C "$REMOTE" tag -l)" = "v0.1" ] || return 1
+    [[ "$output" == *"Other branches on the remote"* ]] || return 1
+    [[ "$output" == *"stale"* ]] || return 1
+    [[ "$output" != *"feature/wip"* ]] || return 1
+}
+
+@test "push refuses when a configured branch is missing" {
+    _repo_fixture
+    REMOTE="$SCRATCH/remote.git"
+    git init -q --bare "$REMOTE"
+    SCRUB_PUSH_BRANCHES="does-not-exist" run bash "$SCRUB" push "$REPO" "$REMOTE"
+    [ "$status" -ne 0 ] || return 1
+    [[ "$output" == *"not found"* ]] || return 1
+    [ -z "$(git -C "$REMOTE" for-each-ref refs/heads)" ] || return 1
 }
