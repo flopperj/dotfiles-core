@@ -7,10 +7,12 @@ document.
 {{DEPS}}
 
 - **Sibling dependencies.** Skills listed above (if any) that belong to the
-  bundle are installed as siblings of this directory. If one is named but
-  missing from your available-skills list, stop and tell the user to install
-  it from the same skills repository this bundle came from. If the host has
-  no Skill tool, read `SKILL_DIR/../<skill>/SKILL.md` and follow it inline.
+  bundle are installed as siblings of this directory. Everything up to the
+  point where a sibling is needed runs normally; at that point, if the sibling
+  is missing from your available-skills list, stop and tell the user to
+  install it from the same skills repository this bundle came from (do not
+  improvise a substitute). If the host has no Skill tool, read
+  `SKILL_DIR/../<skill>/SKILL.md` and follow it inline.
   **Resolving `SKILL_DIR`:** it is the path shown as "Base directory for this skill" when this skill loaded; if the host does not show one, it is the
   directory containing this `SKILL.md` (e.g. `.claude/skills/<name>/` on a
   project install, `~/.agents/skills/<name>/` on a global install).

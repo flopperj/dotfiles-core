@@ -11,7 +11,8 @@ the Agent tool", apply this resolution order:
 1. **Registered subagent (preferred).** If the Agent tool lists `{{AGENT}}`
    among its available agent types, call
    `Agent(subagent_type: "{{AGENT}}", prompt: <brief>)`. You get the pinned
-   model, `maxTurns`, tool restrictions, and persistent agent memory.
+   model, `maxTurns`, tool restrictions (where the agent declares
+   `disallowedTools`), and persistent agent memory (where it declares `memory`).
 2. **Fallback — general-purpose subagent.** Otherwise read `SKILL_DIR/agent.md`,
    drop its YAML frontmatter, and call
    `Agent(subagent_type: "general-purpose", prompt: <agent.md body> + "\n\n---\n\n" + <brief>)`.

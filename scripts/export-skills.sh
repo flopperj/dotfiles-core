@@ -179,17 +179,19 @@ _mcp_for() {
 }
 
 # Space-separated sibling-skill dependencies (install-alongside list), in the
-# order they should render. Empty means standalone.
+# order they should render. Empty means standalone. A dependency is a skill
+# this SKILL.md actually invokes (Skill tool or Agent tool) — a redirect in a
+# "when not to use" note or a "companion" pointer is not a dependency.
 _deps_for() {
     case "$1" in
         forge) echo "grill-me to-prd aristotle-deconstructor optimus-planner cyrus-tdd-engineer" ;;
         aristotle-deconstructor) echo "optimus-planner cyrus-tdd-engineer" ;;
         cyrus-tdd-engineer) echo "code-auditor scout-reviewer ranger-reviewer" ;;
         code-auditor) echo "scout-reviewer ranger-reviewer" ;;
-        scout-reviewer) echo "ranger-reviewer cyrus-tdd-engineer" ;;
-        ranger-reviewer) echo "scout-reviewer cyrus-tdd-engineer" ;;
+        scout-reviewer) echo "cyrus-tdd-engineer" ;;
+        ranger-reviewer) echo "cyrus-tdd-engineer" ;;
         optimus-planner) echo "cyrus-tdd-engineer aristotle-deconstructor" ;;
-        grill-me) echo "to-prd scout-reviewer ranger-reviewer" ;;
+        grill-me) echo "to-prd" ;;
         to-prd) echo "" ;;
     esac
 }
@@ -432,6 +434,11 @@ _render_skill() {
         [ -f "$AGENTS_SRC/$skill.md" ] || { echo "export-skills.sh: missing agent $AGENTS_SRC/$skill.md" >&2; return 1; }
         sedprog="$(mktemp)"; _sed_program "$skill" agent > "$sedprog"
         tmp_insert="$(mktemp)"; _render_template "$PORTABLE_DIR/agent-notes.md" "$skill" > "$tmp_insert"
+        # The memory bullet points at a Persistent Agent Memory section that
+        # only agents declaring `memory:` carry (Aristotle has none by design).
+        if ! grep -q '^memory:' "$AGENTS_SRC/$skill.md"; then
+            sed -i '' '/^- \*\*Memory applies only when registered\.\*\*/,/skip that section entirely\.$/d' "$tmp_insert"
+        fi
         _strip_markers < "$AGENTS_SRC/$skill.md" \
             | _join_error_handling_wrap \
             | sed -f "$sedprog" \

@@ -495,11 +495,11 @@ _scratch_core() {
         || { echo "code-auditor deps line wrong or missing"; return 1; }
 
     f="$TARGET/skills/scout-reviewer/SKILL.md"
-    grep -q '^\*\*Requires (install alongside):\*\* `ranger-reviewer`, `cyrus-tdd-engineer`$' "$f" \
+    grep -q '^\*\*Requires (install alongside):\*\* `cyrus-tdd-engineer`$' "$f" \
         || { echo "scout deps line wrong or missing"; return 1; }
 
     f="$TARGET/skills/ranger-reviewer/SKILL.md"
-    grep -q '^\*\*Requires (install alongside):\*\* `scout-reviewer`, `cyrus-tdd-engineer`$' "$f" \
+    grep -q '^\*\*Requires (install alongside):\*\* `cyrus-tdd-engineer`$' "$f" \
         || { echo "ranger deps line wrong or missing"; return 1; }
 
     f="$TARGET/skills/optimus-planner/SKILL.md"
@@ -507,11 +507,11 @@ _scratch_core() {
         || { echo "optimus deps line wrong or missing"; return 1; }
 
     f="$TARGET/skills/grill-me/SKILL.md"
-    grep -q '^\*\*Requires (install alongside):\*\* `to-prd`, `scout-reviewer`, `ranger-reviewer`$' "$f" \
+    grep -q '^\*\*Requires (install alongside):\*\* `to-prd`$' "$f" \
         || { echo "grill-me deps line wrong or missing"; return 1; }
 
     # stopping-with-install-hint sentence is retained
-    grep -q 'stop and tell the user to install' "$TARGET/skills/forge/SKILL.md"
+    grep -q 'install it from the same skills repository' "$TARGET/skills/forge/SKILL.md"
     ! grep -rq '\*\*Sibling skills\.\*\*' "$TARGET/skills"
 }
 
@@ -616,4 +616,19 @@ _scratch_core() {
     [ "$status" -eq 0 ]
     [ -f "$SCRATCH/repo/.claude/agents/optimus-planner.md" ]
     [ ! -e "$SCRATCH/repo/deep/er/.claude" ]
+}
+
+@test "agent.md: memory bullet appears only for agents that declare memory:" {
+    _render_target
+    ! grep -q 'Memory applies only when registered' "$TARGET/skills/aristotle-deconstructor/agent.md"
+    grep -q 'Memory applies only when registered' "$TARGET/skills/optimus-planner/agent.md"
+    grep -q 'Memory applies only when registered' "$TARGET/skills/ranger-reviewer/agent.md"
+}
+
+@test "Requires lists name only skills the SKILL.md actually invokes (reviewers → cyrus only; grill-me → to-prd only)" {
+    _render_target
+    grep -q '^\*\*Requires (install alongside):\*\* `cyrus-tdd-engineer`$' "$TARGET/skills/scout-reviewer/SKILL.md"
+    grep -q '^\*\*Requires (install alongside):\*\* `cyrus-tdd-engineer`$' "$TARGET/skills/ranger-reviewer/SKILL.md"
+    grep -q '^\*\*Requires (install alongside):\*\* `to-prd`$' "$TARGET/skills/grill-me/SKILL.md"
+    grep -q 'Everything up to the' "$TARGET/skills/grill-me/SKILL.md"
 }
