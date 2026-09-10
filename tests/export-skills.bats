@@ -148,7 +148,7 @@ _scratch_core() {
             && grep -q '^  tags:$' "$f" || { echo "frontmatter incomplete: $s"; return 1; }
         # metadata sits inside the frontmatter (before the closing ---)
         [ "$(awk 'NR>1 && /^---$/ {print NR; exit}' "$f")" -gt "$(grep -n '^metadata:$' "$f" | cut -d: -f1)" ] \
-            || { echo "metadata outside frontmatter: $s"; return 1; } || return 1
+            || { echo "metadata outside frontmatter: $s"; return 1; }
     done
 }
 
@@ -330,7 +330,7 @@ _scratch_core() {
     _render_target
     for s in aristotle-deconstructor optimus-planner cyrus-tdd-engineer code-auditor scout-reviewer ranger-reviewer; do
         f="$TARGET/skills/$s/references/agent-turn-cap-warning.md"
-        [ -f "$f" ] || { echo "missing turn-cap doc in $s"; return 1; } || return 1
+        [ -f "$f" ] || { echo "missing turn-cap doc in $s"; return 1; }
         grep -q '^3\. \*\*Wait for user direction\.\*\*' "$f" || { echo "portable renumbering missing in $s"; return 1; }
         ! grep -q 'agent_truncated. metric' "$f" || { echo "metric step survived in $s"; return 1; }
         grep -q 'references/agent-turn-cap-warning.md' "$TARGET/skills/$s/SKILL.md" || { echo "SKILL.md does not cite the local copy: $s"; return 1; }
@@ -368,7 +368,7 @@ _scratch_core() {
     _render_target
     for s in cyrus-tdd-engineer scout-reviewer ranger-reviewer; do
         f="$TARGET/skills/$s/references/review-heuristics.md"
-        [ -f "$f" ] || { echo "missing review-heuristics.md in $s"; return 1; } || return 1
+        [ -f "$f" ] || { echo "missing review-heuristics.md in $s"; return 1; }
         cmp "$DOTFILES_DIR/.claude/skills/code-auditor/references/review-heuristics.md" "$f" || return 1
         grep -q 'references/review-heuristics.md' "$TARGET/skills/$s/agent.md" \
             || { echo "$s agent.md does not cite the local copy"; return 1; }
@@ -391,7 +391,7 @@ _scratch_core() {
     _render_target
     for s in $AGENT_SET; do
         src="$DOTFILES_DIR/.claude/agents/$s.md"; f="$TARGET/skills/$s/agent.md"
-        [ -f "$f" ] || { echo "missing agent.md: $s"; return 1; } || return 1
+        [ -f "$f" ] || { echo "missing agent.md: $s"; return 1; }
         head -1 "$f" | grep -q '^---$' || return 1
         grep -q "^name: $s$" "$f" || return 1
         model="$(awk '/^model:/{print $2; exit}' "$src")"; [ -n "$model" ] || return 1
@@ -466,8 +466,8 @@ _scratch_core() {
 @test "optional context: personal-file citations are marked, PR-creation fallback stated" {
     _render_target
     grep -q '`~/.claude/DoD.md` (if present' "$TARGET/skills/scout-reviewer/agent.md"
-    grep -q 'the 9 sections named here are the taxonomy either way' "$TARGET/skills/scout-reviewer/agent.md" || return 1
-    grep -q 'the 9 sections named here are the taxonomy either way' "$TARGET/skills/ranger-reviewer/agent.md" || return 1
+    grep -q 'the sections below are the taxonomy either way' "$TARGET/skills/scout-reviewer/agent.md" || return 1
+    grep -q 'the sections below are the taxonomy either way' "$TARGET/skills/ranger-reviewer/agent.md" || return 1
     ! grep -q '(if present) (' "$TARGET/skills/scout-reviewer/SKILL.md"
     grep -q '`~/.claude/AGENTS.md` (if present)' "$TARGET/skills/cyrus-tdd-engineer/agent.md"
     grep -q 'If `~/.claude/project-templates/` exists' "$TARGET/skills/optimus-planner/agent.md"

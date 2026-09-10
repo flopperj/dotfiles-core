@@ -297,7 +297,7 @@ _sed_program() {
     echo 's|`~/\.claude/DoD\.md` (if present) (|`~/.claude/DoD.md` (if present; |g'
     echo 's|`~/\.claude/AGENTS\.md`|`~/.claude/AGENTS.md` (if present)|g'
     # the nine DoD section names are inline, so the taxonomy holds without the file
-    echo 's|`~/\.claude/DoD\.md` (if present) — its 9 sections|`~/.claude/DoD.md` (if present; the 9 sections named here are the taxonomy either way) — its 9 sections|'
+    echo 's|`~/\.claude/DoD\.md` (if present) — its 9 sections|`~/.claude/DoD.md` (if present — the sections below are the taxonomy either way) — its 9 sections|'
     # scout/ranger memory-write note: the harness only enforces disallowedTools
     # for a *registered* subagent; in fallback (general-purpose) mode it is
     # not enforced by the harness and must be self-enforced (see agent-notes.md).
