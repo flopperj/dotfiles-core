@@ -190,6 +190,27 @@ teardown() {
 # Portability: script must run under system bash 3.2
 # ---------------------------------------------------------------------------
 
+@test "schema declares the pipeline_complete outcome enum and nullable first_pass" {
+    local schema="$DOTFILES_DIR/.claude/evals/schemas/metrics-event.schema.json"
+    run jq -e '
+        [.properties.data.oneOf[] | select(.description | startswith("pipeline_complete"))][0]
+        | (.properties.outcome.enum == ["implemented","advisory"])
+          and (.properties.first_pass.type == ["boolean","null"])
+          and (.properties.tests_passed.type == ["boolean","null"])
+          and (.properties | has("advisory_reason"))
+    ' "$schema"
+    [ "$status" -eq 0 ] || return 1
+}
+
+@test "schema swarm_complete declares an optional advisory count" {
+    local schema="$DOTFILES_DIR/.claude/evals/schemas/metrics-event.schema.json"
+    run jq -e '
+        [.properties.data.oneOf[] | select(.description | startswith("swarm_complete"))][0]
+        | (.properties | has("advisory")) and ((.required | index("advisory")) == null)
+    ' "$schema"
+    [ "$status" -eq 0 ] || return 1
+}
+
 @test "emit-metric.sh runs under /bin/bash (3.2-safe)" {
     echo "$VALID_EVENT" | /bin/bash "$EMIT"
     [ -s "$METRICS_FILE" ]

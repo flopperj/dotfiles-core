@@ -181,17 +181,14 @@ present the menu below; three of its four options assume a Move exists.
 
   On `o`, re-invoke per the override rule in Step 1 and return to Step 2.
 
-- *Autonomous:* do not proceed to Optimus. Report back to the caller with
-  the Phase 0 verdict and the analogy answer as the outcome text. Neither
-  `ticket-pickup` nor `ticket-swarm` has a "no code changes" outcome today:
-  both classify any pipeline that ends without a PR as **blocked**, and the
-  swarm's ticket comment reads "Had to stop on this one. What happened:
-  {reason}". Put the verdict in `{reason}` so a human sees a correct answer,
-  not a failure. Known consequence: the ticket counts as blocked and
-  `first_pass` reads false for what was a correct outcome. This is a
-  pre-existing gap shared with the "no code changes needed" halt below;
-  closing it means teaching both callers a third terminal outcome, which is
-  out of scope here.
+- *Autonomous:* do not proceed to Optimus. Return an **advisory outcome**
+  to the caller: `outcome: advisory`, a one-line `verdict` (the Phase 0
+  "wrong tool" ruling), and the analogy answer as the body. `ticket-pickup`
+  emits `pipeline_complete` with `outcome: advisory` and comments the
+  verdict on the ticket; `ticket-swarm` counts it under Advisory, not
+  Blocked, and never retries or runs failure analysis on it. The same
+  outcome shape is used when a full analysis concludes no code changes are
+  needed (see Gate rules).
 
 **In gated mode (full analysis):** Ask:
 
@@ -307,7 +304,9 @@ waves, and aggregate final results.
   decision and proceeds. Only PR creation (handled downstream by
   `/pr-create-from-commits`) gates on user approval. If Aristotle's
   analysis concludes no code changes are needed, or ends in a Phase 0
-  stop, halt and report back.
+  stop, do not launch Optimus: return an advisory outcome to the caller
+  (`outcome: advisory`, one-line `verdict`, the analysis as the body). The
+  callers treat advisory as a success distinct from blocked.
 - **Aristotle-only is valid.** Strategic questions may not need code.
 - **Optimus can be skipped.** If Aristotle identifies a trivial, fully-specified
   change (single function rename, one-line config), offer to skip straight

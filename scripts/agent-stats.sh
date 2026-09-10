@@ -130,14 +130,23 @@ echo
 # An explicit "first_pass": null is treated as absent and falls through to
 # derivation too — intentional asymmetry with the "classification": null
 # convention, where null is a meaningful value rather than "missing".
+#
+# Advisory outcomes (data.outcome == "advisory": the pipeline ended with a
+# correct no-code answer) are successes but not implementations. They are
+# counted separately and excluded from every first-pass denominator, and can
+# never satisfy fp — their null first_pass must not fall through to derivation.
 PIPELINE_STATS="$(jq -s '
+  def adv: (.data.outcome // "implemented") == "advisory";
   def fp:
-    if .data.first_pass != null then .data.first_pass == true
+    if adv then false
+    elif .data.first_pass != null then .data.first_pass == true
     else (.data.tests_passed == true) and ((.data.ci_fix_attempts // 0) == 0)
     end;
   map(select(.event_type == "pipeline_complete"))
   | {
       total: length,
+      advisory: ([.[] | select(adv)] | length),
+      implemented: ([.[] | select(adv | not)] | length),
       first_pass: ([.[] | select(fp)] | length),
       tests_failed: ([.[] | select(.data.tests_passed == false)] | length),
       ci_fix_total: ([.[] | (.data.ci_fix_attempts // 0)] | add // 0),
@@ -147,6 +156,7 @@ PIPELINE_STATS="$(jq -s '
         map({
           classification: (.[0].data.classification // "unknown"),
           n: length,
+          implemented: ([.[] | select(adv | not)] | length),
           first_pass: ([.[] | select(fp)] | length)
         })
       ),
@@ -155,6 +165,7 @@ PIPELINE_STATS="$(jq -s '
         map({
           agent: .[0].agent,
           n: length,
+          implemented: ([.[] | select(adv | not)] | length),
           first_pass: ([.[] | select(fp)] | length)
         })
       )
@@ -168,18 +179,23 @@ if [ "$PIPE_TOTAL" = "0" ]; then
   echo
 else
   PIPE_FP="$(echo "$PIPELINE_STATS" | jq -r '.first_pass')"
+  PIPE_ADV="$(echo "$PIPELINE_STATS" | jq -r '.advisory')"
+  PIPE_IMPL="$(echo "$PIPELINE_STATS" | jq -r '.implemented')"
   PIPE_FAIL="$(echo "$PIPELINE_STATS" | jq -r '.tests_failed')"
   CI_TOTAL="$(echo "$PIPELINE_STATS" | jq -r '.ci_fix_total')"
   AVG_DUR="$(echo "$PIPELINE_STATS" | jq -r '.avg_duration | floor')"
 
-  if [ "$PIPE_TOTAL" -gt 0 ]; then
-    PIPE_FP_PCT="$(awk "BEGIN { printf \"%.0f\", ($PIPE_FP / $PIPE_TOTAL) * 100 }")"
+  # First-pass rate is over implemented pipelines only; advisory outcomes are
+  # correct no-code answers and belong in neither the numerator nor denominator.
+  if [ "$PIPE_IMPL" -gt 0 ]; then
+    PIPE_FP_PCT="$(awk "BEGIN { printf \"%.0f\", ($PIPE_FP / $PIPE_IMPL) * 100 }")"
   else
     PIPE_FP_PCT="0"
   fi
 
   echo "Pipelines completed:    $PIPE_TOTAL"
-  echo "First-pass success:     $PIPE_FP / $PIPE_TOTAL  (${PIPE_FP_PCT}%)"
+  echo "Advisory outcomes:      $PIPE_ADV  (correct no-code answers; excluded from first-pass)"
+  echo "First-pass success:     $PIPE_FP / $PIPE_IMPL  (${PIPE_FP_PCT}%)"
   echo "Tests-failed events:    $PIPE_FAIL"
   echo "CI fix attempts (sum):  $CI_TOTAL"
   echo "Avg pipeline duration:  ${AVG_DUR}s"
@@ -188,14 +204,14 @@ else
   echo "By classification:"
   echo "$PIPELINE_STATS" | jq -r '
     .by_classification[]
-    | "  \(.classification | tostring | (. + "                ")[0:14])  \(.n) runs, \(.first_pass)/\(.n) first-pass"
+    | "  \(.classification | tostring | (. + "                ")[0:14])  \(.n) runs, \(.first_pass)/\(.implemented) first-pass"
   '
   echo
 
   echo "By agent:"
   echo "$PIPELINE_STATS" | jq -r '
     .by_agent[]
-    | "  \(.agent | tostring | (. + "                          ")[0:26])  \(.n) runs, \(.first_pass)/\(.n) first-pass"
+    | "  \(.agent | tostring | (. + "                          ")[0:26])  \(.n) runs, \(.first_pass)/\(.implemented) first-pass"
   '
   echo
 fi
@@ -241,10 +257,11 @@ else
         runs: length,
         tickets: ([.[] | (.data.tickets_total // 0)] | add // 0),
         completed: ([.[] | (.data.completed // 0)] | add // 0),
+        advisory: ([.[] | (.data.advisory // 0)] | add // 0),
         prs: ([.[] | (.data.prs_created // 0)] | add // 0),
         avg_first_pass: (if length == 0 then 0 else ([.[] | (.data.first_pass_rate // 0)] | add) / length end)
       }
-    | "Swarm runs:           \(.runs)\nTickets processed:    \(.tickets)\nCompleted:            \(.completed)\nPRs created:          \(.prs)\nAvg first-pass rate:  \(.avg_first_pass | (. * 100 | floor))%"
+    | "Swarm runs:           \(.runs)\nTickets processed:    \(.tickets)\nCompleted:            \(.completed)\nAdvisory:             \(.advisory)\nPRs created:          \(.prs)\nAvg first-pass rate:  \(.avg_first_pass | (. * 100 | floor))%"
   ' "$EVENTS_TMP" | tr -d '"'
   echo
 fi

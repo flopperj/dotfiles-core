@@ -92,9 +92,15 @@ ROLE_GUARD_FRAGMENT="$DOTFILES_DIR/.claude/_shared/role-guards/aristotle.md"
     grep -q 'override line stating that the user has seen a "wrong tool" verdict' "$AGENT" || return 1
 }
 
-@test "aristotle skill autonomous Phase 0 branch names the callers' blocked bucket" {
-    grep -q 'classify any pipeline that ends without a PR as \*\*blocked\*\*' "$SKILL" || return 1
-    grep -q 'Put the verdict in `{reason}`' "$SKILL" || return 1
+@test "aristotle skill autonomous Phase 0 branch returns an advisory outcome, not blocked" {
+    grep -q 'Return an \*\*advisory outcome\*\*' "$SKILL" || return 1
+    grep -q 'counts it under Advisory, not' "$SKILL" || return 1
+    # The interim wording that filed a correct verdict under the blocked bucket is gone.
+    ! grep -q 'ends without a PR as \*\*blocked\*\*' "$SKILL" || return 1
+}
+
+@test "aristotle skill gate rules route a no-code-changes conclusion to the advisory outcome" {
+    grep -q 'return an advisory outcome to the caller' "$SKILL" || return 1
 }
 
 @test "aristotle skill truncation rule does not treat a missing handoff as truncation" {

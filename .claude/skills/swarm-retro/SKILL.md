@@ -91,6 +91,14 @@ Compare the initial classification against the actual outcome:
   - Ticket classified Medium but Cyrus hit architectural blockers
   - Signs: retries > 0, status = BLOCKED, duration >> average for that tier
 
+- **Advisory is not a misclassification signal.** A Complex ticket that
+  ended with an advisory outcome (Aristotle judged first principles the
+  wrong tool, or found no code change was needed) was correctly routed:
+  only the Complex route can produce that verdict. Do not count it as
+  blocked, as a retry, or as over-classification. It may indicate the
+  *ticket* was mis-filed as engineering work — surface that as a ticket
+  hygiene note, not a routing error.
+
 - **Over-classified** (wasted resources):
   - Ticket classified Complex but completed quickly with no issues
   - Best-of-N where both attempts produced nearly identical results

@@ -186,6 +186,41 @@ EOF
         [[ "$output" == *"cyrus-tdd-engineer"*"3 runs, 1/3 first-pass"* ]]
 }
 
+@test "advisory outcomes are counted separately and excluded from the first-pass denominator" {
+    local now
+    now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    mkdir -p "$TASKS_DIR/advisory"
+    # Two implemented runs (one first-pass), one advisory run with null
+    # first_pass/tests_passed. The advisory run must neither derive to a
+    # first-pass nor widen the denominator.
+    cat > "$TASKS_DIR/advisory/metrics.jsonl" <<EOF
+{"timestamp":"$now","event_type":"pipeline_complete","agent":"ticket-pickup","project":"advisory","ticket":"PROJ-1","data":{"classification":"Medium","first_pass":true,"tests_passed":true,"ci_fix_attempts":0,"duration_seconds":100,"outcome":"implemented"}}
+{"timestamp":"$now","event_type":"pipeline_complete","agent":"ticket-pickup","project":"advisory","ticket":"PROJ-2","data":{"classification":"Medium","first_pass":false,"tests_passed":true,"ci_fix_attempts":1,"duration_seconds":100}}
+{"timestamp":"$now","event_type":"pipeline_complete","agent":"ticket-pickup","project":"advisory","ticket":"PROJ-3","data":{"classification":"Complex","first_pass":null,"tests_passed":null,"ci_fix_attempts":0,"files_changed":0,"duration_seconds":40,"outcome":"advisory","advisory_reason":"wrong tool: vendor config, not code"}}
+EOF
+    run /bin/bash "$STATS" --project advisory
+    [ "$status" -eq 0 ] || return 1
+    [[ "$output" == *"Pipelines completed:    3"* ]] || return 1
+    [[ "$output" == *"Advisory outcomes:      1"* ]] || return 1
+    [[ "$output" == *"First-pass success:     1 / 2  (50%)"* ]] || return 1
+    [[ "$output" == *"Complex"*"1 runs, 0/0 first-pass"* ]] || return 1
+    [[ "$output" == *"Medium"*"2 runs, 1/2 first-pass"* ]] || return 1
+}
+
+@test "advisory swarm_complete counts render on their own line" {
+    local now
+    now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    mkdir -p "$TASKS_DIR/swarmadv"
+    cat > "$TASKS_DIR/swarmadv/metrics.jsonl" <<EOF
+{"timestamp":"$now","event_type":"swarm_complete","agent":"ticket-swarm","project":"swarmadv","run_id":"r1","data":{"tickets_total":5,"completed":3,"advisory":1,"blocked":1,"prs_created":3,"duration_seconds":600,"first_pass_rate":0.75}}
+{"timestamp":"$now","event_type":"swarm_complete","agent":"ticket-swarm","project":"swarmadv","run_id":"r0","data":{"tickets_total":2,"completed":2,"blocked":0,"prs_created":2,"duration_seconds":300,"first_pass_rate":1}}
+EOF
+    run /bin/bash "$STATS" --project swarmadv
+    [ "$status" -eq 0 ] || return 1
+    [[ "$output" == *"Completed:            5"* ]] || return 1
+    [[ "$output" == *"Advisory:             1"* ]] || return 1
+}
+
 @test "explicit first_pass false is not overridden by derivation" {
     local now
     now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
