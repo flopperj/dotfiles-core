@@ -18,6 +18,8 @@ jobs:
         run: make lint
       - name: consult grammar
         run: make check-consult-grammar
+      - name: readme tables in step with skills and agents
+        run: make check-readme
       - name: tests (leakage mechanism runs on synthetic tokens)
         run: make test
       # Classifier answer-key eval under the mechanical ratchet: warn-only

@@ -56,7 +56,7 @@ README="$DOTFILES_DIR/README.md"
     grep -v '^| \*\*Scout\*\* ' "$README" > "$copy"
     run bash "$GEN" "$copy"
     [ "$status" -eq 1 ] || return 1
-    [[ "$output" == *"missing a row for agent: Scout"* ]] || return 1
+    [[ "$output" == *"missing a row for agent: Scout (from .claude/agents/scout-reviewer.md)"* ]] || return 1
 }
 
 @test "a README agent row with no definition file fails the check and is named" {
@@ -79,4 +79,26 @@ README="$DOTFILES_DIR/README.md"
     run bash "$GEN" "$SCRATCH/does-not-exist.md"
     [ "$status" -eq 1 ] || return 1
     [[ "$output" == *"README not found"* ]] || return 1
+}
+
+@test "a duplicated README skill row fails the check and is named" {
+    local copy="$SCRATCH/README.md"
+    awk '{print} /^\| `\/grill-me` /{print}' "$README" > "$copy"
+    run bash "$GEN" "$copy"
+    [ "$status" -eq 1 ] || return 1
+    [[ "$output" == *"lists a skill more than once: grill-me"* ]] || return 1
+}
+
+@test "two agent files sharing a display name are reported, not merged" {
+    # A hypothetical ranger-triage.md would also derive to **Ranger**; the
+    # check must name both files rather than let one row cover two agents.
+    local fake="$SCRATCH/repo"
+    mkdir -p "$fake/scripts" "$fake/.claude/agents" "$fake/.claude/skills"
+    cp "$GEN" "$fake/scripts/docs-gen.sh"
+    cp -R "$DOTFILES_DIR"/.claude/skills/. "$fake/.claude/skills/"
+    cp "$DOTFILES_DIR"/.claude/agents/*.md "$fake/.claude/agents/"
+    printf -- '---\nname: ranger-triage\n---\n' > "$fake/.claude/agents/ranger-triage.md"
+    run bash "$fake/scripts/docs-gen.sh" "$README"
+    [ "$status" -eq 1 ] || return 1
+    [[ "$output" == *"share the display name Ranger: ranger-reviewer.md ranger-triage.md"* ]] || return 1
 }
