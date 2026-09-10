@@ -14,6 +14,10 @@
 #      ../../workflows/, ../skills/), overlay plumbing (overlay-context,
 #      .cursor/hooks.json, parity-ignore, "managed via dotfiles"), and the
 #      export markers themselves (CORE-ONLY, PORTABLE-ONLY).
+#      Company-specific tokens are forbidden too: the maintainer's Jira
+#      project keys (EEE-, AORG-, FREDDIE-, MUL-) — examples must use
+#      PROJ-#### — and company overlay skills (/mc-*), which are not excused
+#      by the optional paragraph because it no longer names them.
 #   2. Every `/skill-name` token resolves to a bundle skill, or the file
 #      carries the "Optional external skills" / "Skills are optional" paragraph that declares
 #      everything else optional.
@@ -49,7 +53,7 @@ if [ -z "$(echo "$CHECK_SKILLS" | tr -d '[:space:]')" ]; then
 fi
 
 # shellcheck disable=SC2088 # literal tilde is the pattern we search for
-FORBIDDEN='~/\.claude/_shared|~/\.claude/evals|~/\.claude/workflows|~/\.claude/skills/|\.\./\.\./agents/|\.\./\.\./workflows/|\.\./skills/|overlay-context|\.cursor/hooks\.json|parity-ignore|managed via dotfiles|CORE-ONLY|PORTABLE-ONLY|metrics-emit|ob-[0-9]'
+FORBIDDEN='~/\.claude/_shared|~/\.claude/evals|~/\.claude/workflows|~/\.claude/skills/|\.\./\.\./agents/|\.\./\.\./workflows/|\.\./skills/|overlay-context|\.cursor/hooks\.json|parity-ignore|managed via dotfiles|CORE-ONLY|PORTABLE-ONLY|metrics-emit|ob-[0-9]|(^|[^A-Za-z])(EEE|AORG|FREDDIE|MUL)-[0-9]'
 
 # Slash tokens that are paths or prose, never skill names.
 ALLOW_SLASH='skill|plans|prds|archive|dev|tmp|llms|repos|metrics|wrong|api|users|app|data|src|test|tests|lib|bin|etc|usr|home|var|opt|Users|claude|cursor|agents|skills|workflows|schemas|references|scripts|or|and|to|from|the|a|an|in|on|by|per|of|with|then|else|ip|i|r|p|x|n|y|g|s|d|c|e|f|dist|node_modules|build|docs|components|styles|pages|hooks|utils|mv|rm'

@@ -18,7 +18,7 @@ document.
   project install, `~/.agents/skills/<name>/` on a global install).
 - **Optional external skills.** Any other `/skill` named here
   (`/pr-create-from-commits`, `/review-context`, `/swarm-retro`,
-  `/smart-compact`, `/create-*`, `/mc-*`, `/google-*`, `/mermaid-diagrams`,
+  `/smart-compact`, `/create-*`, `/google-*`, `/mermaid-diagrams`,
   `/code-review`, the `frontend-design` plugin) is optional and not part of
   this bundle. Use
   it only if it appears in your available-skills list; otherwise perform the

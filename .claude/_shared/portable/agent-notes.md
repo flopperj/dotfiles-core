@@ -6,7 +6,7 @@ this file (see the skill's *Launching the agent* section).
 
 - **Skills are optional.** Any other `/skill` named below
   (`/pr-create-from-commits`, `/review-context`, `/swarm-retro`,
-  `/smart-compact`, `/create-*`, `/mc-*`, `/google-*`, `/mermaid-diagrams`,
+  `/smart-compact`, `/create-*`, `/google-*`, `/mermaid-diagrams`,
   `/code-review`, the `frontend-design` plugin) that is not in your
   available-skills list is unavailable: perform the action directly instead of
   invoking it. For PR creation that means `gh pr create --draft`, honouring the

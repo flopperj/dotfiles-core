@@ -296,6 +296,8 @@ _sed_program() {
     echo 's|`~/\.claude/DoD\.md`|`~/.claude/DoD.md` (if present)|g'
     echo 's|`~/\.claude/DoD\.md` (if present) (|`~/.claude/DoD.md` (if present; |g'
     echo 's|`~/\.claude/AGENTS\.md`|`~/.claude/AGENTS.md` (if present)|g'
+    # the nine DoD section names are inline, so the taxonomy holds without the file
+    echo 's|`~/\.claude/DoD\.md` (if present) — its 9 sections|`~/.claude/DoD.md` (if present — the sections below are the taxonomy either way) — its 9 sections|'
     # scout/ranger memory-write note: the harness only enforces disallowedTools
     # for a *registered* subagent; in fallback (general-purpose) mode it is
     # not enforced by the harness and must be self-enforced (see agent-notes.md).
@@ -316,6 +318,13 @@ _sed_program() {
         # registered); only the mandatory numbered step in Optimus needs the
         # qualifier so a fallback run does not treat it as required.
         echo 's|^\*\*Step C — Check agent memory\.\*\* Consult|**Step C — Check agent memory (registered-subagent mode only).** Consult|'
+    fi
+    # --- project-agnostic bundle: company overlay skills never ship ---
+    # The Optimus skill catalog lists the maintainer's /mc-* overlay skills
+    # in table rows (a comment marker inside a markdown table would break
+    # the table in core, so this is a generator rule, not a marker).
+    if [ "$skill" = "optimus-planner" ] && [ "$kind" = "agent" ]; then
+        echo '/^  | `\/mc-[a-z-]*` |/d'
     fi
     # --- core-only housekeeping ---
     echo '/^# parity-ignore:/d'

@@ -133,7 +133,7 @@ A numbered, sequenced list of discrete steps. Each step must include:
 - **What**: What action is being taken
 - **Where**: File path as a markdown link — [`src/services/Foo.ts`](src/services/Foo.ts)
 - **Why**: Why this step is necessary
-- **Agent/Skill**: Which Claude agent or named skill is best suited to execute this step (e.g., `/mc-pr-flag`, `/mc-lint`, `/create-jira-ticket`, `/mc-create-optimizely-experiment`, `/mc-create-logging-plan`, `/create-tech-spec`, `frontend-design`, the code auditor, etc.)
+- **Agent/Skill**: Which Claude agent or named skill is best suited to execute this step (e.g., `/create-jira-ticket`, `/create-tech-spec`, `frontend-design`, the code auditor, or a team skill from the available-skills list such as a feature-flag or lint skill, etc.)
 - **Dependencies**: Which prior steps must be complete first
 - **Before** (optional): The current code that will change — include this when the change is non-obvious or touches complex logic
 - **After** (optional): The expected code after the change — gives Cyrus precise guidance, reducing interpretation drift
@@ -175,7 +175,12 @@ If the change should be flag-gated (default: yes for any user-facing or risky ch
 - Flag placement per project conventions in project CLAUDE.md
 - Rollout sequence: 0% → 1% → 5% → 10% → 25% → 50% → 100%
 - Which code paths are gated
+<!-- BEGIN CORE-ONLY -->
 - **Execution skill**: Assign `/mc-pr-flag` as the execution step for flag creation and release PRs
+<!-- END CORE-ONLY -->
+<!-- PORTABLE-ONLY
+- **Execution skill**: If the team has a feature-flag skill in the available-skills list, assign it as the execution step for flag creation and release PRs
+-->
 
 ### 6. Testing Plan
 - List each new test file to create (per project conventions from project CLAUDE.md or inferred from the repo)
@@ -188,7 +193,12 @@ If the change should be flag-gated (default: yes for any user-facing or risky ch
 - Which IO calls (HTTP, database, external services) need instrumentation
 - Logging context to carry through the call chain
 - Where to check logs (per project conventions)
+<!-- BEGIN CORE-ONLY -->
 - **Available skills**: Use `/mc-create-logging-plan` to generate a comprehensive logging plan with constraint validation, and `/mc-create-splunk-dashboard` to generate monitoring dashboards from the logging plan
+<!-- END CORE-ONLY -->
+<!-- PORTABLE-ONLY
+- **Available skills**: If the team has logging-plan or monitoring-dashboard skills in the available-skills list, use them to generate the logging plan and its dashboards
+-->
 
 ### 8. Static Analysis Plan
 - List the static analysis commands to run per project CLAUDE.md or discovered from the repo
@@ -262,7 +272,7 @@ After producing the complete plan, write it to a file for downstream tracking. T
 
 ```yaml
 ---
-ticket: AORG-9120  # or omit if no ticket
+ticket: PROJ-9120  # or omit if no ticket
 created: 2026-04-10T19:00:00
 status: planned
 todos:

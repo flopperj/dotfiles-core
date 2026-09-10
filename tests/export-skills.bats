@@ -7,9 +7,11 @@
 # asserts on the rendered output: idempotency, self-containment, preserved
 # agent frontmatter, and the inserted portable sections.
 #
-# bash 3.2 note: assertions are &&-chained into each test's final command, and
-# every extraction is guarded with a non-empty check so a mistyped pattern
-# cannot produce a vacuous pass.
+# bash 3.2 note: under macOS bash 3.2 a failing `[[ ]]` does not trip errexit
+# and no operand of an `&&`/`||` list does, so a mid-test assertion is
+# vacuous unless it is the test's final command. Every mid-test assertion
+# therefore ends in `|| return 1`, and every extraction is guarded with a
+# non-empty check so a mistyped pattern cannot produce a vacuous pass.
 #
 # Run with: bats tests/export-skills.bats
 
@@ -73,17 +75,17 @@ _scratch_core() {
 # --- CLI surface ------------------------------------------------------------
 
 @test "export-skills: executable, --help exits 0, missing target exits 2" {
-    [ -x "$EXPORT" ]
+    [ -x "$EXPORT" ] || return 1
     run bash "$EXPORT" --help
-    [ "$status" -eq 0 ] && [[ "$output" == *"Usage:"* ]]
+    [ "$status" -eq 0 ] && [[ "$output" == *"Usage:"* ]] || return 1
     run bash "$EXPORT"
-    [ "$status" -eq 2 ] && [[ "$output" == *"missing <target-repo-dir>"* ]]
+    [ "$status" -eq 2 ] && [[ "$output" == *"missing <target-repo-dir>"* ]] || return 1
     run bash "$EXPORT" "$SCRATCH/does-not-exist"
     [ "$status" -eq 2 ] && [[ "$output" == *"target is not a directory"* ]]
 }
 
 @test "check-portable-refs: executable, usage exits 2 without a dir" {
-    [ -x "$REFS" ]
+    [ -x "$REFS" ] || return 1
     run bash "$REFS"
     [ "$status" -eq 2 ]
 }
@@ -103,8 +105,8 @@ _scratch_core() {
     printf '<!-- BEGIN CORE-ONLY -->\nnever terminated\n' >> "$SCRATCH_CORE/.claude/skills/to-prd/SKILL.md"
     TARGET="$SCRATCH/target-bad"; mkdir -p "$TARGET"
     run env EXPORT_SKILLS_CORE_DIR="$SCRATCH_CORE" bash "$EXPORT" "$TARGET"
-    [ "$status" -ne 0 ]
-    [[ "$output" == *"unterminated <!-- BEGIN CORE-ONLY -->"* ]]
+    [ "$status" -ne 0 ] || return 1
+    [[ "$output" == *"unterminated <!-- BEGIN CORE-ONLY -->"* ]] || return 1
     # nothing was written: the render aborted before the copy step
     [ -z "$(ls -A "$TARGET/skills" 2>/dev/null)" ]
 }
@@ -112,8 +114,8 @@ _scratch_core() {
 @test "check-portable-refs: empty resolved skill list errors instead of reporting clean" {
     mkdir -p "$SCRATCH/empty-dir"
     run bash "$REFS" "$SCRATCH/empty-dir"
-    [ "$status" -eq 1 ]
-    [[ "$output" == *"no skills to check"* ]]
+    [ "$status" -eq 1 ] || return 1
+    [[ "$output" == *"no skills to check"* ]] || return 1
     [[ "$output" != *"clean (0 skills)"* ]]
 }
 
@@ -124,7 +126,7 @@ _scratch_core() {
     local n
     n="$(find "$TARGET/skills" -name SKILL.md | wc -l | tr -d ' ')"
     # 9 exported + 1 unmanaged
-    [ "$n" = "10" ]
+    [ "$n" = "10" ] || return 1
     for s in $EXPORT_SET; do
         [ "$(find "$TARGET/skills/$s" -name SKILL.md | wc -l | tr -d ' ')" = "1" ] || return 1
     done
@@ -168,21 +170,21 @@ _scratch_core() {
         > "$SCRATCH_CORE/.claude/skills/to-prd/SKILL.md"
     TARGET="$SCRATCH/target-noh2"; mkdir -p "$TARGET"
     run env EXPORT_SKILLS_CORE_DIR="$SCRATCH_CORE" bash "$EXPORT" "$TARGET"
-    [ "$status" -ne 0 ]
+    [ "$status" -ne 0 ] || return 1
     [[ "$output" == *"no ## heading found"* ]]
 }
 
 @test "check: README table drift is detected even when every skills/ dir is up to date" {
     _render_target
     run bash "$EXPORT" "$TARGET" --owner-team test-team --owner-slack '#test-chan' --check
-    [ "$status" -eq 0 ]
+    [ "$status" -eq 0 ] || return 1
 
     # hand-edited prose outside the sentinels is preserved, not drift (see the
     # "hand-written content preserved on re-run" README test) — but a
     # hand-edit *inside* the generated table is real drift.
     sed -i.bak 's/^| `forge` |.*$/| `forge` | tampered row |/' "$TARGET/README.md" && rm -f "$TARGET/README.md.bak"
     run bash "$EXPORT" "$TARGET" --owner-team test-team --owner-slack '#test-chan' --check
-    [ "$status" -eq 1 ]
+    [ "$status" -eq 1 ] || return 1
     [[ "$output" == *"DRIFT  README.md"* ]]
 }
 
@@ -191,11 +193,11 @@ _scratch_core() {
 @test "check: clean after render; drift after mutation; drift when a skill dir is missing" {
     _render_target
     run bash "$EXPORT" "$TARGET" --owner-team test-team --owner-slack '#test-chan' --check
-    [ "$status" -eq 0 ] && [[ "$output" == *"up to date"* ]]
+    [ "$status" -eq 0 ] && [[ "$output" == *"up to date"* ]] || return 1
 
     echo "tampered" >> "$TARGET/skills/forge/SKILL.md"
     run bash "$EXPORT" "$TARGET" --owner-team test-team --owner-slack '#test-chan' --check
-    [ "$status" -eq 1 ] && [[ "$output" == *"DRIFT  skills/forge"* ]]
+    [ "$status" -eq 1 ] && [[ "$output" == *"DRIFT  skills/forge"* ]] || return 1
 
     rm -rf "$TARGET/skills/to-prd"
     run bash "$EXPORT" "$TARGET" --owner-team test-team --owner-slack '#test-chan' --check
@@ -206,8 +208,8 @@ _scratch_core() {
     _render_target
     chmod -x "$TARGET/skills/optimus-planner/scripts/install-agent.sh"
     run bash "$EXPORT" "$TARGET" --owner-team test-team --owner-slack '#test-chan' --check
-    [ "$status" -eq 1 ]
-    [[ "$output" == *"skills/optimus-planner/scripts/install-agent.sh (executable bit missing)"* ]]
+    [ "$status" -eq 1 ] || return 1
+    [[ "$output" == *"skills/optimus-planner/scripts/install-agent.sh (executable bit missing)"* ]] || return 1
     # content-only drift must not be reported as an exec-bit problem
     [[ "$output" != *"unexpected executable bit"* ]]
 }
@@ -242,12 +244,32 @@ _scratch_core() {
         && [[ "$output" == *"unresolved skill reference /not-a-bundle-skill"* ]]
 }
 
+@test "render: no company overlay skills or company Jira keys survive export" {
+    _render_target
+    # the Optimus skill catalog keeps its generic rows once the /mc-* rows are dropped
+    grep -q '^  | `/create-jira-ticket` |' "$TARGET/skills/optimus-planner/agent.md" || return 1
+    grep -q '^  | `frontend-design` |' "$TARGET/skills/optimus-planner/agent.md" || return 1
+    grep -q 'feature-flag skill in the available-skills list' "$TARGET/skills/optimus-planner/agent.md" || return 1
+    run grep -rE '/mc-|(EEE|AORG|FREDDIE|MUL)-[0-9]' "$TARGET/skills"
+    [ "$status" -eq 1 ] && [ -z "$output" ]
+}
+
+@test "portable refs: checker flags a company Jira key and an un-excused /mc- skill" {
+    _render_target
+    printf '\nSee AORG-123 and run /mc-lint first.\n' >> "$TARGET/skills/to-prd/SKILL.md"
+    run bash "$REFS" "$TARGET/skills" to-prd
+    [ "$status" -eq 1 ] \
+        && [[ "$output" == *"forbidden reference"* ]] \
+        && [[ "$output" == *"AORG-123"* ]] \
+        && [[ "$output" == *"unresolved skill reference /mc-lint"* ]]
+}
+
 @test "portable refs: checker catches a broken relative markdown link" {
     _render_target
     printf '\nSee [missing doc](references/does-not-exist.md) for details.\n' >> "$TARGET/skills/to-prd/SKILL.md"
     run bash "$REFS" "$TARGET/skills" to-prd
-    [ "$status" -eq 1 ]
-    [[ "$output" == *"broken relative link"* ]]
+    [ "$status" -eq 1 ] || return 1
+    [[ "$output" == *"broken relative link"* ]] || return 1
     [[ "$output" == *"does-not-exist.md"* ]]
 }
 
@@ -256,7 +278,7 @@ _scratch_core() {
     mkdir -p "$TARGET/skills/to-prd/nested/SKILL.md.dir"
     printf -- '---\nname: nested\ndescription: x\n---\n' > "$TARGET/skills/to-prd/nested/SKILL.md"
     run bash "$REFS" "$TARGET/skills" to-prd
-    [ "$status" -eq 1 ]
+    [ "$status" -eq 1 ] || return 1
     [[ "$output" == *"2 SKILL.md files"* ]]
 }
 
@@ -265,8 +287,8 @@ _scratch_core() {
     printf -- '---\nname: to-prd\ndescription: x\n---\n\nOptional external skills: /pr-create-from-commits is optional.\n\nAlso try /mc-totally-made-up.\n' \
         > "$SCRATCH/refs/to-prd/SKILL.md"
     run bash "$REFS" "$SCRATCH/refs" to-prd
-    [ "$status" -eq 1 ]
-    [[ "$output" == *"unresolved skill reference /mc-totally-made-up"* ]]
+    [ "$status" -eq 1 ] || return 1
+    [[ "$output" == *"unresolved skill reference /mc-totally-made-up"* ]] || return 1
 
     mkdir -p "$SCRATCH/refs2/mc-lint"
     printf -- '---\nname: mc-lint\ndescription: x\n---\n\nOptional external skills: /mc-* skills are optional.\n\nAlso try /mc-lint.\n' \
@@ -444,6 +466,8 @@ _scratch_core() {
 @test "optional context: personal-file citations are marked, PR-creation fallback stated" {
     _render_target
     grep -q '`~/.claude/DoD.md` (if present' "$TARGET/skills/scout-reviewer/agent.md"
+    grep -q 'the sections below are the taxonomy either way' "$TARGET/skills/scout-reviewer/agent.md" || return 1
+    grep -q 'the sections below are the taxonomy either way' "$TARGET/skills/ranger-reviewer/agent.md" || return 1
     ! grep -q '(if present) (' "$TARGET/skills/scout-reviewer/SKILL.md"
     grep -q '`~/.claude/AGENTS.md` (if present)' "$TARGET/skills/cyrus-tdd-engineer/agent.md"
     grep -q 'If `~/.claude/project-templates/` exists' "$TARGET/skills/optimus-planner/agent.md"
@@ -470,7 +494,7 @@ _scratch_core() {
     printf -- '---\nname: to-prd\ndescription: x\n---\n\nFollow CLAUDE.md error handling defaults for everything.\n' \
         > "$SCRATCH/unq/to-prd/SKILL.md"
     run bash "$REFS" "$SCRATCH/unq" to-prd
-    [ "$status" -eq 1 ]
+    [ "$status" -eq 1 ] || return 1
     [[ "$output" == *"unqualified phrase"* ]]
 }
 
@@ -525,7 +549,7 @@ _scratch_core() {
     grep -q '^Intro prose kept verbatim\.$' "$TARGET/README.md"
     grep -q '<!-- BEGIN REASONING PIPELINE TABLE -->' "$TARGET/README.md"
     rows="$(awk '/BEGIN REASONING PIPELINE TABLE/{f=1;next} /END REASONING PIPELINE TABLE/{f=0} f && /^\| `/' "$TARGET/README.md" | wc -l | tr -d ' ')"
-    [ "$rows" = "9" ]
+    [ "$rows" = "9" ] || return 1
     # user adds prose around the block; re-render keeps it and the block count
     printf '\nHand-written pipeline notes.\n' >> "$TARGET/README.md"
     bash "$EXPORT" "$TARGET" --owner-team test-team --owner-slack '#test-chan'
@@ -541,28 +565,44 @@ _scratch_core() {
     skill_dir="$TARGET/skills/optimus-planner"
 
     run bash "$skill_dir/scripts/install-agent.sh"
-    [ "$status" -eq 0 ] && [ -f "$HOME/.claude/agents/optimus-planner.md" ]
+    [ "$status" -eq 0 ] && [ -f "$HOME/.claude/agents/optimus-planner.md" ] || return 1
     cmp "$skill_dir/agent.md" "$HOME/.claude/agents/optimus-planner.md"
 
     # identical re-run is fine
     run bash "$skill_dir/scripts/install-agent.sh"
-    [ "$status" -eq 0 ]
+    [ "$status" -eq 0 ] || return 1
 
     # differing existing file → refuse without --force
     echo "local edit" >> "$HOME/.claude/agents/optimus-planner.md"
     run bash "$skill_dir/scripts/install-agent.sh"
-    [ "$status" -eq 1 ] && [[ "$output" == *"--force"* ]]
+    [ "$status" -eq 1 ] && [[ "$output" == *"--force"* ]] || return 1
     run bash "$skill_dir/scripts/install-agent.sh" --force
-    [ "$status" -eq 0 ]
+    [ "$status" -eq 0 ] || return 1
     cmp "$skill_dir/agent.md" "$HOME/.claude/agents/optimus-planner.md"
 
     # --project targets ./.claude/agents
     mkdir -p "$SCRATCH/proj" && cd "$SCRATCH/proj"
     run bash "$skill_dir/scripts/install-agent.sh" --project
-    [ "$status" -eq 0 ] && [ -f "$SCRATCH/proj/.claude/agents/optimus-planner.md" ]
+    [ "$status" -eq 0 ] && [ -f "$SCRATCH/proj/.claude/agents/optimus-planner.md" ] || return 1
 
     run bash "$skill_dir/scripts/install-agent.sh" --bogus
     [ "$status" -eq 2 ]
+}
+
+@test "install-agent.sh: refuses to write through a symlinked destination, even with --force" {
+    _render_target
+    export HOME="$SCRATCH/home-link"; mkdir -p "$HOME/.claude/agents" "$SCRATCH/canonical"
+    skill_dir="$TARGET/skills/optimus-planner"
+    printf 'canonical agent file\n' > "$SCRATCH/canonical/optimus-planner.md"
+    ln -s "$SCRATCH/canonical/optimus-planner.md" "$HOME/.claude/agents/optimus-planner.md"
+
+    run bash "$skill_dir/scripts/install-agent.sh"
+    [ "$status" -eq 1 ] && [[ "$output" == *"is a symlink"* ]] || return 1
+    run bash "$skill_dir/scripts/install-agent.sh" --force
+    [ "$status" -eq 1 ] && [[ "$output" == *"is a symlink"* ]] || return 1
+    # the link target was never touched
+    [ "$(cat "$SCRATCH/canonical/optimus-planner.md")" = "canonical agent file" ] || return 1
+    [ -L "$HOME/.claude/agents/optimus-planner.md" ]
 }
 
 @test "install-agent.sh: fails clearly when agent.md is absent" {
@@ -580,7 +620,7 @@ _scratch_core() {
     printf -- '---\ndescription: x\n---\nbody\n' > "$SCRATCH/nameless/agent.md"
     cp "$INSTALL_TPL" "$SCRATCH/nameless/scripts/install-agent.sh"
     run bash "$SCRATCH/nameless/scripts/install-agent.sh"
-    [ "$status" -eq 1 ]
+    [ "$status" -eq 1 ] || return 1
     [[ "$output" == *"no name:"* ]]
 }
 
@@ -591,16 +631,16 @@ _scratch_core() {
     printf -- '---\nname: ../../pwned\ndescription: x\n---\nbody\n' > "$SCRATCH/pwned/agent.md"
     cp "$INSTALL_TPL" "$SCRATCH/pwned/scripts/install-agent.sh"
     run bash "$SCRATCH/pwned/scripts/install-agent.sh"
-    [ "$status" -eq 1 ]
-    [[ "$output" == *"invalid"* ]] || [[ "$output" == *"unsafe"* ]]
-    [ ! -e "$HOME/.claude/agents/pwned.md" ]
-    [ ! -e "$SCRATCH/home/.claude/pwned" ]
+    [ "$status" -eq 1 ] || return 1
+    [[ "$output" == *"invalid"* ]] || [[ "$output" == *"unsafe"* ]] || return 1
+    [ ! -e "$HOME/.claude/agents/pwned.md" ] || return 1
+    [ ! -e "$SCRATCH/home/.claude/pwned" ] || return 1
 
     mkdir -p "$SCRATCH/trimmed/scripts"
     printf -- '---\nname:   "my-agent"   \ndescription: x\n---\nbody\n' > "$SCRATCH/trimmed/agent.md"
     cp "$INSTALL_TPL" "$SCRATCH/trimmed/scripts/install-agent.sh"
     run bash "$SCRATCH/trimmed/scripts/install-agent.sh"
-    [ "$status" -eq 0 ]
+    [ "$status" -eq 0 ] || return 1
     [ -f "$HOME/.claude/agents/my-agent.md" ]
 }
 
@@ -617,8 +657,8 @@ _scratch_core() {
     mkdir -p "$SCRATCH/repo/deep/er" && git -C "$SCRATCH/repo" init -q
     cd "$SCRATCH/repo/deep/er"
     run bash "$TARGET/skills/optimus-planner/scripts/install-agent.sh" --project
-    [ "$status" -eq 0 ]
-    [ -f "$SCRATCH/repo/.claude/agents/optimus-planner.md" ]
+    [ "$status" -eq 0 ] || return 1
+    [ -f "$SCRATCH/repo/.claude/agents/optimus-planner.md" ] || return 1
     [ ! -e "$SCRATCH/repo/deep/er/.claude" ]
 }
 
