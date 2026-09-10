@@ -242,12 +242,14 @@ The submodule SHA pin is intentional — your overlay records exactly which vers
 | `/google-docs` | Create, read, and edit Google Docs with Markdown conversion |
 | `/google-drive` | Search, upload, download, and share Google Drive files |
 | `/grill-me` | Relentless interview to stress-test a plan or design |
+| `/handoff` | Park the current session for a fresh one — captures typed rejections and next intent so the next session resumes with full context |
 | `/lessons-review` | Surface cross-project lessons; gate promotion to system-wide guidance |
 | `/mermaid-diagrams` | Convert Mermaid syntax to PNG via mmdc |
 | `/metrics-emit` | Library skill — structured metrics event schema for pipeline skills |
 | `/obligations` | Cross-session reminders: create, view, cancel, and evaluate |
 | `/optimus-planner` | Detailed execution plan before implementation begins |
 | `/overlay-init` | Scaffold a new overlay or extend an existing one (add skill / fragment / context section) |
+| `/performance-review` | Draft an evidence-backed self-review from Jira, GitHub, and tooling contributions into the company template |
 | `/pr-create-from-commits` | Create a PR from recent commits with template auto-detection; Merge order section for repo-split PRs |
 | `/ranger-reviewer` | Staff-level PR review with confidence scoring (Opus-tier) |
 | `/review-context` | Generate a per-project llms.txt for reviewer context |

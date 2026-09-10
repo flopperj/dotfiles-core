@@ -1,4 +1,4 @@
-.PHONY: test lint lint-agents check-leakage check-leakage-shapes gen-docs gen-boundaries gen-role-guards gen-reviewer-blocks gen eval all export-skills check-export
+.PHONY: test lint lint-agents check-leakage check-leakage-shapes check-readme gen-docs gen-boundaries gen-role-guards gen-reviewer-blocks gen eval all export-skills check-export
 
 DOTFILES_DIR := $(shell realpath .)
 
@@ -10,7 +10,7 @@ TEST_FILES := $(wildcard tests/*.bats)
 # by a manual reminder. The nested glob no-ops cleanly when no skill ships one.
 LINT_FILES := $(wildcard scripts/*.sh) $(wildcard scripts/templates/*.sh) $(wildcard .claude/skills/*/scripts/*.sh) $(wildcard .claude/evals/scripts/*.sh)
 
-all: lint lint-agents check-leakage check-consult-grammar test
+all: lint lint-agents check-leakage check-consult-grammar check-readme test
 
 test:                                   ## Run all bats tests
 	DOTFILES_DIR=$(DOTFILES_DIR) bats $(TEST_FILES)
@@ -30,7 +30,9 @@ check-consult-grammar:                  ## Positive grammar check for consult-in
 lint-agents:                            ## Run agent/skill structural linter
 	bash scripts/lint-agents.sh
 
-gen-docs:                               ## Regenerate README tables from skill/agent directory
+gen-docs: check-readme                  ## README tables are curated by hand; this verifies them (see check-readme)
+
+check-readme:                           ## Fail if README skill/agent tables drift from .claude/skills and .claude/agents
 	bash scripts/docs-gen.sh
 
 gen-boundaries:                         ## Regenerate responsibility boundary tables in SKILL.md files
