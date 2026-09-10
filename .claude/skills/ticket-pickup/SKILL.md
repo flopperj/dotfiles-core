@@ -646,7 +646,7 @@ Data to capture:
   and `advisory_reason` carries the one-line verdict. The Aristotle skill
   returns that verdict under the key `verdict`; the metrics event names it
   `advisory_reason`. Copy the value across — an event that carries
-  `verdict` instead of `advisory_reason` validates but loses the field.
+  `verdict` instead of `advisory_reason` fails schema validation.
 
 If emit fails, log and continue.
 
