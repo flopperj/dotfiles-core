@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # install-agent.sh — Register this skill's bundled agent definition as a
 # Claude Code subagent so it runs with its pinned model, maxTurns, tool
-# restrictions, and persistent memory instead of the general-purpose fallback.
+# restrictions, and (where its frontmatter declares `memory:`) persistent
+# memory, instead of the general-purpose fallback.
 #
 # Usage:
 #   bash scripts/install-agent.sh            # → ~/.claude/agents/<name>.md
