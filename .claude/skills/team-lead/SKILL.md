@@ -246,6 +246,12 @@ validate, fall back.
    - `blocked` (Jira keys of tickets that did not complete; empty array
      when every ticket succeeded)
 
+   The optional `advisory` array may also be present. Unlike `blocked`, its
+   items are objects, not bare keys: `{ "ticket": "PROJ-1234", "verdict":
+   "one-line ruling" }`, one per ticket whose pipeline ended with a correct
+   no-code answer. Do not require it; treat absence as empty. Do not reject
+   a payload for carrying it.
+
    Validate **only those fields**. The workflow returns no prose — its
    per-wave narration goes to the run journal — so do not require or
    parse any text alongside the object. A malformed `args` payload makes
@@ -287,7 +293,8 @@ path's Agent-tool fan-out: log the wave width before launching.
   `journal.jsonl`; mine it for the per-wave detail lines when reporting
   to ticket-swarm.
 - For each ticket in `blocked`, run Step 3.5 smart failure analysis
-  before escalating. Any re-run this produces is a **prose-orchestrated**
+  before escalating. Tickets in `advisory` are **not** blocked: skip
+  failure analysis, do not retry, and report them under Advisory. Any re-run this produces is a **prose-orchestrated**
   Agent call (see Truncation handling below).
 - Feed the returned object into the Step 4 cluster report.
 
@@ -431,7 +438,8 @@ report the cluster summary to ticket-swarm:
 ```
 [Backend Lead] Cluster complete: 4/4 tickets processed
 
-  Succeeded: 3 (PROJ-1003, PROJ-1007, PROJ-1001)
+  Succeeded: 2 (PROJ-1003, PROJ-1007)
+  Advisory:  1 (PROJ-1001 — analysis says this is a config change on the vendor side, not code)
   Blocked:   1 (PROJ-1002 — test failure in integration step)
 
   Waves executed: 3

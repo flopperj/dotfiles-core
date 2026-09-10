@@ -76,7 +76,8 @@
               "description": "Wall-clock seconds from pipeline launch to return"
             },
             "tests_passed": {
-              "type": "boolean"
+              "type": ["boolean", "null"],
+              "description": "Null only when outcome is advisory (no code was produced to test)."
             },
             "coverage_percent": {
               "type": ["number", "null"],
@@ -88,12 +89,38 @@
               "description": "Number of CI fix iterations. 0 if first-pass success."
             },
             "first_pass": {
-              "type": "boolean",
-              "description": "True if pipeline completed with 0 retries and 0 CI fix attempts"
+              "type": ["boolean", "null"],
+              "description": "True if pipeline completed with 0 retries and 0 CI fix attempts. Null only when outcome is advisory; consumers exclude those from the first-pass denominator."
             },
             "files_changed": {
               "type": "integer",
               "minimum": 0
+            },
+            "outcome": {
+              "type": "string",
+              "enum": ["implemented", "advisory"],
+              "description": "implemented (default when absent): code was produced. advisory: the pipeline ended deliberately with no code change because the correct answer was not a code change (Aristotle Phase 0 wrong-tool verdict, or a Move stating no code changes are needed). Advisory is a success outcome, distinct from blocked."
+            },
+            "advisory_reason": {
+              "type": "string",
+              "description": "One-line verdict when outcome is advisory. Absent otherwise."
+            }
+          },
+          "if": {
+            "properties": { "outcome": { "const": "advisory" } },
+            "required": ["outcome"]
+          },
+          "then": {
+            "properties": {
+              "tests_passed": { "type": "null" },
+              "first_pass": { "type": "null" }
+            },
+            "required": ["advisory_reason"]
+          },
+          "else": {
+            "properties": {
+              "tests_passed": { "type": "boolean" },
+              "first_pass": { "type": "boolean" }
             }
           }
         },
@@ -132,7 +159,13 @@
             },
             "completed": {
               "type": "integer",
-              "minimum": 0
+              "minimum": 0,
+              "description": "Tickets that produced a PR"
+            },
+            "advisory": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Tickets whose pipeline ended with a correct no-code answer (pipeline_complete outcome: advisory). Optional for legacy events; treated as 0 when absent."
             },
             "blocked": {
               "type": "integer",
@@ -150,7 +183,7 @@
               "type": "number",
               "minimum": 0,
               "maximum": 1,
-              "description": "(tickets completed on first attempt) / tickets_total"
+              "description": "(tickets completed on first attempt) / (tickets_total - advisory)"
             },
             "agents_spawned": {
               "type": "integer",

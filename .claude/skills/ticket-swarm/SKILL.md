@@ -435,6 +435,24 @@ PROJ-1003  [BLOCKED]  Cyrus hit a test failure — needs input
   -> status    = Refresh progress
 ```
 
+### Handling an advisory outcome
+
+A pipeline can end with a correct answer that is not a code change: the
+Complex route's Aristotle stage judges first principles the wrong tool
+(Phase 0 stop) or concludes no code changes are needed. `ticket-pickup`
+returns this as `outcome: advisory` with a one-line verdict. It is the
+swarm's third terminal outcome — a success, not a blocker:
+
+- Show it as `[ADVISORY]` on the dashboard with the verdict, not `[BLOCKED]`.
+- Do not retry, do not run smart failure analysis, do not escalate.
+- Count it under `Advisory` in the summary, run log, and `swarm_complete`.
+- Best-of-N: if every attempt returns advisory, the ticket is advisory (take
+  the clearest verdict). If one attempt implements and another returns
+  advisory, the attempts disagree on whether this is a code change at all;
+  surface both to the user with the verdict alongside the implementation's
+  test result. Do not auto-select — the existing best-of-N gate ("wait for
+  user choice on complex tickets") applies.
+
 ### Handling blockers
 
 When a pipeline reports a blocker:
@@ -539,6 +557,10 @@ For each ticket with a created PR:
 - Transition to "In Review" if available.
 - Add comment: `🤖 Submitted PR #{number} for review. The ticket's in In Review — it's yours from here.`
 
+For advisory tickets (correct no-code answer):
+- Add comment: `🤖 Looked into this one and the answer isn't a code change. {verdict}. Leaving the ticket as-is for a human to decide what to do with it.`
+- Leave status unchanged. There is no PR to review.
+
 For blocked/aborted tickets:
 - Add comment: `🤖 Had to stop on this one. What happened: {reason}. I've left the ticket in its current state — worth a human look to decide what's next.`
 - Leave status unchanged.
@@ -553,7 +575,8 @@ When the swarm is complete, present a final report:
 Ticket Swarm Complete
 
   Launched:   5 tickets
-  Completed:  4 (3 PRs created, 1 awaiting review)
+  Completed:  3 (3 PRs created)
+  Advisory:   1 (PROJ-1030 — first principles says this is a vendor-config change, not code)
   Blocked:    1 (PROJ-1003 — test failure, needs manual fix)
 
   PRs created:
@@ -598,8 +621,11 @@ Create `~/.claude/tasks/<project>/swarm-runs/` if it does not exist.
 ## Sequencing
 - {domain}: {sequence description}
 
+## Advisory
+- {ticket}: {verdict}
+
 ## Summary
-- Launched: {N} | Completed: {N} | Blocked: {N}
+- Launched: {N} | Completed: {N} | Advisory: {N} | Blocked: {N}
 - PRs: {N} | Time: {duration} | Agents: {N}
 ```
 
@@ -615,11 +641,12 @@ format and emit instructions.
 
 Data to capture:
 - `tickets_total`: total tickets in the swarm
-- `completed`: tickets that completed successfully
+- `completed`: tickets that produced a PR
+- `advisory`: tickets whose pipeline ended with a correct no-code answer
 - `blocked`: tickets that hit unresolvable blockers
 - `prs_created`: number of draft PRs created
 - `duration_seconds`: wall-clock from swarm start to summary
-- `first_pass_rate`: (completed on first attempt) / tickets_total
+- `first_pass_rate`: (completed on first attempt) / (tickets_total − advisory)
 - `agents_spawned`: total subagents launched across all pipelines
 
 If emit fails, log and continue.

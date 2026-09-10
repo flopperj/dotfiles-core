@@ -90,7 +90,7 @@ Never suggest more than one. The user is reading a dashboard, not running a tria
 
 This skill consumes events defined in `~/.claude/evals/schemas/metrics-event.schema.json`. The four event types it reads:
 
-- `pipeline_complete` — emitted by `cyrus-tdd-engineer` and `ticket-pickup`. Contributes to first-pass and CI-fix metrics.
+- `pipeline_complete` — emitted by `cyrus-tdd-engineer` and `ticket-pickup`. Contributes to first-pass and CI-fix metrics. Events with `outcome: advisory` (a correct no-code answer) are counted on their own line and excluded from the first-pass denominator.
 - `ticket_classified` — emitted by `ticket-pickup` after the classification gate. Contributes to classification distribution.
 - `swarm_complete` — emitted by `ticket-swarm` at run end. Contributes to swarm outcomes.
 - `multi_repo_split` — emitted by `ticket-pickup` on multi-repo detection. Contributes to the Multi-Repo Splits section: counts split by `mode` and `gate_choice`, plus the notice-vs-gate ratio — the detection false-positive denominator.

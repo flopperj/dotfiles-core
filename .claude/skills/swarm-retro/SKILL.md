@@ -65,6 +65,9 @@ Read the full run log. The expected format is:
 ## Blockers
 - {ticket}: {description} (retry N: {outcome})
 
+## Advisory
+- {ticket}: {verdict}
+
 ## Sequencing
 - {domain}: {sequence description}
 
@@ -72,9 +75,12 @@ Read the full run log. The expected format is:
 - {ticket}: {action taken} (outcome: {result})
 
 ## Summary
-- Launched: N | Completed: N | Blocked: N
+- Launched: N | Completed: N | Advisory: N | Blocked: N
 - PRs: N | Time: Nm | Agents: N
 ```
+
+Older run logs predate the `## Advisory` section and the `Advisory: N`
+field; treat both as absent-means-zero.
 
 ---
 
@@ -90,6 +96,14 @@ Compare the initial classification against the actual outcome:
   - Ticket classified Simple but blocked or required retries
   - Ticket classified Medium but Cyrus hit architectural blockers
   - Signs: retries > 0, status = BLOCKED, duration >> average for that tier
+
+- **Advisory is not a misclassification signal.** A Complex ticket that
+  ended with an advisory outcome (Aristotle judged first principles the
+  wrong tool, or found no code change was needed) was correctly routed:
+  only the Complex route can produce that verdict. Do not count it as
+  blocked, as a retry, or as over-classification. It may indicate the
+  *ticket* was mis-filed as engineering work — surface that as a ticket
+  hygiene note, not a routing error.
 
 - **Over-classified** (wasted resources):
   - Ticket classified Complex but completed quickly with no issues

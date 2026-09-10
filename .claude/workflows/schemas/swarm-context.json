@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$comment": "Typed accumulator contract for team-lead wave sequencing (team-lead/SKILL.md Steps 1-3), and the return contract for the planned team-lead-waves workflow. Field names come from the SKILL.md vocabulary: waves is the Step 1 sequencing plan (sequential outer, parallel inner); sequencing_reasons records WHY tickets were ordered (same-file conflicts, Jira 'Blocks' links, schema-before-API logical ordering); domain is the ticket-swarm domain tag; blocked lists tickets that ended [BLOCKED] so downstream waves and ticket-swarm can react.",
+  "$comment": "Typed accumulator contract for team-lead wave sequencing (team-lead/SKILL.md Steps 1-3), and the return contract for the planned team-lead-waves workflow. Field names come from the SKILL.md vocabulary: waves is the Step 1 sequencing plan (sequential outer, parallel inner); sequencing_reasons records WHY tickets were ordered (same-file conflicts, Jira 'Blocks' links, schema-before-API logical ordering); domain is the ticket-swarm domain tag; blocked lists tickets that ended [BLOCKED] so downstream waves and ticket-swarm can react; advisory (optional) lists tickets that ended with a correct no-code answer, which is a success outcome distinct from blocked.",
   "type": "object",
   "required": ["waves", "sequencing_reasons", "domain", "blocked"],
   "properties": {
@@ -34,6 +34,18 @@
       "$comment": "Jira keys of tickets that reported a blocker and did not complete. Empty array when every ticket succeeded.",
       "type": "array",
       "items": { "type": "string" }
+    },
+    "advisory": {
+      "$comment": "Optional. Tickets whose pipeline ended deliberately with no code change because the correct answer was not a code change (Aristotle Phase 0 wrong-tool verdict, or a Move stating no code changes are needed). A success outcome: never retried, never run through failure analysis, never counted as blocked.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["ticket", "verdict"],
+        "properties": {
+          "ticket": { "type": "string" },
+          "verdict": { "type": "string" }
+        }
+      }
     }
   }
 }

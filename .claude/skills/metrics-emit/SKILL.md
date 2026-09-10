@@ -96,13 +96,30 @@ them. Swarm-retro can use either depending on the question being answered.
     "coverage_percent": 87.5,
     "ci_fix_attempts": 0,
     "first_pass": true,
-    "files_changed": 3
+    "files_changed": 3,
+    "outcome": "implemented"
   }
 }
 ```
 
+**Terminal outcomes.** `outcome` is one of:
+
+- `implemented` (default when absent) — the pipeline produced code and a
+  branch; `tests_passed` and `first_pass` are booleans.
+- `advisory` — the pipeline ended deliberately with no code change because the
+  correct answer was not a code change: Aristotle's Phase 0 "wrong tool"
+  verdict, or a Move that explicitly states no code changes are needed. This
+  is a **success**, not a blocker. Emit `tests_passed: null`,
+  `first_pass: null`, `ci_fix_attempts: 0`, `files_changed: 0`, and put the
+  one-line verdict in `advisory_reason`. Consumers exclude advisory events
+  from the first-pass denominator and count them separately.
+
+A pipeline that stopped because something went wrong (test failure, blocker,
+truncation) is neither — it does not emit `pipeline_complete` at all; the
+swarm records it as blocked.
+
 **Required data fields:** `first_pass` and `classification` must always be
-present. `first_pass` is derived as `tests_passed && ci_fix_attempts == 0`
+present (`first_pass` is `null` only when `outcome` is `advisory`). `first_pass` is derived as `tests_passed && ci_fix_attempts == 0`
 unless the emitter has better information (e.g. a retry that predates CI).
 `classification` is `null` on direct invocations (no ticket-pickup in the
 chain) — emit the key with `null`, don't omit it. Consumers (agent-stats)
@@ -149,6 +166,7 @@ Emitted by **ticket-swarm** after the run log is written.
   "data": {
     "tickets_total": 5,
     "completed": 4,
+    "advisory": 0,
     "blocked": 1,
     "prs_created": 4,
     "duration_seconds": 3600,
@@ -157,6 +175,12 @@ Emitted by **ticket-swarm** after the run log is written.
   }
 }
 ```
+
+`completed` counts tickets that produced a PR. `advisory` counts tickets whose
+pipeline ended with a correct no-code answer (see `pipeline_complete` →
+`outcome: advisory`). `first_pass_rate` is (completed on first attempt) /
+(`tickets_total` − `advisory`), so an advisory outcome neither helps nor
+hurts the rate. `completed + advisory + blocked == tickets_total`.
 
 ---
 

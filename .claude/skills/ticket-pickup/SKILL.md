@@ -640,8 +640,39 @@ Data to capture:
   pipeline needed a retry (ticket-pickup's better-information case, since it
   sees retries that predate CI and Cyrus's own report may not capture)
 - `files_changed`: count of files modified
+- `outcome`: `implemented` normally. `advisory` when the pipeline ended
+  deliberately with no code change (see below); then `tests_passed` and
+  `first_pass` are `null`, `ci_fix_attempts` is 0, `files_changed` is 0,
+  and `advisory_reason` carries the one-line verdict. The Aristotle skill
+  returns that verdict under the key `verdict`; the metrics event names it
+  `advisory_reason`. Copy the value across — an event that carries
+  `verdict` instead of `advisory_reason` fails schema validation.
 
 If emit fails, log and continue.
+
+### Advisory outcome (pipeline ended with a correct no-code answer)
+
+The Complex route can end without code and without failure: Aristotle's
+Phase 0 judges first principles the wrong tool and answers by analogy, or
+the Aristotelian Move states that no code changes are needed. The
+`aristotle-deconstructor` skill reports either back as an **advisory**
+outcome with a one-line verdict and the answer text.
+
+This is the pipeline's third terminal outcome, alongside PR created and
+blocked. It is a success. Handle it as:
+
+1. Emit `pipeline_complete` with `outcome: advisory` as described above.
+2. Add a Jira comment: `🤖 Looked into this one and the answer isn't a code
+   change. {verdict}. Full reasoning is in the pipeline output — leaving the
+   ticket as-is for a human to decide what to do with it.`
+3. Leave the ticket status unchanged (it is already In Progress from Step 7).
+   Do not transition to In Review; there is no PR to review.
+4. In swarm mode, return `outcome: advisory` and the verdict to the caller
+   instead of a PR URL, so ticket-swarm counts it under Advisory rather
+   than Blocked.
+
+Do not treat an advisory outcome as a failure, retry it, or escalate it
+through smart failure analysis.
 
 **IMPORTANT:** Immediately after launching the pipeline, proceed to
 Step 7 (Jira transition). Do not skip it.
@@ -683,6 +714,10 @@ pipeline activity in real time.
 - **Fallback gracefully.** If Jira is unavailable, if codebase search finds
   nothing, if enrichment is thin — still present what you have and let the
   user decide.
+- **Three terminal outcomes, not two.** PR created, advisory (correct
+  no-code answer), blocked (something went wrong). Never file an advisory
+  outcome as blocked; it pollutes the first-pass metric and tells a human
+  something failed when it did not.
 
 ## Maintenance
 
