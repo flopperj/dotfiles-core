@@ -258,3 +258,39 @@ EOF
     [[ "$output" == *"not found"* ]] || return 1
     [ -z "$(git -C "$REMOTE" for-each-ref refs/heads)" ] || return 1
 }
+
+@test "push refuses an empty branch list with a clear error" {
+    _repo_fixture
+    REMOTE="$SCRATCH/remote.git"
+    git init -q --bare "$REMOTE"
+    # An empty string falls back to the default; whitespace-only is the crash path.
+    SCRUB_PUSH_BRANCHES=" " run bash "$SCRUB" push "$REPO" "$REMOTE"
+    [ "$status" -ne 0 ] || return 1
+    [[ "$output" == *"SCRUB_PUSH_BRANCHES is empty"* ]] || return 1
+    [[ "$output" != *"unbound variable"* ]] || return 1
+}
+
+@test "a glob in the allowed-domains file never matches a file in cwd" {
+    _repo_fixture
+    _mailmap_fixture
+    unset SCRUB_ALLOWED_EMAIL_DOMAINS
+    ALLOWED="$SCRATCH/mirror-allowed-domains"
+    printf 'users.noreply.example.com\n*.example.com\n' > "$ALLOWED"
+    export SCRUB_ALLOWED_DOMAINS_FILE="$ALLOWED"
+    # A file in cwd named exactly like the leaking domain must not turn the glob into an allow.
+    mkdir -p "$SCRATCH/cwd" && touch "$SCRATCH/cwd/xyzzy.example.com"
+    run bash -c "cd '$SCRATCH/cwd' && bash '$SCRUB' audit '$REPO'"
+    [ "$status" -ne 0 ] || return 1
+    [[ "$output" == *"unlisted domain(s)"* ]] || return 1
+}
+
+@test "allowed banner has no trailing space after file domains" {
+    _repo_fixture
+    _mailmap_fixture
+    unset SCRUB_ALLOWED_EMAIL_DOMAINS
+    ALLOWED="$SCRATCH/mirror-allowed-domains"
+    echo 'xyzzy.example.com' > "$ALLOWED"
+    export SCRUB_ALLOWED_DOMAINS_FILE="$ALLOWED"
+    run bash "$SCRUB" audit "$REPO"
+    [[ "$output" == *"(allowed: users.noreply.github.com github.com xyzzy.example.com)"* ]] || return 1
+}

@@ -48,6 +48,9 @@
 #   Notify fork owners; re-tag release SHAs if tags pointed at pre-scrub commits.
 
 set -euo pipefail
+# Allowed domains and branch lists are word-split from files and env vars;
+# pathname expansion must never turn '*.example' into a filename in cwd.
+set -f
 
 TARGET_PATH='scripts/leakage-tokens.txt'
 GUARD_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles-guard"
@@ -60,7 +63,7 @@ else
     if [ -f "$ALLOWED_DOMAINS_FILE" ]; then
         # one domain per line; '#' comments and blank lines ignored; CRLF tolerated
         _extra=$(tr -d '\r' < "$ALLOWED_DOMAINS_FILE" | sed -e 's/#.*//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e '/^$/d' | tr '\n' ' ')
-        ALLOWED_DOMAINS="$ALLOWED_DOMAINS $_extra"
+        ALLOWED_DOMAINS="${ALLOWED_DOMAINS} ${_extra% }"
     fi
 fi
 PUSH_BRANCHES="${SCRUB_PUSH_BRANCHES:-main}"
@@ -208,7 +211,10 @@ _push() {
     [ -n "$REMOTE" ] || { echo "ERROR: remote URL required for push" >&2; exit 1; }
     local b
     local -a refspecs=()
-    for b in $PUSH_BRANCHES; do
+    # shellcheck disable=SC2086 # intentional word-split of a space-separated list
+    set -- $PUSH_BRANCHES
+    [ "$#" -gt 0 ] || { echo "ERROR: SCRUB_PUSH_BRANCHES is empty — nothing to push" >&2; exit 1; }
+    for b in "$@"; do
         git -C "$CLONE" rev-parse -q --verify "refs/heads/$b" >/dev/null \
             || { echo "ERROR: branch '$b' not found in $CLONE" >&2; exit 1; }
         refspecs+=("refs/heads/$b:refs/heads/$b")
