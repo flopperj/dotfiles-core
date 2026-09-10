@@ -485,6 +485,10 @@ _render_skill() {
     # Guard: the skills CLI registers every SKILL.md it finds, so a nested one
     # would surface as a phantom skill.
     if [ "$(find "$out" -name SKILL.md | wc -l | tr -d ' ')" != "1" ]; then
+        # Defensive only: every asset copied above has a fixed destination
+        # name, so no input can currently reach this branch. It guards the
+        # next person who adds a directory copy. (The checker enforces the
+        # same invariant on the target, and that path is tested.)
         echo "export-skills.sh: $skill rendered more than one SKILL.md" >&2; return 1
     fi
 }
@@ -561,6 +565,8 @@ if [ "$CHECK" -eq 1 ]; then
             if [ -x "$rendered_script" ] && [ ! -x "$target_script" ]; then
                 echo "DRIFT  skills/$skill/$script_rel (executable bit missing)"; drift=1
             elif [ ! -x "$rendered_script" ] && [ -x "$target_script" ]; then
+                # Defensive: every shipped script is rendered executable, so
+                # this branch is unreachable until a non-executable .sh ships.
                 echo "DRIFT  skills/$skill/$script_rel (unexpected executable bit)"; drift=1
             fi
         done < <(find "$RENDER/skills/$skill" -path '*/scripts/*.sh' 2>/dev/null)

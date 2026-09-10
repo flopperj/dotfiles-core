@@ -77,9 +77,9 @@ _scratch_core() {
     run bash "$EXPORT" --help
     [ "$status" -eq 0 ] && [[ "$output" == *"Usage:"* ]]
     run bash "$EXPORT"
-    [ "$status" -eq 2 ]
+    [ "$status" -eq 2 ] && [[ "$output" == *"missing <target-repo-dir>"* ]]
     run bash "$EXPORT" "$SCRATCH/does-not-exist"
-    [ "$status" -eq 2 ]
+    [ "$status" -eq 2 ] && [[ "$output" == *"target is not a directory"* ]]
 }
 
 @test "check-portable-refs: executable, usage exits 2 without a dir" {
@@ -104,7 +104,9 @@ _scratch_core() {
     TARGET="$SCRATCH/target-bad"; mkdir -p "$TARGET"
     run env EXPORT_SKILLS_CORE_DIR="$SCRATCH_CORE" bash "$EXPORT" "$TARGET"
     [ "$status" -ne 0 ]
-    [[ "$output" == *"CORE-ONLY"* ]]
+    [[ "$output" == *"unterminated <!-- BEGIN CORE-ONLY -->"* ]]
+    # nothing was written: the render aborted before the copy step
+    [ -z "$(ls -A "$TARGET/skills" 2>/dev/null)" ]
 }
 
 @test "check-portable-refs: empty resolved skill list errors instead of reporting clean" {
@@ -205,13 +207,15 @@ _scratch_core() {
     chmod -x "$TARGET/skills/optimus-planner/scripts/install-agent.sh"
     run bash "$EXPORT" "$TARGET" --owner-team test-team --owner-slack '#test-chan' --check
     [ "$status" -eq 1 ]
-    [[ "$output" == *"skills/optimus-planner/scripts/install-agent.sh"* ]]
+    [[ "$output" == *"skills/optimus-planner/scripts/install-agent.sh (executable bit missing)"* ]]
+    # content-only drift must not be reported as an exec-bit problem
+    [[ "$output" != *"unexpected executable bit"* ]]
 }
 
 @test "check: metadata flags are part of the rendered state (different flags = drift)" {
     _render_target
     run bash "$EXPORT" "$TARGET" --owner-team other-team --check
-    [ "$status" -eq 1 ]
+    [ "$status" -eq 1 ] && [[ "$output" == *"DRIFT  skills/"* ]] && [[ "$output" == *"has drifted"* ]]
 }
 
 @test "render twice: byte-identical (idempotent)" {
@@ -458,7 +462,7 @@ _scratch_core() {
             || { echo "qualified phrase missing in $s"; return 1; }
     done
     run bash "$REFS" "$TARGET/skills" $EXPORT_SET
-    [ "$status" -eq 0 ]
+    [ "$status" -eq 0 ] && [[ "$output" == *"clean (9 skills)"* ]]
 }
 
 @test "portable refs: checker flags an unqualified 'Follow CLAUDE.md error handling defaults' phrase" {

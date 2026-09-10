@@ -12,7 +12,7 @@
 - **`.claude/_shared/portable/`** — `launch.md`, `bundle-notes.md`, `agent-notes.md` templates inserted into exported files.
 - **Export markers** — `<!-- BEGIN CORE-ONLY -->` … `<!-- END CORE-ONLY -->` (dropped on export) and `<!-- PORTABLE-ONLY … -->` (unwrapped on export). Applied to the metrics-emit sections in `optimus-planner/SKILL.md` and `agents/cyrus-tdd-engineer.md`, the Cursor-hook paragraphs in `cyrus-tdd-engineer/SKILL.md`, the metric mentions in `_shared/agent-turn-cap-warning.md`, and the failure-handling lead-in in `code-auditor/SKILL.md`. Core rendering is unchanged (HTML comments).
 - Makefile targets `export-skills` / `check-export` (`TARGET=…`, `EXPORT_ARGS=…`); `scripts/templates/*.sh` added to `LINT_FILES`.
-- `tests/export-skills.bats` — 21 tests: CLI surface, render shape, metadata, idempotency and `--check` drift (including the missing-dir case), self-containment via `check-portable-refs.sh`, byte-identity of shipped assets, agent frontmatter preservation, inserted sections, README sentinel behaviour, and `install-agent.sh` semantics.
+- `tests/export-skills.bats` — 45 tests (21 in the initial cut, extended in the review follow-ups): CLI surface, render shape, metadata, idempotency and `--check` drift (including the missing-dir case), self-containment via `check-portable-refs.sh`, byte-identity of shipped assets, agent frontmatter preservation, inserted sections, README sentinel behaviour, and `install-agent.sh` semantics.
 - README — "Publishing to a team skills repo" section.
 
 ### Notes
@@ -27,6 +27,7 @@
 - **Canonical docs:** `agent-turn-cap-warning.md` and `cyrus-tdd-engineer/SKILL.md` now say Cyrus `maxTurns` is 300 (was 100); forge's private obligation id is `CORE-ONLY`.
 - **`install-agent.sh`:** `name:` is sanitized (`^[A-Za-z0-9][A-Za-z0-9_-]*$`, whitespace/quotes stripped); `--project` resolves the git root instead of `$PWD`.
 - Re-review follow-up: `Requires` lists name only skills a SKILL.md actually invokes (reviewers → `cyrus-tdd-engineer`; `grill-me` → `to-prd`; `forge` drops the transitive `cyrus-tdd-engineer`); the missing-sibling rule says earlier steps still run; the agent-notes memory bullet renders only for agents declaring `memory:`; launch text qualifies tool restrictions and memory as conditional.
+- Tests assert diagnostic messages, not just exit codes, on every error path (`--check` drift kinds, usage errors, unterminated marker, clean-run positive control).
 - Portability: no `sed -i` in `export-skills.sh` (BSD/GNU flag syntax differs; CI runs on Linux).
 - `tests/export-skills.bats`: 45 tests, with a real-tree snapshot guard (`setup_file`/`teardown_file`) and coverage for every path above.
 
