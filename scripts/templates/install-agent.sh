@@ -45,6 +45,15 @@ echo "$NAME" | grep -qE '^[A-Za-z0-9][A-Za-z0-9_-]*$' \
 DEST="$DEST_DIR/$NAME.md"
 mkdir -p "$DEST_DIR"
 
+# A symlinked destination belongs to another installer (e.g. a dotfiles
+# checkout that links ~/.claude/agents/<name>.md into its repo). cp would
+# follow the link and silently rewrite that canonical file, so refuse —
+# even with --force. --project or removing the link are the ways forward.
+if [ -L "$DEST" ]; then
+    echo "install-agent.sh: $DEST is a symlink (→ $(readlink "$DEST")) managed by another installer; refusing to write through it. Use --project, or remove the link first." >&2
+    exit 1
+fi
+
 if [ -e "$DEST" ] && ! cmp -s "$SRC" "$DEST"; then
     if [ "$FORCE" -ne 1 ]; then
         echo "install-agent.sh: $DEST exists and differs from agent.md; re-run with --force to overwrite" >&2

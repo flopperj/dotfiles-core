@@ -37,7 +37,7 @@ If the PR cannot be determined, ask the user.
 When no `ticket_context` is provided (standalone invocation), attempt to discover it from the PR metadata:
 
 1. **Fetch PR metadata**: `gh pr view <number> --json title,body,headRefName`
-2. **Extract ticket key**: search the PR title, body, and branch name for a Jira ticket key pattern (e.g., `[A-Z][A-Z0-9]+-\d+` — matches `EEE-12195`, `PROJ-1234`, etc.). Take the first match.
+2. **Extract ticket key**: search the PR title, body, and branch name for a Jira ticket key pattern (e.g., `[A-Z][A-Z0-9]+-\d+` — matches `ABC-123`, `PROJ-1234`, etc.). Take the first match.
 3. **Fetch ticket from Jira** (if a key was found): call `getJiraIssue(ticket_key)` via the Atlassian MCP to retrieve summary, description, acceptance criteria, priority, and status.
 4. **Build ticket_context** from the Jira response in the same format as the enriched ticket brief: summary, description, acceptance criteria (extracted from the description field), and the ticket key.
 
@@ -454,8 +454,8 @@ User: Scout, review PR #482
 
 Scout flow:
 1. Step 1   — gh pr view 482 → confirms PR exists and is open
-2. Step 1b  — extracts EEE-12195 from PR title; fetches ticket via Atlassian MCP
-3. Step 1c  — reads ~/.claude/review-context/mc-omni-agent-ui/llms.txt (present)
+2. Step 1b  — extracts PROJ-12195 from PR title; fetches ticket via Atlassian MCP
+3. Step 1c  — reads ~/.claude/review-context/<project>/llms.txt (present)
 4. Step 2   — launches scout-reviewer agent with PR + ticket + review-context;
               agent runs 6 parallel analysis subagents
 5. Step 2a  — Requirements Coverage subagent runs in parallel (ticket context present)

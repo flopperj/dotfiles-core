@@ -1,6 +1,14 @@
 # Changelog
 
 > **How to update:** The pre-commit hook (`scripts/pre-commit.sh`) is auto-installed by `install.sh`. It runs a fast leakage check (`scripts/check-no-leakage.sh`) and re-renders the generated `CLAUDE.md.generated` and `AGENTS.md.generated` files on every commit. A pre-push gate (`scripts/pre-push.sh`, also auto-installed) scans every outgoing commit's tree and metadata before it leaves the machine. CI runs lint, consult-grammar, and the test suite (including synthetic-token leakage mechanism tests) on every PR; the company-token scan is a separate step that runs only when guard data is present on the runner. If you bypass the hooks or work in a context where hooks cannot run, keep this file current manually. Each release heading links to the diff on the public mirror.
+## v1.19.1 — 2026-09-10 (project-agnostic export)
+
+### Fixed
+
+- **Exported bundle is project-agnostic.** A Ranger review of the exported copies in the team skills repo found the maintainer's environment leaking into shipped text. Fixed at the source and in the generator: the Scout worked example named a specific repository where Ranger's twin line used `<project>`; Scout/Ranger/Optimus examples used the maintainer's Jira project keys (now `PROJ-####` / `ABC-123`); the Optimus agent's two overlay-skill bullets are now `CORE-ONLY` with generic `PORTABLE-ONLY` replacements, its skill-catalog `/mc-*` rows are dropped on export, and its inline example list no longer names overlay skills. `check-portable-refs.sh` now forbids the company Jira keys outright, and `/mc-*` is no longer listed as an excused optional namespace in the portable notes, so any surviving overlay reference fails the checker.
+- **`tests/export-skills.bats` assertions bind under bash 3.2.** Under macOS bash 3.2 a failing `[[ ]]` does not trip errexit and no operand of an `&&` list does, so every mid-test assertion was vacuous unless it was the test's final command (verified by mutation: mutated diagnostics left the suite green). Every mid-test assertion now ends in `|| return 1`. Three tests added (48 total).
+- **`install-agent.sh` refuses a symlinked destination.** With dotfiles-core installed, `~/.claude/agents/<name>.md` is a symlink into the checkout; `cp` followed it and `--force` silently rewrote the git-tracked canonical agent file. The installer now refuses when the destination is a symlink, even with `--force`, and points at `--project`. Found by running the exported Ranger definition in fallback mode as a parity check.
+- **Exported reviewer agents keep the DoD taxonomy without the file.** The `(if present)` qualifier on `~/.claude/DoD.md` read as conditional, so a fallback run dropped the nine-section tags; the exported sentence now says the sections apply either way.
 
 ## v1.19.0 — 2026-09-09 (portable export of the reasoning pipeline)
 
