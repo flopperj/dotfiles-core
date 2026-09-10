@@ -1,6 +1,13 @@
 # Changelog
 
 > **How to update:** The pre-commit hook (`scripts/pre-commit.sh`) is auto-installed by `install.sh`. It runs a fast leakage check (`scripts/check-no-leakage.sh`) and re-renders the generated `CLAUDE.md.generated` and `AGENTS.md.generated` files on every commit. A pre-push gate (`scripts/pre-push.sh`, also auto-installed) scans every outgoing commit's tree and metadata before it leaves the machine. CI runs lint, consult-grammar, and the test suite (including synthetic-token leakage mechanism tests) on every PR; the company-token scan is a separate step that runs only when guard data is present on the runner. If you bypass the hooks or work in a context where hooks cannot run, keep this file current manually. Each release heading links to the diff on the public mirror.
+## v1.20.1 — 2026-09-10 (README drift check)
+
+### Fixed
+
+- **`make gen` no longer fails on main** (PR #34). `scripts/docs-gen.sh` looked for `BEGIN SKILLS TABLE` / `BEGIN AGENTS TABLE` sentinels the README never carried and aborted, which also kept the boundaries, role-guard, and reviewer-block generators from running through `make gen`. Rendering the tables from frontmatter was tried and rejected (descriptions truncate mid-sentence; agent descriptions open with "Use this agent when…"), so the script is now a drift check: every skill directory has a row and every row names a directory, and the same for agents matched on the bold display name. A duplicated row, or two agent files that derive to the same display name, is reported rather than merged away. Exit 1 names each row to add or remove. New `check-readme` Makefile target, part of `make all` and an explicit step in the lint workflow. `tests/docs-gen.bats` (11 tests).
+- README skills table gained the missing rows for `/handoff` and `/performance-review`.
+
 ## v1.20.0 — 2026-09-10 (advisory outcome, Aristotle framing check, mirror identity scrub)
 
 ### Added
