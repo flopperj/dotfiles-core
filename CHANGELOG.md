@@ -27,6 +27,7 @@
 - **Canonical docs:** `agent-turn-cap-warning.md` and `cyrus-tdd-engineer/SKILL.md` now say Cyrus `maxTurns` is 300 (was 100); forge's private obligation id is `CORE-ONLY`.
 - **`install-agent.sh`:** `name:` is sanitized (`^[A-Za-z0-9][A-Za-z0-9_-]*$`, whitespace/quotes stripped); `--project` resolves the git root instead of `$PWD`.
 - Re-review follow-up: `Requires` lists name only skills a SKILL.md actually invokes (reviewers → `cyrus-tdd-engineer`; `grill-me` → `to-prd`; `forge` drops the transitive `cyrus-tdd-engineer`); the missing-sibling rule says earlier steps still run; the agent-notes memory bullet renders only for agents declaring `memory:`; launch text qualifies tool restrictions and memory as conditional.
+- Portability: no `sed -i` in `export-skills.sh` (BSD/GNU flag syntax differs; CI runs on Linux).
 - `tests/export-skills.bats`: 45 tests, with a real-tree snapshot guard (`setup_file`/`teardown_file`) and coverage for every path above.
 
 ## v1.18.1 — 2026-09-09 (pipeline_complete emit contract: first_pass/classification)

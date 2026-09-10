@@ -437,7 +437,11 @@ _render_skill() {
         # The memory bullet points at a Persistent Agent Memory section that
         # only agents declaring `memory:` carry (Aristotle has none by design).
         if ! grep -q '^memory:' "$AGENTS_SRC/$skill.md"; then
-            sed -i '' '/^- \*\*Memory applies only when registered\.\*\*/,/skip that section entirely\.$/d' "$tmp_insert"
+            # No `sed -i`: its flag syntax differs between BSD and GNU sed, and
+            # CI runs on Linux. Filter through a second temp file instead.
+            tmp_filtered="$(mktemp)"
+            sed '/^- \*\*Memory applies only when registered\.\*\*/,/skip that section entirely\.$/d' "$tmp_insert" > "$tmp_filtered"
+            mv "$tmp_filtered" "$tmp_insert"
         fi
         _strip_markers < "$AGENTS_SRC/$skill.md" \
             | _join_error_handling_wrap \
