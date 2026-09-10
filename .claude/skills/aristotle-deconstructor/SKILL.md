@@ -157,9 +157,10 @@ If a subagent fails or times out, surface the failure and stop — do not
 present partial strategic analysis.
 
 **Validate output before presenting:** If Aristotle's response contains code
-blocks, file paths, or implementation specifics beyond its Implementation
-Handoff section, note this to the user as a boundary violation and present
-only the strategic analysis.
+blocks, file paths, or implementation specifics anywhere other than its
+Implementation Handoff section (a Phase 0 stop has no such section, so on a
+stop any of these is a violation), note this to the user as a boundary
+violation and present only the strategic analysis.
 
 ## Step 2: Present analysis and gate
 
@@ -180,8 +181,17 @@ present the menu below; three of its four options assume a Move exists.
 
   On `o`, re-invoke per the override rule in Step 1 and return to Step 2.
 
-- *Autonomous:* treat it like the "no code changes needed" halt below — log
-  the verdict and report back to the caller. Do not proceed to Optimus.
+- *Autonomous:* do not proceed to Optimus. Report back to the caller with
+  the Phase 0 verdict and the analogy answer as the outcome text. Neither
+  `ticket-pickup` nor `ticket-swarm` has a "no code changes" outcome today:
+  both classify any pipeline that ends without a PR as **blocked**, and the
+  swarm's ticket comment reads "Had to stop on this one. What happened:
+  {reason}". Put the verdict in `{reason}` so a human sees a correct answer,
+  not a failure. Known consequence: the ticket counts as blocked and
+  `first_pass` reads false for what was a correct outcome. This is a
+  pre-existing gap shared with the "no code changes needed" halt below;
+  closing it means teaching both callers a third terminal outcome, which is
+  out of scope here.
 
 **In gated mode (full analysis):** Ask:
 
@@ -313,7 +323,7 @@ waves, and aggregate final results.
 
 ## Truncation handling
 
-When this skill invokes Aristotle, Optimus, or Cyrus via the `Agent` tool, the orchestrator must verify the returned response contains the `<<task-complete>>` sentinel before consuming its output. See `~/.claude/_shared/agent-turn-cap-warning.md` for the detection rule, halt/skip behavior, and the `agent_truncated` metric to emit. Aristotle-truncation is especially load-bearing here — a truncated Implementation Handoff section silently corrupts Optimus's brief.
+When this skill invokes Aristotle, Optimus, or Cyrus via the `Agent` tool, the orchestrator must verify the returned response contains the `<<task-complete>>` sentinel before consuming its output. See `~/.claude/_shared/agent-turn-cap-warning.md` for the detection rule, halt/skip behavior, and the `agent_truncated` metric to emit. Aristotle-truncation is especially load-bearing here — a truncated Implementation Handoff section silently corrupts Optimus's brief. A missing handoff is not by itself the truncation signature: a Phase 0 stop legitimately has no handoff and no Phases 1-5. The sentinel is the test — a Phase 0 stop that ends with `<<task-complete>>` is complete; a five-phase analysis that stops mid-handoff without the sentinel is truncated.
 
 ## Maintenance
 

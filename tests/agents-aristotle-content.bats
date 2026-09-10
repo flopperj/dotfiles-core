@@ -78,6 +78,29 @@ ROLE_GUARD_FRAGMENT="$DOTFILES_DIR/.claude/_shared/role-guards/aristotle.md"
     grep -q 'Override: the user has reviewed your Phase 0' "$SKILL" || return 1
 }
 
+@test "skill override line and agent override clause agree on the required wording" {
+    # I5 was a drift bug between these two files: the agent must accept exactly the
+    # literal the skill prepends. The agent conditions on "an explicit override line
+    # stating that the user has seen a \"wrong tool\" verdict"; the skill's literal
+    # must therefore contain both "Override" and the quoted verdict phrase.
+    local literal
+    # The literal wraps across markdown lines; flatten before matching.
+    literal=$(tr '\n' ' ' < "$SKILL" | grep -o 'Override: the user has reviewed your Phase 0[^`]*' | head -1)
+    [ -n "$literal" ] || return 1
+    [[ "$literal" == *'"wrong tool" verdict'* ]] || return 1
+    [[ "$literal" == *"full five-phase analysis"* ]] || return 1
+    grep -q 'override line stating that the user has seen a "wrong tool" verdict' "$AGENT" || return 1
+}
+
+@test "aristotle skill autonomous Phase 0 branch names the callers' blocked bucket" {
+    grep -q 'classify any pipeline that ends without a PR as \*\*blocked\*\*' "$SKILL" || return 1
+    grep -q 'Put the verdict in `{reason}`' "$SKILL" || return 1
+}
+
+@test "aristotle skill truncation rule does not treat a missing handoff as truncation" {
+    grep -q 'A missing handoff is not by itself the truncation signature' "$SKILL" || return 1
+}
+
 @test "aristotle skill no longer promises an unconditional 5-phase analysis" {
     ! grep -q 'still runs the full 5-phase analysis' "$SKILL" || return 1
 }
