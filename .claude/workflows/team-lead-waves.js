@@ -27,13 +27,22 @@ export const meta = {
 // else yields null from agent(); the wave loop attributes that null to its
 // ticket BY INDEX — attribution happens before any filtering, because the
 // index-to-ticket mapping is how a blocked ticket gets named.
+//
+// Three terminal statuses, matching ticket-pickup's outcomes: 'done' (PR
+// produced), 'advisory' (the pipeline correctly concluded the answer is not a
+// code change — Aristotle Phase 0 wrong-tool verdict, or a Move stating no
+// code changes are needed; a success, never retried or failure-analysed),
+// 'blocked' (something went wrong). 'verdict' carries the one-line advisory
+// ruling and is required in spirit when status is advisory; the schema keeps
+// it optional so a 'done'/'blocked' result need not include it.
 const TICKET_RESULT = {
   type: 'object',
   required: ['ticket', 'status', 'summary', 'files_touched'],
   properties: {
     ticket: { type: 'string' },
-    status: { type: 'string', enum: ['done', 'blocked'] },
+    status: { type: 'string', enum: ['done', 'advisory', 'blocked'] },
     summary: { type: 'string' },
+    verdict: { type: 'string' },
     files_touched: { type: 'array', items: { type: 'string' } }
   }
 }
@@ -98,9 +107,10 @@ ${priorContext}`
 
 When the pipeline finishes, return ONLY the JSON object the schema requires:
 - "ticket": "${key}"
-- "status": "done" if the pipeline completed, "blocked" if it hit a blocker it could not resolve
-- "summary": one short paragraph — what was built (files created/modified, classes/interfaces established, tests written, reviewer outcome) or why it blocked
-- "files_touched": repo-relative paths of every file the pipeline created or modified (empty array if blocked before any change)
+- "status": "done" if the pipeline produced a PR, "advisory" if it ended deliberately with no code change because the correct answer is not a code change (ticket-pickup returned outcome: advisory), "blocked" if it hit a blocker it could not resolve
+- "summary": one short paragraph — what was built (files created/modified, classes/interfaces established, tests written, reviewer outcome), or the analysis's answer if advisory, or why it blocked
+- "verdict": advisory only — the one-line ruling ticket-pickup returned (omit otherwise)
+- "files_touched": repo-relative paths of every file the pipeline created or modified (empty array if advisory, or if blocked before any change)
 This is a workflow-owned stage: the schema-validated return IS the completion signal — no sentinel token is required.`
 }
 
@@ -150,6 +160,7 @@ if (!planValid) {
 
   const accumulator = []
   const blocked = []
+  const advisory = []
 
   for (const wave of waves) {
     phase(`Wave ${wave.index}`)
@@ -202,6 +213,12 @@ if (!planValid) {
           blocked.push(key)
           entries.push({ ticket: key, status: 'blocked', summary: r.summary, files })
           log(`Wave ${wave.index} — ${key}: BLOCKED — ${r.summary}`)
+        } else if (r.status === 'advisory') {
+          // A correct no-code answer. Not blocked: no retry, no failure analysis.
+          const verdict = typeof r.verdict === 'string' && r.verdict.trim() ? r.verdict.trim() : r.summary
+          advisory.push({ ticket: key, verdict })
+          entries.push({ ticket: key, status: 'advisory', summary: r.summary, files: [] })
+          log(`Wave ${wave.index} — ${key}: ADVISORY — ${verdict}`)
         } else {
           entries.push({ ticket: key, status: 'done', summary: r.summary, files })
           log(`Wave ${wave.index} — ${key}: done — ${files.length} file(s) touched.`)
@@ -211,11 +228,15 @@ if (!planValid) {
     accumulator.push({ index: wave.index, entries })
 
     const succeeded = entries.filter((e) => e.status === 'done').length
-    log(`Wave ${wave.index} complete: ${succeeded}/${width} succeeded${succeeded < width ? `, blocked: ${entries.filter((e) => e.status === 'blocked').map((e) => e.ticket).join(', ')}` : ''}.`)
+    const advised = entries.filter((e) => e.status === 'advisory').map((e) => e.ticket)
+    const stuck = entries.filter((e) => e.status === 'blocked').map((e) => e.ticket)
+    log(`Wave ${wave.index} complete: ${succeeded}/${width} succeeded${advised.length ? `, advisory: ${advised.join(', ')}` : ''}${stuck.length ? `, blocked: ${stuck.join(', ')}` : ''}.`)
   }
 
-  log(`All waves complete: ${blocked.length} blocked ticket(s)${blocked.length > 0 ? ` (${blocked.join(', ')})` : ''}.`)
-  result = { waves, sequencing_reasons: sequencingReasons, domain, blocked }
+  log(`All waves complete: ${advisory.length} advisory, ${blocked.length} blocked ticket(s)${blocked.length > 0 ? ` (${blocked.join(', ')})` : ''}.`)
+  // `advisory` is optional in swarm-context.json; emitted always so the caller
+  // never has to distinguish "none" from "not reported".
+  result = { waves, sequencing_reasons: sequencingReasons, domain, blocked, advisory }
 }
 
 // Machine-consumable return only — narration stays in the log above.

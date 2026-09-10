@@ -77,3 +77,20 @@ SWARM_CONTEXT="$DOTFILES_DIR/.claude/workflows/schemas/swarm-context.json"
     # The interim wording that routed a correct verdict into the blocked bucket.
     ! grep -rq 'ends without a PR as \*\*blocked\*\*' "$SKILLS" || return 1
 }
+
+@test "team-lead-waves workflow accepts status advisory and returns an advisory array" {
+    local wf="$DOTFILES_DIR/.claude/workflows/team-lead-waves.js"
+    grep -q "enum: \['done', 'advisory', 'blocked'\]" "$wf" || return 1
+    grep -q "verdict: { type: 'string' }" "$wf" || return 1
+    grep -q "r.status === 'advisory'" "$wf" || return 1
+    grep -q "result = { waves, sequencing_reasons: sequencingReasons, domain, blocked, advisory }" "$wf" || return 1
+    # The pipeline prompt tells the agent when to answer advisory.
+    grep -q '"status": "done" if the pipeline produced a PR, "advisory" if' "$wf" || return 1
+}
+
+@test "team-lead-waves workflow never files an advisory result under blocked" {
+    local wf="$DOTFILES_DIR/.claude/workflows/team-lead-waves.js"
+    # The advisory branch pushes to `advisory`, not `blocked`, and runs before the done fallthrough.
+    awk "/r.status === 'advisory'/,/} else {/" "$wf" | grep -q 'advisory.push' || return 1
+    ! awk "/r.status === 'advisory'/,/} else {/" "$wf" | grep -q 'blocked.push' || return 1
+}
