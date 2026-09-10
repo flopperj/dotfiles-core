@@ -1,6 +1,13 @@
 # Changelog
 
 > **How to update:** The pre-commit hook (`scripts/pre-commit.sh`) is auto-installed by `install.sh`. It runs a fast leakage check (`scripts/check-no-leakage.sh`) and re-renders the generated `CLAUDE.md.generated` and `AGENTS.md.generated` files on every commit. A pre-push gate (`scripts/pre-push.sh`, also auto-installed) scans every outgoing commit's tree and metadata before it leaves the machine. CI runs lint, consult-grammar, and the test suite (including synthetic-token leakage mechanism tests) on every PR; the company-token scan is a separate step that runs only when guard data is present on the runner. If you bypass the hooks or work in a context where hooks cannot run, keep this file current manually. Each release heading links to the diff on the public mirror.
+## v1.20.2 — 2026-09-10 (agent-stats test alignment)
+
+### Fixed
+
+- **`make test` no longer fails on the mirror's CI.** v1.20.0 reworded the agent-stats CI-attempts health flag to "exceed implemented pipeline count" but left the older numeric-validation tests in `tests/agent-stats.bats` asserting the previous "exceed pipeline count" text. Local Bats 1.14.0 does not fail a test on a bare false `[[ ]]`, so the drift passed locally and only surfaced on CI. The assertions now match the current wording and carry `|| return 1` so they fail closed on every bats version.
+- `scripts/templates/install-agent.sh` header no longer claims persistent memory for every registered agent; memory applies only where the agent declares it (Aristotle is stateless by design). Ranger review of the exported bundle.
+
 ## v1.20.1 — 2026-09-10 (README drift check)
 
 ### Fixed
