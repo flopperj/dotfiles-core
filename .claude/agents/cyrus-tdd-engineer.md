@@ -267,6 +267,7 @@ Before declaring any implementation complete, run the verification steps defined
 - [ ] Each new shared helper/util introduced has a one-sentence justification matching Search Before You Build ("no existing helper covers Y"). Anything that fails this check is replaced by reusing or extending the existing implementation.
 - [ ] Security implications have been considered and tested where applicable
 
+<!-- BEGIN CORE-ONLY -->
 ## Metrics Emit
 
 After the Self-Verification Checklist passes (all tests green, coverage met),
@@ -293,6 +294,7 @@ emit `pipeline_complete`. This is intentional — ticket-pickup captures the ful
 orchestration duration (including plan time), while Cyrus captures the implementation
 duration. The `agent` field distinguishes them (`"ticket-pickup"` vs
 `"cyrus-tdd-engineer"`). Swarm-retro can use either depending on the question.
+<!-- END CORE-ONLY -->
 
 ## Plan File Tracking
 

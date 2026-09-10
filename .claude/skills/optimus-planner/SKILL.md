@@ -127,6 +127,7 @@ Invoke the Cyrus skill's parallel execution mode by launching the `cyrus-tdd-eng
 
 The Cyrus skill will fan out one agent per step per wave, collect results, and report between waves.
 
+<!-- BEGIN CORE-ONLY -->
 ### Metrics emit (direct invocations too)
 
 Swarm and ticket-pickup runs emit pipeline metrics, but directly-invoked
@@ -145,6 +146,7 @@ for format):
 
 If emit fails, log and continue — never block planning or implementation
 on metrics.
+<!-- END CORE-ONLY -->
 
 ### Step 4: Handle revision (if requested)
 

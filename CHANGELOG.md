@@ -2,6 +2,35 @@
 
 > **How to update:** The pre-commit hook (`scripts/pre-commit.sh`) is auto-installed by `install.sh`. It runs a fast leakage check (`scripts/check-no-leakage.sh`) and re-renders the generated `CLAUDE.md.generated` and `AGENTS.md.generated` files on every commit. A pre-push gate (`scripts/pre-push.sh`, also auto-installed) scans every outgoing commit's tree and metadata before it leaves the machine. CI runs lint, consult-grammar, and the test suite (including synthetic-token leakage mechanism tests) on every PR; the company-token scan is a separate step that runs only when guard data is present on the runner. If you bypass the hooks or work in a context where hooks cannot run, keep this file current manually. Each release heading links to the diff on the public mirror.
 
+## v1.19.0 — 2026-09-09 (portable export of the reasoning pipeline)
+
+### Added
+
+- **`scripts/export-skills.sh <target> [--check] [--owner-team …] [--owner-slack …]`** — renders self-contained copies of the nine reasoning-pipeline skills (`aristotle-deconstructor`, `optimus-planner`, `cyrus-tdd-engineer`, `forge`, `grill-me`, `to-prd`, `code-auditor`, `scout-reviewer`, `ranger-reviewer`) into a plain `skills/<name>/SKILL.md` repository for skills CLIs that cannot install `~/.claude/agents`, workflows, `_shared/`, or `evals/`. Agent definitions ship as `skills/<name>/agent.md` with a *Launching the agent* section (registered subagent → `general-purpose` fallback primed with `agent.md` → inline) and a `scripts/install-agent.sh` registration helper. Shared assets (turn-cap doc, handoff schemas, review heuristics, `code-auditor-score.js`) are duplicated per skill so single-skill installs work. SKILL.md frontmatter gains a `metadata:` block (`domain`, `status`, `bundle`, `tags`, `tools`, `mcp_servers`, optional owner fields). A README table is maintained between `REASONING PIPELINE TABLE` sentinels. `--check` exits 1 on drift.
+- **`scripts/check-portable-refs.sh <skills-dir>`** — self-containment gate for an exported bundle: forbids core-only paths and export markers, requires every `/skill` reference to resolve to a bundle skill or be covered by the "optional external skills" paragraph, and verifies relative links resolve. Also guards against nested `SKILL.md` files (the CLI registers each one as a skill).
+- **`scripts/templates/install-agent.sh`** — copied into every agent-backed exported skill; installs `agent.md` to `~/.claude/agents/<name>.md` (or `./.claude/agents/` with `--project`), refusing to overwrite a differing file without `--force`.
+- **`.claude/_shared/portable/`** — `launch.md`, `bundle-notes.md`, `agent-notes.md` templates inserted into exported files.
+- **Export markers** — `<!-- BEGIN CORE-ONLY -->` … `<!-- END CORE-ONLY -->` (dropped on export) and `<!-- PORTABLE-ONLY … -->` (unwrapped on export). Applied to the metrics-emit sections in `optimus-planner/SKILL.md` and `agents/cyrus-tdd-engineer.md`, the Cursor-hook paragraphs in `cyrus-tdd-engineer/SKILL.md`, the metric mentions in `_shared/agent-turn-cap-warning.md`, and the failure-handling lead-in in `code-auditor/SKILL.md`. Core rendering is unchanged (HTML comments).
+- Makefile targets `export-skills` / `check-export` (`TARGET=…`, `EXPORT_ARGS=…`); `scripts/templates/*.sh` added to `LINT_FILES`.
+- `tests/export-skills.bats` — 45 tests (21 in the initial cut, extended in the review follow-ups): CLI surface, render shape, metadata, idempotency and `--check` drift (including the missing-dir case), self-containment via `check-portable-refs.sh`, byte-identity of shipped assets, agent frontmatter preservation, inserted sections, README sentinel behaviour, and `install-agent.sh` semantics.
+- README — "Publishing to a team skills repo" section.
+
+### Notes
+
+- The `metrics-emit` library skill is deliberately **not** exported: its only consumer (`/agent-stats`) is not part of the bundle, so emission instructions are stripped rather than guarded.
+
+### Fixed (review follow-up)
+
+- **`check-portable-refs.sh` no longer passes vacuously.** An empty resolved skill list is an error, not "clean (0 skills)"; a non-bundle `/skill` token is excused only when that exact token or its namespace wildcard (`/mc-*`, `/create-*`, …) literally appears in the file's optional-skills paragraph. Forbidden list gains the unqualified "Follow CLAUDE.md error handling defaults" phrase and `ob-[0-9]` obligation ids.
+- **`export-skills.sh`:** an unterminated `CORE-ONLY` block aborts the render instead of truncating the file; `--check` also detects executable-bit drift on shipped scripts; the two-line "Follow CLAUDE.md error handling / defaults." wrap in the reviewer agents is rewritten robustly; `managed via dotfiles` is anchored so `dotfiles-core` survives; `EXPORT_SKILLS_CORE_DIR` lets tests render from a scratch copy.
+- **Rendered bundle:** every `agent.md` is told to end completed runs with `<<task-complete>>` (the instruction previously lived only in the maintainer's global AGENTS.md); `review-heuristics.md` ships with every skill that cites it (cyrus, scout, ranger, code-auditor); `SKILL_DIR` resolution is spelled out; the fallback brief restates `disallowedTools` and the agent notes tell the agent to self-enforce them; per-skill *Requires* lists replace the all-nine sibling boilerplate; Optimus's memory step is qualified as registered-mode only; the shipped `auditor-composite.json` `$comment` cites `workflows/code-auditor-score.js`.
+- **Canonical docs:** `agent-turn-cap-warning.md` and `cyrus-tdd-engineer/SKILL.md` now say Cyrus `maxTurns` is 300 (was 100); forge's private obligation id is `CORE-ONLY`.
+- **`install-agent.sh`:** `name:` is sanitized (`^[A-Za-z0-9][A-Za-z0-9_-]*$`, whitespace/quotes stripped); `--project` resolves the git root instead of `$PWD`.
+- Re-review follow-up: `Requires` lists name only skills a SKILL.md actually invokes (reviewers → `cyrus-tdd-engineer`; `grill-me` → `to-prd`; `forge` drops the transitive `cyrus-tdd-engineer`); the missing-sibling rule says earlier steps still run; the agent-notes memory bullet renders only for agents declaring `memory:`; launch text qualifies tool restrictions and memory as conditional.
+- Tests assert diagnostic messages, not just exit codes, on every error path (`--check` drift kinds, usage errors, unterminated marker, clean-run positive control).
+- Portability: no `sed -i` in `export-skills.sh` (BSD/GNU flag syntax differs; CI runs on Linux).
+- `tests/export-skills.bats`: 45 tests, with a real-tree snapshot guard (`setup_file`/`teardown_file`) and coverage for every path above.
+
 ## v1.18.1 — 2026-09-09 (pipeline_complete emit contract: first_pass/classification)
 
 ### Fixed

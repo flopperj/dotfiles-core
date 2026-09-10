@@ -1,12 +1,17 @@
 # Agent Turn-Cap Truncation Handling
 
-The five reasoning agents have `maxTurns` set in their frontmatter — Aristotle 20, Optimus 30, Cyrus 100, Ranger 40, Scout 35. When the harness terminates a run at the cap, the agent's final message returns without any explicit signal, so the pipeline can silently consume partial output.
+The five reasoning agents have `maxTurns` set in their frontmatter — Aristotle 20, Optimus 30, Cyrus 300, Ranger 40, Scout 35. When the harness terminates a run at the cap, the agent's final message returns without any explicit signal, so the pipeline can silently consume partial output.
 
 ## Scope — prose-orchestrated calls only
 
 The sentinel remains required for every `Agent`-tool call orchestrated from SKILL.md prose.
 
+<!-- BEGIN CORE-ONLY -->
 Stages executed by a saved workflow script are **exempt**: `agent()` with a `schema` returns a validated object or `null`, which is itself the completion signal — a sentinel adds nothing there. Workflow-owned stages also emit **no** `agent_truncated` metric: a `null` return is the workflow-native truncation/failure signal, handled by the workflow's own degradation rules and the invoking skill's invoke → validate → fall-back contract. The `agent_truncated` metric stays live for prose-orchestrated calls, where sentinel-absence is the detection rule below.
+<!-- END CORE-ONLY -->
+<!-- PORTABLE-ONLY
+Stages executed by a saved workflow script are **exempt**: `agent()` with a `schema` returns a validated object or `null`, which is itself the completion signal — a sentinel adds nothing there. A `null` return is the workflow-native truncation/failure signal, handled by the workflow's own degradation rules and the invoking skill's invoke → validate → fall-back contract. For prose-orchestrated calls, sentinel-absence is the detection rule below.
+-->
 
 ## Detection
 
@@ -29,14 +34,24 @@ A response that lacks the sentinel **and** explicitly states a blocker is incomp
    >
    > Options: (1) review the partial output below and decide whether it's salvageable, (2) re-run the agent with a tightened scope, (3) raise the agent's `maxTurns` in its frontmatter and re-run after a session restart.
 
+<!-- BEGIN CORE-ONLY -->
 3. **Emit the `agent_truncated` metric** — see `~/.claude/skills/metrics-emit/SKILL.md` → `agent_truncated`.
 4. **Wait for user direction.** Do not proceed.
+<!-- END CORE-ONLY -->
+<!-- PORTABLE-ONLY
+3. **Wait for user direction.** Do not proceed.
+-->
 
 ## Response — swarm mode (`swarm_mode: true`)
 
 1. **Record and skip.** Mark the ticket blocked with reason `agent_truncated`.
+<!-- BEGIN CORE-ONLY -->
 2. **Emit the metric.**
 3. **Move to the next ticket.** Do not halt the batch — `/swarm-retro` will surface the pattern across runs.
+<!-- END CORE-ONLY -->
+<!-- PORTABLE-ONLY
+2. **Move to the next ticket.** Do not halt the batch.
+-->
 
 ## Hard rules
 

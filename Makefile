@@ -1,4 +1,4 @@
-.PHONY: test lint lint-agents check-leakage check-leakage-shapes gen-docs gen-boundaries gen-role-guards gen-reviewer-blocks gen eval all
+.PHONY: test lint lint-agents check-leakage check-leakage-shapes gen-docs gen-boundaries gen-role-guards gen-reviewer-blocks gen eval all export-skills check-export
 
 DOTFILES_DIR := $(shell realpath .)
 
@@ -8,7 +8,7 @@ TEST_FILES := $(wildcard tests/*.bats)
 # Repo-root scripts plus any skill-local scripts (e.g. babysit-prs). Skill
 # scripts back consequential actions, so they are shellchecked in CI too, not
 # by a manual reminder. The nested glob no-ops cleanly when no skill ships one.
-LINT_FILES := $(wildcard scripts/*.sh) $(wildcard .claude/skills/*/scripts/*.sh) $(wildcard .claude/evals/scripts/*.sh)
+LINT_FILES := $(wildcard scripts/*.sh) $(wildcard scripts/templates/*.sh) $(wildcard .claude/skills/*/scripts/*.sh) $(wildcard .claude/evals/scripts/*.sh)
 
 all: lint lint-agents check-leakage check-consult-grammar test
 
@@ -43,6 +43,18 @@ gen-reviewer-blocks:                    ## Regenerate shared reviewer contract b
 	bash scripts/reviewer-blocks-gen.sh
 
 gen: gen-docs gen-boundaries gen-role-guards gen-reviewer-blocks   ## Run all generators
+
+# export-skills — render portable copies of the reasoning-pipeline skills into
+# a plain skills repo (TARGET). dotfiles-core stays canonical; the target's
+# managed skill dirs are regenerated. EXPORT_ARGS passes metadata flags, e.g.
+#   make export-skills TARGET=../team-skills EXPORT_ARGS='--owner-team foo --owner-slack "#foo"'
+export-skills:                          ## Render portable skills into TARGET
+	@test -n "$(TARGET)" || { echo "usage: make export-skills TARGET=<skills-repo-dir> [EXPORT_ARGS=...]"; exit 2; }
+	bash scripts/export-skills.sh "$(TARGET)" $(EXPORT_ARGS)
+
+check-export:                           ## Verify TARGET matches a fresh render (exit 1 on drift)
+	@test -n "$(TARGET)" || { echo "usage: make check-export TARGET=<skills-repo-dir> [EXPORT_ARGS=...]"; exit 2; }
+	bash scripts/export-skills.sh "$(TARGET)" --check $(EXPORT_ARGS)
 
 EVAL_SET := .claude/evals/sets/classifier-v1.jsonl
 
