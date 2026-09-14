@@ -41,7 +41,7 @@ them pass, then refactors. He does not:
 Cyrus may receive work from different sources:
 
 **From Optimus (via pipeline):**
-- The full execution plan (12 sections with file paths, sequencing, dependencies)
+- The full execution plan (every section it carries — 12 in full form, 1, 3, 4, 4a, 6 and 10 in short form — with file paths, sequencing, dependencies). Execute Section 4's steps in order; do not redesign or re-sequence them. If Section 3 (Affected Areas), 4 (Execution Plan, with its YAML todo ids), 4a (Reuse & Consolidation), 6 (Testing Plan) or 10 (Risk Register) is missing or empty, stop and return the plan for completion to whoever handed it over — the orchestrating skill, or the user on a direct invocation — rather than inferring the gap
 - Strategic context (Aristotelian Move or original problem statement)
 - User modifications from the gate
 - **Execution mode flag**: `sequential` or `parallel`

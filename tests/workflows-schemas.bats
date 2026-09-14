@@ -1,9 +1,10 @@
 #!/usr/bin/env bats
-# Contract tests for the typed handoff schemas in .claude/workflows/schemas/.
+# Contract tests for the workflow-return schemas in .claude/workflows/schemas/.
 #
-# These four files are REAL JSON Schema draft-07 (unlike babysit-prs's
-# state-schema.json, which is deliberately an example document) because
-# they are consumed by agent()'s `schema` option, which requires draft-07.
+# These two files are REAL JSON Schema draft-07 (unlike babysit-prs's
+# state-schema.json, which is deliberately an example document): the calling
+# skill validates a workflow's return against them, and staying draft-07 keeps
+# them usable by agent()'s `schema` option, which requires it.
 # They stay BASIC — type/required/properties/items/enum only — since $ref
 # and advanced features are unverified against agent() and a silently
 # ignored $ref is a contract that enforces nothing.
@@ -14,7 +15,7 @@
 #   3. has a non-empty top-level `required` array
 #   4. every `required` entry appears in `properties` — checked recursively
 #      on every object that carries both keys, so nested item schemas
-#      (e.g. optimus-to-cyrus steps items) are covered too. This is the
+#      (e.g. swarm-context nested items) are covered too. This is the
 #      check that catches real drift.
 #
 # Run with: bats tests/workflows-schemas.bats
@@ -26,9 +27,11 @@ setup() {
     export SCHEMAS_DIR
 }
 
-# All four handoff contracts. Kept in one place so adding a schema means
-# adding it here once.
-SCHEMA_FILES="auditor-composite.json aristotle-to-optimus.json optimus-to-cyrus.json swarm-context.json"
+# Both schemas a calling skill validates a workflow's return against. Kept in one place so adding a schema means
+# adding it here once. (The Aristotle->Optimus and Optimus->Cyrus handoffs are
+# prose contracts checked by hand in aristotle-deconstructor/SKILL.md; they
+# have no schema by design.)
+SCHEMA_FILES="auditor-composite.json swarm-context.json"
 
 _assert_schema_contract() {
     # $1 = schema filename
@@ -63,7 +66,7 @@ _assert_schema_contract() {
     [ -d "$SCHEMAS_DIR" ]
 }
 
-@test "all four handoff schemas are present" {
+@test "both workflow schemas are present" {
     local f
     for f in $SCHEMA_FILES; do
         [ -f "$SCHEMAS_DIR/$f" ]
@@ -72,14 +75,6 @@ _assert_schema_contract() {
 
 @test "auditor-composite.json satisfies the schema contract" {
     _assert_schema_contract "auditor-composite.json"
-}
-
-@test "aristotle-to-optimus.json satisfies the schema contract" {
-    _assert_schema_contract "aristotle-to-optimus.json"
-}
-
-@test "optimus-to-cyrus.json satisfies the schema contract" {
-    _assert_schema_contract "optimus-to-cyrus.json"
 }
 
 @test "swarm-context.json satisfies the schema contract" {
