@@ -132,7 +132,6 @@ case "$SHARE_TYPE" in
         ;;
 esac
 
-# permissions.create: POST files/{fileId}/permissions
 # Query params: sendNotificationEmail=false (scripted use), supportsAllDrives=true (shared drives)
 RESPONSE=$(curl -sS -X POST \
     -H "Authorization: Bearer $TOKEN" \
@@ -142,7 +141,6 @@ RESPONSE=$(curl -sS -X POST \
     "$DRIVE_API/files/$FILE_ID/permissions?sendNotificationEmail=false&supportsAllDrives=true&fields=id,type,role")
 
 if ! handle_api_error "$RESPONSE" "Create permission"; then
-    # Check for corporate policy restriction on public sharing
     if echo "$RESPONSE" | grep -q "does not have sufficient permissions" && [[ "$SHARE_TYPE" == "anyone" ]]; then
         echo "" >&2
         echo "HINT: Your organization's Google Workspace policy may restrict public link sharing." >&2

@@ -64,7 +64,6 @@ QUOTA_PROJECT=$(get_quota_project)
 
 FILENAME="${CUSTOM_NAME:-$(basename "$FILE_PATH")}"
 
-# Detect MIME type using file command if available, else use extension
 detect_mime_type() {
     if command -v file &>/dev/null; then
         file -b --mime-type "$FILE_PATH"
@@ -81,7 +80,6 @@ detect_mime_type() {
 
 MIME_TYPE=$(detect_mime_type)
 
-# Build metadata JSON (name, mimeType, optional parents)
 if [[ -n "$FOLDER_ID" ]]; then
     METADATA=$(jq -n -c --arg name "$FILENAME" --arg mime "$MIME_TYPE" --arg folder "$FOLDER_ID" '{
         name: $name,

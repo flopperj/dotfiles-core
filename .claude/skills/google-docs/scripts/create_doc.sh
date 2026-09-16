@@ -41,7 +41,6 @@ if [[ $# -eq 0 ]]; then
     exit 1
 fi
 
-# Parse arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
         --markdown) USE_MARKDOWN=true; shift ;;
@@ -76,20 +75,16 @@ TOKEN=$(get_access_token) || exit 1
 QUOTA_PROJECT=$(get_quota_project)
 
 if [[ "$USE_MARKDOWN" == "true" && -n "$CONTENT" ]]; then
-    # Use Drive API multipart upload to convert Markdown to Google Doc
-    # Interpret escape sequences in content
+    # Drive's multipart upload converts text/markdown into a native Google Doc when the metadata names the Doc mimeType; the Docs API has no Markdown import.
     CONTENT=$(printf '%b' "$CONTENT")
     
-    # Create metadata JSON with target mimeType for conversion
     METADATA=$(jq -n --arg name "$TITLE" '{
         name: $name,
         mimeType: "application/vnd.google-apps.document"
     }')
     
-    # Generate a unique boundary for multipart request
     BOUNDARY="boundary_$(date +%s)_$$"
     
-    # Build multipart body
     MULTIPART_BODY="--${BOUNDARY}
 Content-Type: application/json; charset=UTF-8
 
@@ -116,7 +111,6 @@ ${CONTENT}
     echo "Document ID: $FILE_ID"
     echo "URL: https://docs.google.com/document/d/$FILE_ID/edit"
 else
-    # Use Docs API for plain text
     CREATE_BODY=$(jq -n --arg title "$TITLE" '{title: $title}')
     
     RESPONSE=$(curl -sS -X POST \
@@ -132,12 +126,9 @@ else
     
     DOC_ID=$(echo "$RESPONSE" | jq -r '.documentId')
     
-    # Insert content if provided
     if [[ -n "$CONTENT" ]]; then
-        # Interpret escape sequences
         CONTENT=$(printf '%b' "$CONTENT")
         
-        # Ensure content ends with newline
         [[ "${CONTENT: -1}" != $'\n' ]] && CONTENT+=$'\n'
         
         INSERT_BODY=$(jq -n --arg text "$CONTENT" '{

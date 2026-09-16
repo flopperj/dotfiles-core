@@ -78,7 +78,6 @@ done
 TOKEN=$(get_access_token) || exit 1
 QUOTA_PROJECT=$(get_quota_project)
 
-# Determine insert index: explicit or end of document
 if [[ -z "$INSERT_INDEX" ]]; then
     DOC_RESPONSE=$(curl -sS \
         -H "Authorization: Bearer $TOKEN" \
@@ -93,7 +92,6 @@ if [[ -z "$INSERT_INDEX" ]]; then
     INSERT_INDEX=$((END_INDEX - 1))
 fi
 
-# Build objectSize if width/height specified
 OBJECT_SIZE_JSON=""
 if [[ -n "$WIDTH" && -n "$HEIGHT" ]]; then
     OBJECT_SIZE_JSON=$(jq -n -c --argjson w "$WIDTH" --argjson h "$HEIGHT" '{
@@ -106,8 +104,7 @@ elif [[ -n "$HEIGHT" ]]; then
     OBJECT_SIZE_JSON=$(jq -n -c --argjson h "$HEIGHT" '{height: { magnitude: $h, unit: "PT" }}')
 fi
 
-# Build batchUpdate request (InsertInlineImageRequest)
-# Reference: https://developers.google.com/workspace/docs/api/how-tos/images
+# InsertInlineImageRequest: https://developers.google.com/workspace/docs/api/how-tos/images
 if [[ -n "$OBJECT_SIZE_JSON" ]]; then
     REQUEST=$(jq -n -c --arg uri "$IMAGE_URL" --argjson index "$INSERT_INDEX" --argjson size "$OBJECT_SIZE_JSON" '{
         requests: [{
@@ -137,7 +134,6 @@ RESPONSE=$(curl -sS -X POST \
     "$DOCS_API/documents/$DOC_ID:batchUpdate")
 
 if ! handle_api_error "$RESPONSE" "Insert image"; then
-    # Check for common image insertion failures
     if echo "$RESPONSE" | grep -q "Internal error"; then
         echo "" >&2
         echo "HINT: Image insertion failed. Common causes:" >&2

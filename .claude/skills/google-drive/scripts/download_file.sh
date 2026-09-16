@@ -49,7 +49,6 @@ if [[ $# -eq 0 ]]; then
     exit 1
 fi
 
-# First argument is file ID
 FILE_ID=$(extract_file_id "$1") || exit 1
 shift
 
@@ -66,7 +65,6 @@ done
 TOKEN=$(get_access_token) || exit 1
 QUOTA_PROJECT=$(get_quota_project)
 
-# Get file metadata
 META_RESPONSE=$(curl -sS \
     -H "Authorization: Bearer $TOKEN" \
     -H "x-goog-user-project: $QUOTA_PROJECT" \
@@ -79,7 +77,7 @@ fi
 ORIGINAL_NAME=$(echo "$META_RESPONSE" | jq -r '.name')
 MIME_TYPE=$(echo "$META_RESPONSE" | jq -r '.mimeType')
 
-# Determine if this is a Google Workspace file that needs export
+# Workspace-native files (Docs, Sheets, Slides) have no binary body to download; they must be exported to a concrete format
 IS_WORKSPACE_FILE=false
 case "$MIME_TYPE" in
     application/vnd.google-apps.document|\
@@ -90,7 +88,6 @@ case "$MIME_TYPE" in
 esac
 
 if [[ "$IS_WORKSPACE_FILE" == "true" ]]; then
-    # Determine export MIME type and extension
     case "$MIME_TYPE" in
         application/vnd.google-apps.document)
             case "${EXPORT_FORMAT:-text}" in
@@ -135,7 +132,6 @@ if [[ "$IS_WORKSPACE_FILE" == "true" ]]; then
     DOWNLOAD_URL="$DRIVE_API/files/$FILE_ID/export?mimeType=$ENCODED_MIME"
     
     if [[ "$TO_STDOUT" == "true" ]]; then
-        # Check if binary format
         case "$EXPORT_MIME" in
             application/pdf|application/vnd.openxmlformats-*)
                 echo "ERROR: Cannot output binary content to stdout" >&2
@@ -146,7 +142,6 @@ if [[ "$IS_WORKSPACE_FILE" == "true" ]]; then
         curl -sS -H "Authorization: Bearer $TOKEN" -H "x-goog-user-project: $QUOTA_PROJECT" "$DOWNLOAD_URL"
     else
         if [[ -z "$OUTPUT_PATH" ]]; then
-            # Remove original extension and add new one
             BASE_NAME="${ORIGINAL_NAME%.*}"
             OUTPUT_PATH="$BASE_NAME$EXT"
         fi
@@ -155,7 +150,6 @@ if [[ "$IS_WORKSPACE_FILE" == "true" ]]; then
         echo "Downloaded: $OUTPUT_PATH" >&2
     fi
 else
-    # Direct download for non-Workspace files
     if [[ "$TO_STDOUT" == "true" ]]; then
         echo "ERROR: Cannot output binary files to stdout. Use --output instead." >&2
         exit 1

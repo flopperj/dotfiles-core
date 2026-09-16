@@ -38,7 +38,6 @@ if [[ $# -eq 0 ]]; then
     exit 1
 fi
 
-# First argument is doc ID
 DOC_ID=$(extract_file_id "$1") || exit 1
 shift
 
@@ -53,7 +52,6 @@ done
 TOKEN=$(get_access_token) || exit 1
 QUOTA_PROJECT=$(get_quota_project)
 
-# Get document metadata
 RESPONSE=$(curl -sS \
     -H "Authorization: Bearer $TOKEN" \
     -H "x-goog-user-project: $QUOTA_PROJECT" \
@@ -76,13 +74,11 @@ case "$OUTPUT_FORMAT" in
         echo ""
         echo "URL:          https://docs.google.com/document/d/$DOC_ID/edit"
         
-        # Get revision info if available
         REVISION_ID=$(echo "$RESPONSE" | jq -r '.revisionId // "N/A"')
         if [[ "$REVISION_ID" != "N/A" && -n "$REVISION_ID" ]]; then
             echo "Revision ID:  $REVISION_ID"
         fi
         
-        # Document style info
         MARGINS=$(echo "$RESPONSE" | jq -r '.documentStyle // empty')
         if [[ -n "$MARGINS" && "$MARGINS" != "null" ]]; then
             echo ""
@@ -95,7 +91,6 @@ case "$OUTPUT_FORMAT" in
             fi
         fi
         
-        # Body content stats
         CONTENT_LENGTH=$(echo "$RESPONSE" | jq '[.body.content[].endIndex] | max // 0')
         echo ""
         echo "Content length: ~$CONTENT_LENGTH characters"

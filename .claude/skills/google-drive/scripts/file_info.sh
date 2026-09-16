@@ -37,7 +37,6 @@ if [[ $# -eq 0 ]]; then
     exit 1
 fi
 
-# First argument is file ID
 FILE_ID=$(extract_file_id "$1") || exit 1
 shift
 
@@ -52,7 +51,6 @@ done
 TOKEN=$(get_access_token) || exit 1
 QUOTA_PROJECT=$(get_quota_project)
 
-# Request detailed fields
 FIELDS="id,name,mimeType,createdTime,modifiedTime,size,description"
 FIELDS+=",webViewLink,webContentLink,owners,sharingUser,shared,permissions"
 FIELDS+=",parents,starred,trashed,capabilities"
@@ -84,7 +82,6 @@ case "$OUTPUT_FORMAT" in
         
         SIZE=$(echo "$RESPONSE" | jq -r '.size // "N/A"')
         if [[ "$SIZE" != "N/A" && -n "$SIZE" ]]; then
-            # Convert bytes to human readable
             if [[ $SIZE -gt 1073741824 ]]; then
                 SIZE_HUMAN="$(echo "scale=2; $SIZE / 1073741824" | bc) GB"
             elif [[ $SIZE -gt 1048576 ]]; then

@@ -13,10 +13,8 @@ detect_environment() {
     fi
 }
 
-# Export environment for use by other scripts
 SKILL_ENV=$(detect_environment)
 
-# Get the gcloud command path based on environment
 get_gcloud_cmd() {
     if [[ "$SKILL_ENV" == "cws" ]]; then
         if [[ -x "/workspace/google-cloud-sdk/bin/gcloud" ]]; then
@@ -40,7 +38,6 @@ get_gcloud_cmd() {
     return 1
 }
 
-# Get the skills directory based on environment
 get_skills_dir() {
     if [[ "$SKILL_ENV" == "cws" ]]; then
         echo "/home/coder/.cursor/skills"
@@ -49,7 +46,6 @@ get_skills_dir() {
     fi
 }
 
-# Get the gcloud config directory based on environment
 get_gcloud_config_dir() {
     if [[ "$SKILL_ENV" == "cws" ]]; then
         echo "/home/coder/.config/gcloud"
@@ -58,7 +54,6 @@ get_gcloud_config_dir() {
     fi
 }
 
-# Get an access token for Google API calls
 # Returns the token on stdout, errors on stderr
 # Uses Application Default Credentials (ADC) for proper scope handling
 get_access_token() {
@@ -87,15 +82,13 @@ EOF
         fi
         
         echo "" >&2
-        echo "Default project: rsg-api-auth-dev (Google Docs and Drive APIs enabled)" >&2
-        echo "For a different project, see google-cloud-setup.md" >&2
+        echo "Add --set-quota-project=<your-gcp-project>: the project your org enabled the Docs and Drive APIs on (see google-cloud-setup.md)." >&2
         return 1
     fi
     
     echo "$token"
 }
 
-# Check that required tools are available
 check_dependencies() {
     local missing=()
     
@@ -120,7 +113,6 @@ check_dependencies() {
     return 0
 }
 
-# Handle API error responses
 # Usage: handle_api_error "$response" "operation description"
 handle_api_error() {
     local response="$1"
@@ -139,7 +131,7 @@ handle_api_error() {
     return 0
 }
 
-# Get the quota project from ADC credentials
+# Project billed for API quota (sent as x-goog-user-project); ADC's quota_project_id wins over the gcloud default
 get_quota_project() {
     local config_dir
     config_dir=$(get_gcloud_config_dir)
@@ -154,13 +146,11 @@ get_quota_project() {
         fi
     fi
     
-    # Fallback to gcloud config project
     local gcloud_cmd
     gcloud_cmd=$(get_gcloud_cmd 2>/dev/null) || return 1
     "$gcloud_cmd" config get-value project 2>/dev/null
 }
 
-# Get curl headers for API calls (including auth and quota project)
 # Usage: HEADERS=$(get_api_headers) && curl $HEADERS ...
 get_api_headers() {
     local token
@@ -175,7 +165,6 @@ get_api_headers() {
     fi
 }
 
-# Print environment info (useful for debugging)
 print_env_info() {
     echo "Environment: $SKILL_ENV"
     echo "Skills dir: $(get_skills_dir)"

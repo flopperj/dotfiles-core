@@ -43,7 +43,6 @@ if [[ $# -lt 2 ]]; then
     exit 1
 fi
 
-# Parse arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
         --markdown) USE_MARKDOWN=true; shift ;;
@@ -84,7 +83,6 @@ TOKEN=$(get_access_token) || exit 1
 QUOTA_PROJECT=$(get_quota_project)
 
 if [[ "$USE_MARKDOWN" == "true" ]]; then
-    # Get original document title
     DOC_RESPONSE=$(curl -sS \
         -H "Authorization: Bearer $TOKEN" \
         -H "x-goog-user-project: $QUOTA_PROJECT" \
@@ -96,20 +94,16 @@ if [[ "$USE_MARKDOWN" == "true" ]]; then
     
     TITLE=$(echo "$DOC_RESPONSE" | jq -r '.title')
     
-    # Interpret escape sequences
     NEW_CONTENT=$(printf '%b' "$NEW_CONTENT")
     
-    # Use Drive API multipart upload to convert Markdown to Google Doc
-    # Create metadata JSON with target mimeType for conversion
+    # Drive's multipart upload converts text/markdown into a native Google Doc when the metadata names the Doc mimeType; the Docs API has no Markdown import.
     METADATA=$(jq -n --arg name "$TITLE" '{
         name: $name,
         mimeType: "application/vnd.google-apps.document"
     }')
     
-    # Generate a unique boundary for multipart request
     BOUNDARY="boundary_$(date +%s)_$$"
     
-    # Build multipart body
     MULTIPART_BODY="--${BOUNDARY}
 Content-Type: application/json; charset=UTF-8
 
@@ -137,7 +131,6 @@ ${NEW_CONTENT}
     echo "URL: https://docs.google.com/document/d/$NEW_DOC_ID/edit"
     echo "Note: Markdown conversion creates a new document"
 else
-    # Get current document to find content range
     DOC_RESPONSE=$(curl -sS \
         -H "Authorization: Bearer $TOKEN" \
         -H "x-goog-user-project: $QUOTA_PROJECT" \
@@ -147,13 +140,11 @@ else
         exit 1
     fi
     
-    # Find the end index
     END_INDEX=$(echo "$DOC_RESPONSE" | jq '[.body.content[]? | .endIndex // 0] | max')
     
-    # Build requests array
     REQUESTS="[]"
     
-    # Delete existing content if there is any
+    # An empty body still spans indices 1-2 (the mandatory trailing newline, which cannot be deleted), so only a longer body has content to clear
     if [[ $END_INDEX -gt 2 ]]; then
         DELETE_END=$((END_INDEX - 1))
         REQUESTS=$(echo "$REQUESTS" | jq --argjson end "$DELETE_END" '. + [{
@@ -163,8 +154,6 @@ else
         }]')
     fi
     
-    # Add new content
-    # Interpret escape sequences and ensure text ends with newline
     NEW_CONTENT=$(printf '%b' "$NEW_CONTENT")
     [[ "${NEW_CONTENT: -1}" != $'\n' ]] && NEW_CONTENT+=$'\n'
     
@@ -175,7 +164,6 @@ else
         }
     }]')
     
-    # Make the update
     UPDATE_BODY=$(echo "$REQUESTS" | jq '{requests: .}')
     
     RESPONSE=$(curl -sS -X POST \

@@ -40,7 +40,6 @@ if [[ $# -eq 0 ]]; then
     exit 1
 fi
 
-# First argument is file ID
 FILE_ID=$(extract_file_id "$1") || exit 1
 shift
 
@@ -56,7 +55,6 @@ done
 TOKEN=$(get_access_token) || exit 1
 QUOTA_PROJECT=$(get_quota_project)
 
-# Build request body
 BODY="{}"
 
 if [[ -n "$NEW_NAME" ]]; then
@@ -67,7 +65,6 @@ if [[ -n "$FOLDER_ID" ]]; then
     BODY=$(echo "$BODY" | jq --arg folder "$FOLDER_ID" '. + {parents: [$folder]}')
 fi
 
-# Make copy request
 RESPONSE=$(curl -sS -X POST \
     -H "Authorization: Bearer $TOKEN" \
     -H "x-goog-user-project: $QUOTA_PROJECT" \

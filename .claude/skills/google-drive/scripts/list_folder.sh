@@ -40,7 +40,6 @@ Examples:
 EOF
 }
 
-# Check if first argument is a folder ID or flag
 if [[ $# -gt 0 && ! "$1" =~ ^- ]]; then
     FOLDER_ID=$(extract_file_id "$1") || exit 1
     shift
@@ -60,12 +59,11 @@ done
 TOKEN=$(get_access_token) || exit 1
 QUOTA_PROJECT=$(get_quota_project)
 
-# Use 'root' for My Drive if no folder specified
+# The Drive API accepts the alias 'root' for My Drive
 if [[ -z "$FOLDER_ID" ]]; then
     FOLDER_ID="root"
 fi
 
-# Function to list a single folder
 list_single_folder() {
     local folder_id="$1"
     local indent="${2:-0}"
@@ -91,7 +89,6 @@ list_single_folder() {
     echo "$response"
 }
 
-# Print folder contents with tree view
 print_tree() {
     local folder_id="$1"
     local prefix="${2:-}"
@@ -115,13 +112,11 @@ print_tree() {
         local connector="├── "
         local next_prefix="${prefix}│   "
         
-        # Check if last item
         if [[ $i -eq $items ]]; then
             connector="└── "
             next_prefix="${prefix}    "
         fi
         
-        # Add folder/file icon
         local icon="📄"
         if [[ "$mime" == "application/vnd.google-apps.folder" ]]; then
             icon="📁"
@@ -135,14 +130,12 @@ print_tree() {
         
         echo "${prefix}${connector}${icon} ${name}"
         
-        # Recurse into folders
         if [[ "$mime" == "application/vnd.google-apps.folder" ]]; then
             print_tree "$id" "$next_prefix"
         fi
     done
 }
 
-# Print flat list (with optional recursion)
 print_flat() {
     local folder_id="$1"
     local indent="${2:-0}"
@@ -164,7 +157,6 @@ print_flat() {
         return
     fi
     
-    # Table format
     echo "$response" | jq -r '.files[] | [.name, .mimeType, .modifiedTime, .id] | @tsv' | \
     while IFS=$'\t' read -r name mime modified id; do
         print_file_row "$name" "$mime" "$modified" "$id" "$indent"
@@ -176,9 +168,7 @@ print_flat() {
     done
 }
 
-# Main output
 if [[ "$TREE_VIEW" == "true" ]]; then
-    # Get folder name for root
     if [[ "$FOLDER_ID" == "root" ]]; then
         echo "📁 My Drive"
     else
