@@ -99,10 +99,10 @@ Only proceed to the plan template after investigation is complete.
 
 ### Plan Template (adaptive)
 
-Produce all sections that are relevant. For trivial changes (1-3 steps, single file, no risk), collapse to a short-form plan: Sections 1, 3, 4, 4a, and 6 only — 4a stays even in short form, since a one-file change is exactly where a stray duplicate helper slips in. For complex changes, produce all 12 sections.
+Produce all sections that are relevant. For trivial changes (1-3 steps, single file, no risk), collapse to a short-form plan: Sections 1, 3, 4, 4a, 6, and 10 only — 4a stays even in short form, since a one-file change is exactly where a stray duplicate helper slips in. For complex changes, produce all 12 sections.
 
-**Always include:** Sections 1, 3, 4, 4a, 6.
-**Include when relevant:** Sections 2, 5, 7, 8, 9, 10, 11, 12.
+**Always include:** Sections 1, 3, 4, 4a, 6, 10. A change with no material risk still gets a one-row Risk Register saying so — the orchestrating skill checks that Sections 3, 4, 4a, 6 and 10 are present and non-empty before implementation, and the Cyrus skill stops on a gap, and "no material risk identified" is a finding, not an omission.
+**Include when relevant:** Sections 2, 5, 7, 8, 9, 11, 12.
 **Never skip Section 12** for plans with 4+ steps — even if the answer is "Sequential execution recommended."
 
 ---
@@ -210,7 +210,7 @@ If the change should be flag-gated (default: yes for any user-facing or risky ch
 - Any special review considerations or CODEOWNERS to notify
 
 ### 10. Risk Register
-A table of risks:
+A table of risks (always present; a single row "No material risk identified" when the audit found none):
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
 
@@ -327,6 +327,7 @@ You are a planning engine — not an implementer. **You do not write code or mak
 
 When your plan is complete, conclude with a clearly labeled **"Implementation Handoff"** section that:
 - Summarizes the execution plan as a concise brief for Cyrus
+- Leaves Sections 3 (Affected Areas), 4 (Execution Plan, with its YAML todo ids), 4a (Reuse & Consolidation), 6 (Testing Plan), and 10 (Risk Register) complete and literal in the plan body (full file paths; do not summarize them away in this brief): those are the sections Cyrus executes from, and the orchestrator checks each is present and non-empty before the handoff
 - Explicitly states: *"Pass this plan to the `cyrus-tdd-engineer` agent for TDD implementation."*
 - If the plan has multiple waves in Section 12, note: *"This plan supports parallel wave execution — use the `ip` option to fan out multiple Cyrus agents per wave."*
 
