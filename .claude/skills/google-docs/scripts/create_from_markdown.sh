@@ -47,7 +47,6 @@ if [[ $# -eq 0 ]]; then
     exit 1
 fi
 
-# Parse arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
         --file) FILE_PATH="$2"; shift 2 ;;
@@ -76,7 +75,6 @@ if [[ -z "$TITLE" ]]; then
     exit 1
 fi
 
-# Read Markdown content
 if [[ -n "$FILE_PATH" ]]; then
     if [[ ! -f "$FILE_PATH" ]]; then
         echo "ERROR: File not found: $FILE_PATH" >&2
@@ -100,17 +98,14 @@ fi
 TOKEN=$(get_access_token) || exit 1
 QUOTA_PROJECT=$(get_quota_project)
 
-# Use Drive API multipart upload to convert Markdown to Google Doc
-# Create metadata JSON with target mimeType for conversion
+# Drive's multipart upload converts text/markdown into a native Google Doc when the metadata names the Doc mimeType; the Docs API has no Markdown import.
 METADATA=$(jq -n --arg name "$TITLE" '{
     name: $name,
     mimeType: "application/vnd.google-apps.document"
 }')
 
-# Generate a unique boundary for multipart request
 BOUNDARY="boundary_$(date +%s)_$$"
 
-# Build multipart body
 MULTIPART_BODY="--${BOUNDARY}
 Content-Type: application/json; charset=UTF-8
 

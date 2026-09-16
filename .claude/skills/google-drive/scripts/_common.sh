@@ -3,7 +3,6 @@
 # This file is sourced by other scripts, not executed directly
 # Note: _auth.sh must be sourced first to set SKILL_ENV
 
-# URL-encode a string for use in query parameters
 url_encode() {
     local string="$1"
     printf '%s' "$string" | jq -sRr @uri
@@ -13,7 +12,6 @@ url_encode() {
 extract_file_id() {
     local input="$1"
     
-    # If it's a URL, extract the ID
     if [[ "$input" =~ ^https?:// ]]; then
         # Match patterns like:
         # - docs.google.com/document/d/FILE_ID/edit
@@ -27,11 +25,9 @@ extract_file_id() {
         return 1
     fi
     
-    # Assume it's already a file ID
     echo "$input"
 }
 
-# Map short type names to MIME types
 get_mime_type() {
     local type="$1"
     case "$type" in
@@ -52,7 +48,6 @@ get_mime_type() {
     esac
 }
 
-# Map MIME types to human-readable names
 get_type_name() {
     local mime="$1"
     case "$mime" in
@@ -67,7 +62,6 @@ get_type_name() {
         application/pdf)
             echo "PDF" ;;
         *)
-            # Extract last part of MIME type
             echo "${mime##*/}" | cut -c1-10 ;;
     esac
 }
@@ -78,7 +72,6 @@ format_date() {
     echo "${timestamp:0:10}"
 }
 
-# Truncate a string to a maximum length with ellipsis
 truncate() {
     local string="$1"
     local max_length="${2:-50}"
@@ -90,13 +83,11 @@ truncate() {
     fi
 }
 
-# Print a formatted table header
 print_table_header() {
     printf "%-50s %-10s %-12s %s\n" "Name" "Type" "Modified" "ID"
     printf '%100s\n' '' | tr ' ' '-'
 }
 
-# Print a formatted table row for a file
 print_file_row() {
     local name="$1"
     local mime="$2"
@@ -119,14 +110,12 @@ print_file_row() {
     printf "%-50s %-10s %-12s %s\n" "$display_name" "$type_name" "$date" "$id"
 }
 
-# Get the path to the google-drive skill scripts
 get_drive_scripts_dir() {
     local skills_dir
     skills_dir=$(get_skills_dir)
     echo "$skills_dir/google-drive/scripts"
 }
 
-# Get the path to the google-docs skill scripts
 get_docs_scripts_dir() {
     local skills_dir
     skills_dir=$(get_skills_dir)

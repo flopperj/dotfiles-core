@@ -36,7 +36,6 @@ if [[ $# -eq 0 ]]; then
     exit 1
 fi
 
-# First argument is doc ID
 DOC_ID=$(extract_file_id "$1") || exit 1
 shift
 
@@ -50,7 +49,6 @@ done
 TOKEN=$(get_access_token) || exit 1
 QUOTA_PROJECT=$(get_quota_project)
 
-# Get document content
 RESPONSE=$(curl -sS \
     -H "Authorization: Bearer $TOKEN" \
     -H "x-goog-user-project: $QUOTA_PROJECT" \
@@ -60,9 +58,7 @@ if ! handle_api_error "$RESPONSE" "Read document"; then
     exit 1
 fi
 
-# Extract plain text from the document body
-# The body.content array contains structural elements (paragraphs, tables, etc.)
-# We extract text from paragraph elements
+# Only paragraph text runs are emitted; tables and other structural elements are skipped
 echo "$RESPONSE" | jq -r '
     .body.content[]? |
     select(.paragraph) |

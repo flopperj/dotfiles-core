@@ -60,7 +60,6 @@ done
 TOKEN=$(get_access_token) || exit 1
 QUOTA_PROJECT=$(get_quota_project)
 
-# Build query parts
 QUERY_PARTS=()
 
 if [[ -n "$QUERY" ]]; then
@@ -96,7 +95,6 @@ if [[ "$INCLUDE_TRASHED" != "true" ]]; then
     QUERY_PARTS+=("trashed = false")
 fi
 
-# Join query parts with " and "
 Q=""
 for i in "${!QUERY_PARTS[@]}"; do
     if [[ $i -gt 0 ]]; then
@@ -105,7 +103,6 @@ for i in "${!QUERY_PARTS[@]}"; do
     Q+="${QUERY_PARTS[$i]}"
 done
 
-# Build request URL
 URL="$DRIVE_API/files?pageSize=$MAX_RESULTS&orderBy=modifiedTime%20desc"
 URL+="&fields=files(id,name,mimeType,modifiedTime,size,webViewLink,parents)"
 
@@ -114,18 +111,15 @@ if [[ -n "$Q" ]]; then
     URL+="&q=$ENCODED_Q"
 fi
 
-# Make API request
 RESPONSE=$(curl -sS \
     -H "Authorization: Bearer $TOKEN" \
     -H "x-goog-user-project: $QUOTA_PROJECT" \
     "$URL")
 
-# Check for errors
 if ! handle_api_error "$RESPONSE" "Search"; then
     exit 1
 fi
 
-# Output results
 case "$OUTPUT_FORMAT" in
     json)
         echo "$RESPONSE" | jq '.files'

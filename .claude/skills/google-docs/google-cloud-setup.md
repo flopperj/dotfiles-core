@@ -2,13 +2,13 @@
 
 This guide explains how to configure Google Cloud credentials for the Google Docs skill.
 
-## Default Project
+## Quota Project
 
-By default, this skill uses the **`rsg-api-auth-dev`** project, which already has the Google Docs API and Google Drive API enabled.
+Every request carries the quota project from your Application Default Credentials (`--set-quota-project=<your-gcp-project>` at login, or the gcloud default project). Use the Google Cloud project your org enabled the Google Docs API and Google Drive API on; the skill has no built-in default.
 
-## Using a Different Project
+## Setting Up a Project
 
-If you want to use a different Google Cloud project, follow these steps:
+If no project has the APIs enabled yet, or you want to use a different one, follow these steps:
 
 ### Step 1: Enable Required APIs
 

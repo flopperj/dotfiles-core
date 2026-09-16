@@ -38,11 +38,9 @@ if [[ $# -lt 2 ]]; then
     exit 1
 fi
 
-# First argument is doc ID
 DOC_ID=$(extract_file_id "$1") || exit 1
 shift
 
-# Second argument is text
 TEXT="$1"
 shift
 
@@ -56,7 +54,6 @@ done
 TOKEN=$(get_access_token) || exit 1
 QUOTA_PROJECT=$(get_quota_project)
 
-# First, get the document to find the end index
 DOC_RESPONSE=$(curl -sS \
     -H "Authorization: Bearer $TOKEN" \
     -H "x-goog-user-project: $QUOTA_PROJECT" \
@@ -66,14 +63,12 @@ if ! handle_api_error "$DOC_RESPONSE" "Get document"; then
     exit 1
 fi
 
-# Get the end index (subtract 1 because endIndex is exclusive and we insert before the final newline)
+# endIndex is exclusive and the body's final newline must stay last, so insert one position before it
 END_INDEX=$(echo "$DOC_RESPONSE" | jq '[.body.content[].endIndex] | max')
 INSERT_INDEX=$((END_INDEX - 1))
 
-# Interpret escape sequences in text
 TEXT=$(printf '%b' "$TEXT")
 
-# Build batchUpdate request
 REQUEST=$(jq -n --arg text "$TEXT" --argjson index "$INSERT_INDEX" '{
     requests: [
         {
@@ -87,7 +82,6 @@ REQUEST=$(jq -n --arg text "$TEXT" --argjson index "$INSERT_INDEX" '{
     ]
 }')
 
-# Execute the update
 RESPONSE=$(curl -sS -X POST \
     -H "Authorization: Bearer $TOKEN" \
     -H "x-goog-user-project: $QUOTA_PROJECT" \
