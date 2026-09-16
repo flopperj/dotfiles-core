@@ -179,10 +179,10 @@ teardown() {
     done
 }
 
-@test "install symlinks all four workflow schemas into ~/.claude/workflows/schemas/" {
+@test "install symlinks both workflow schemas into ~/.claude/workflows/schemas/" {
     _run_install
     local name
-    for name in aristotle-to-optimus auditor-composite optimus-to-cyrus swarm-context; do
+    for name in auditor-composite swarm-context; do
         [ -f "$SCRATCH/home/.claude/workflows/schemas/$name.json" ]
     done
 }

@@ -70,7 +70,7 @@ After the five lines, output a one-sentence verdict on the form:
 Do not ship a plan with a ❌ unaddressed. If a ❌ is unavoidable (e.g., the user's scope explicitly excludes one of these), call it out in the verdict so the gate reviewer sees it.
 ```
 
-Wait for the full execution plan (12 sections + Plan Critique block).
+Wait for the full execution plan (every section it calls for — 12 in full form, 1, 3, 4, 4a, 6 and 10 in short form — plus the Plan Critique block).
 
 **Subagent failure handling:** Follow CLAUDE.md error handling defaults. If a subagent fails or times out, surface the failure and stop — do not present a partial execution plan.
 
@@ -107,7 +107,7 @@ Wait for user input. Do not proceed without explicit approval.
 If the user chooses "i" (sequential):
 
 Launch the `cyrus-tdd-engineer` agent via the Agent tool. Pass it **only** the handoff contract output:
-- Optimus's full execution plan (all 12 sections)
+- Optimus's full execution plan (every section it carries; 12 in full form)
 - The strategic context (Aristotelian Move or original problem)
 - Any user modifications or constraints mentioned during the gate
 - Execution mode: `sequential`
@@ -118,7 +118,7 @@ Launch the `cyrus-tdd-engineer` agent via the Agent tool. Pass it **only** the h
 If the user chooses "ip" (parallel):
 
 Invoke the Cyrus skill's parallel execution mode by launching the `cyrus-tdd-engineer` skill orchestrator. Pass:
-- Optimus's full execution plan (all 12 sections)
+- Optimus's full execution plan (every section it carries; 12 in full form)
 - The strategic context
 - Any user modifications or constraints
 - Execution mode: `parallel`
@@ -163,7 +163,7 @@ This keeps a single plan file as the source of truth rather than producing disco
 - **In gated mode: never skip the gate.** The plan must be reviewed before implementation.
 - **In autonomous mode: the Cyrus handoff auto-approves.** The orchestrator logs the plan summary and proceeds. Optimus still produces the full plan — only the gate behavior changes.
 - **Plan-only is valid.** The user may just want the plan for reference (gated mode only).
-- **Aristotle can be inserted upstream.** If the user picks "a" (gated mode), launch `aristotle-deconstructor` with the problem, then feed its output back to Optimus per the aristotle-deconstructor skill's handoff contract.
+- **Aristotle can be inserted upstream.** If the user picks "a" (gated mode), launch `aristotle-deconstructor` with the problem, then feed its output back to Optimus per the aristotle-deconstructor skill's handoff contract (the Aristotelian Move, irreducible truths, assumptions stripped, constraints, and the Implementation Handoff brief).
 - **Each agent runs as a subagent** to keep the main context clean.
 - **Enforce boundaries at the handoff.** You are the orchestrator — if Optimus strays into implementation, filter its output before passing to Cyrus.
 - **Forward swarm flags.** When `swarm_mode` and `execution_mode` are present, pass them through to the Cyrus skill invocation.
@@ -255,8 +255,21 @@ When `swarm_mode: true` is also passed, forward both flags to the Cyrus skill so
 
 ## Handoff contract: Optimus -> Cyrus
 
+This is a written contract the orchestrator (you) checks by hand — the stage
+is a prose-orchestrated `Agent` call, not a saved workflow script, so nothing
+enforces it for you. Before launching Cyrus, confirm the plan's Section 3
+(Affected Areas), Section 4 (Execution Plan, with its YAML todo ids),
+Section 4a (Reuse & Consolidation), Section 6 (Testing Plan) and Section 10
+(Risk Register) are present and non-empty; those are the sections Cyrus
+executes from. If one is missing, the plan is incomplete —
+send it back to Optimus rather than launching Cyrus with a gap. In autonomous
+mode send it back once; if the revised plan is still incomplete, halt and
+surface it rather than looping. A plan written before Section 10 became
+mandatory may lack it: on resume, record "No material risk identified"
+yourself rather than sending the plan back.
+
 Pass **only** these from Optimus's output:
-- **The full execution plan** — all 12 sections (including Section 12: Parallelization Strategy)
+- **The full execution plan** — every section it carries: all 12 in full form (including Section 12: Parallelization Strategy), or 1, 3, 4, 4a, 6 and 10 in short form
 - **The strategic context** — the Aristotelian Move if the pipeline started from Aristotle, or the user's original problem statement if Optimus was invoked directly
 - **User modifications** — any changes the user requested during the gate
 - **Execution mode flag** — `sequential` or `parallel` (based on user's gate choice)
