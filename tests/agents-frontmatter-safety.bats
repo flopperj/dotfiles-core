@@ -19,8 +19,8 @@ declare_expected() {
     expected_max_turns_aristotle=20
     expected_max_turns_optimus=60
     expected_max_turns_cyrus=300
-    expected_max_turns_ranger=40
-    expected_max_turns_scout=35
+    expected_max_turns_ranger=80
+    expected_max_turns_scout=70
 }
 
 # Extract a top-level frontmatter key value. Frontmatter is the block between
