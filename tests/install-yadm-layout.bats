@@ -17,6 +17,8 @@ setup() {
     TEST_HOME="$SCRATCH/home"
     mkdir -p "$TEST_HOME"
     export _SKIP_PRECOMMIT_INSTALL=1
+    # tests/stubs/claude answers the installer's plugin step offline; see the
+    # header of that file.
     export PATH="$BATS_TEST_DIRNAME/stubs:$PATH"
 }
 
@@ -58,6 +60,22 @@ _overlay_snapshot() {
 # (~/.claude/.backups) is excluded: relocated entries keep their names there.
 _bak_count() {
     find "$TEST_HOME/.claude" -path "$TEST_HOME/.claude/.backups" -prune -o -name '*.bak.*' -print 2>/dev/null | wc -l | tr -d ' '
+}
+
+# A throwaway copy of core (only what install.sh reads), so a destructive
+# installer bug damages the copy and not this checkout.
+_make_scratch_core() {
+    mkdir -p "$SCRATCH/core"
+    cp -R "$CORE_DIR/.claude" "$CORE_DIR/scripts" "$CORE_DIR/_shared" "$SCRATCH/core/"
+    cp "$CORE_DIR/install.sh" "$CORE_DIR/plugins.txt" "$SCRATCH/core/"
+}
+
+# Every path under a core .claude tree plus a checksum of every regular file,
+# for a before/after comparison. agent-memory is skipped: the seeding step
+# legitimately writes there when ~/.claude resolves into the checkout.
+_core_tree_snapshot() {
+    ( cd "$1" && find . -path ./agent-memory -prune -o -print | sort
+      find . -path ./agent-memory -prune -o -type f -print0 | sort -z | xargs -0 shasum )
 }
 
 # ---------------------------------------------------------------------------
@@ -141,9 +159,9 @@ _bak_count() {
     cp -R "$CORE_DIR/.claude/skills/to-prd" "$TEST_HOME/.claude/skills/to-prd"
     _run_install
     [ "$status" -eq 0 ]
-    ! echo "$output" | grep -q "WARNING"
-    ! echo "$output" | grep -q "Backed up"
-    ! echo "$output" | grep -q "Removed stale"
+    [[ "$output" != *"WARNING"* ]] || return 1
+    [[ "$output" != *"Backed up"* ]] || return 1
+    [[ "$output" != *"Removed stale"* ]] || return 1
     echo "$output" | grep -q "Kept overlay-owned entry (identical to core): $TEST_HOME/.claude/skills/to-prd"
 }
 
@@ -180,14 +198,14 @@ _bak_count() {
     [ "$status" -eq 0 ]
     [ -L "$TEST_HOME/.claude/skills/forge" ]
     [ ! -e "$TEST_HOME/.claude/.backups" ]
-    ! echo "$output" | grep -q "Backed up"
+    [[ "$output" != *"Backed up"* ]] || return 1
 }
 
 @test "local layout: install --check is clean and second install is a no-op" {
     _run_install
     _run_install
     [ "$status" -eq 0 ]
-    ! echo "$output" | grep -q "WARNING"
+    [[ "$output" != *"WARNING"* ]] || return 1
     _run_install --check
     [ "$status" -eq 0 ]
     echo "$output" | grep -q "layout: local"
@@ -246,7 +264,7 @@ _bak_count() {
 @test "legacy relocation is a no-op when nothing matches" {
     _run_install
     [ "$status" -eq 0 ]
-    ! echo "$output" | grep -q "legacy backup"
+    [[ "$output" != *"legacy backup"* ]] || return 1
     [ ! -e "$TEST_HOME/.claude/.backups" ]
 }
 
@@ -263,4 +281,164 @@ _bak_count() {
     echo "$output" | grep -q "Pruned backup set: 1000000000"
     [ ! -e "$TEST_HOME/.claude/.backups/1000000000" ]
     [ -d "$TEST_HOME/.claude/.backups/fresh" ]
+}
+
+# ---------------------------------------------------------------------------
+# same-object guard: a destination that *is* the core file (through a
+# symlinked ~/.claude or ~/.claude/skills) must never be removed or backed up
+# ---------------------------------------------------------------------------
+
+@test "_link_dir: a destination that is the source itself (via a symlinked ~/.claude) is left in place" {
+    mkdir -p "$SCRATCH/core/.claude/skills/demo"
+    echo "# demo" > "$SCRATCH/core/.claude/skills/demo/SKILL.md"
+    ln -s "$SCRATCH/core/.claude" "$TEST_HOME/.claude"
+    run bash -c "HOME='$TEST_HOME'; DOTFILES_LAYOUT=local; source '$CORE_DIR/scripts/lib-core-symlinks.sh'; _link_dir '$SCRATCH/core/.claude/skills/demo' '$TEST_HOME/.claude/skills/demo'"
+    [ "$status" -eq 0 ]
+    [ ! -L "$SCRATCH/core/.claude/skills/demo" ]
+    [ -f "$SCRATCH/core/.claude/skills/demo/SKILL.md" ]
+    [[ "$output" == *"already the core file itself"* ]] || return 1
+    [[ "$output" != *"Backed up"* ]] || return 1
+}
+
+@test "_link_entry: a missing destination whose parent resolves into the core checkout is not created" {
+    mkdir -p "$SCRATCH/core/.claude"
+    echo "# rendered" > "$SCRATCH/core/.claude/CLAUDE.md.generated"
+    ln -s "$SCRATCH/core/.claude" "$TEST_HOME/.claude"
+    run bash -c "HOME='$TEST_HOME'; DOTFILES_LAYOUT=local; source '$CORE_DIR/scripts/lib-core-symlinks.sh'; _link_entry '$SCRATCH/core/.claude/CLAUDE.md.generated' '$TEST_HOME/.claude/CLAUDE.md' '$SCRATCH/core'"
+    [ "$status" -eq 0 ]
+    [ ! -e "$SCRATCH/core/.claude/CLAUDE.md" ]
+    [ ! -L "$SCRATCH/core/.claude/CLAUDE.md" ]
+    [[ "$output" == *"inside the core checkout"* ]] || return 1
+}
+
+@test "same-object guard: ~/.claude symlinked into the core checkout leaves every core file in place" {
+    _make_scratch_core
+    ln -s "$SCRATCH/core/.claude" "$TEST_HOME/.claude"
+    local before after
+    before="$(_core_tree_snapshot "$SCRATCH/core/.claude")"
+
+    HOME="$TEST_HOME" run bash "$SCRATCH/core/install.sh"
+    [ "$status" -eq 0 ]
+
+    after="$(_core_tree_snapshot "$SCRATCH/core/.claude")"
+    [ "$before" = "$after" ]
+    [ ! -L "$SCRATCH/core/.claude/skills/forge" ]
+    [ -f "$SCRATCH/core/.claude/skills/forge/SKILL.md" ]
+    [ ! -L "$SCRATCH/core/.claude/agents/optimus-planner.md" ]
+    [ ! -L "$SCRATCH/core/.claude/_shared/role-guards" ]
+    [ ! -L "$SCRATCH/core/.claude/evals/scripts" ]
+    [ ! -e "$SCRATCH/core/.claude/CLAUDE.md" ]
+    [ ! -e "$SCRATCH/core/.claude/.backups" ]
+    [[ "$output" == *"already the core file itself"* ]] || return 1
+    [[ "$output" == *"already the core directory itself"* ]] || return 1
+    [[ "$output" != *"Backed up"* ]] || return 1
+    [[ "$output" != *"WARNING"* ]] || return 1
+}
+
+@test "same-object guard: ~/.claude/skills symlinked into core's skills dir is left alone and the rest installs" {
+    _make_scratch_core
+    mkdir -p "$TEST_HOME/.claude"
+    ln -s "$SCRATCH/core/.claude/skills" "$TEST_HOME/.claude/skills"
+    HOME="$TEST_HOME" run bash "$SCRATCH/core/install.sh"
+    [ "$status" -eq 0 ]
+    [ -L "$TEST_HOME/.claude/skills" ]
+    [ ! -L "$SCRATCH/core/.claude/skills/forge" ]
+    [ -f "$SCRATCH/core/.claude/skills/forge/SKILL.md" ]
+    [ -L "$TEST_HOME/.claude/agents/optimus-planner.md" ]
+    [ -L "$TEST_HOME/.claude/_shared/role-guards" ]
+    [[ "$output" != *"Backed up"* ]] || return 1
+}
+
+# ---------------------------------------------------------------------------
+# merge roots: only a whole-directory symlink into core is migrated; anything
+# else at ~/.claude/_shared or ~/.claude/evals is not core's to touch
+# ---------------------------------------------------------------------------
+
+@test "merged _shared: a whole-directory symlink into the core checkout is migrated silently" {
+    mkdir -p "$TEST_HOME/.claude"
+    ln -s "$CORE_DIR/.claude/_shared" "$TEST_HOME/.claude/_shared"
+    _run_install
+    [ "$status" -eq 0 ]
+    [ ! -L "$TEST_HOME/.claude/_shared" ]
+    [ -d "$TEST_HOME/.claude/_shared" ]
+    [ -L "$TEST_HOME/.claude/_shared/role-guards" ]
+    [[ "$output" != *"WARNING"* ]] || return 1
+}
+
+@test "merged _shared: a whole-directory symlink pointing outside core is left alone with a WARNING; --check reports COLLISION" {
+    mkdir -p "$SCRATCH/elsewhere" "$TEST_HOME/.claude"
+    echo "theirs" > "$SCRATCH/elsewhere/theirs.md"
+    ln -s "$SCRATCH/elsewhere" "$TEST_HOME/.claude/_shared"
+    _run_install
+    [ "$status" -eq 0 ]
+    [ -L "$TEST_HOME/.claude/_shared" ]
+    [ "$(readlink "$TEST_HOME/.claude/_shared")" = "$SCRATCH/elsewhere" ]
+    [ -f "$SCRATCH/elsewhere/theirs.md" ]
+    [ ! -e "$SCRATCH/elsewhere/role-guards" ]
+    [[ "$output" == *"WARNING: $TEST_HOME/.claude/_shared is a symlink to $SCRATCH/elsewhere"* ]] || return 1
+    [ -L "$TEST_HOME/.claude/evals/scripts" ]
+
+    _run_install --check
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"COLLISION _shared (symlink to $SCRATCH/elsewhere, not managed by core)"* ]] || return 1
+}
+
+@test "_link_dir on ~/.claude/_shared or ~/.claude/evals never collapses the merged directory" {
+    mkdir -p "$TEST_HOME/.claude/_shared/claude-md.d" "$TEST_HOME/.claude/evals/scripts"
+    echo "# overlay rows" > "$TEST_HOME/.claude/_shared/claude-md.d/60-routing.md"
+    echo "echo overlay eval" > "$TEST_HOME/.claude/evals/scripts/x.sh"
+    run bash -c "HOME='$TEST_HOME'; DOTFILES_LAYOUT=local; source '$CORE_DIR/scripts/lib-core-symlinks.sh'; _link_dir '$CORE_DIR/.claude/_shared' '$TEST_HOME/.claude/_shared'; _link_dir '$CORE_DIR/.claude/evals' '$TEST_HOME/.claude/evals'"
+    [ "$status" -eq 0 ]
+    [ ! -L "$TEST_HOME/.claude/_shared" ]
+    [ ! -L "$TEST_HOME/.claude/evals" ]
+    [ -f "$TEST_HOME/.claude/_shared/claude-md.d/60-routing.md" ]
+    [ -f "$TEST_HOME/.claude/evals/scripts/x.sh" ]
+    [ ! -e "$TEST_HOME/.claude/.backups" ]
+    [[ "$output" == *"Left in place"*"_shared"* ]] || return 1
+    [[ "$output" == *"Left in place"*"evals"* ]] || return 1
+}
+
+# ---------------------------------------------------------------------------
+# backup retention: only installer-created set names are pruned
+# ---------------------------------------------------------------------------
+
+@test "_prune_backups leaves aged directories that are not installer-created sets" {
+    local root="$TEST_HOME/.claude/.backups"
+    mkdir -p "$root/keep-me/x" "$root/1000000000.1/x" "$root/legacy-1000000000/x"
+    touch -t 200001010000 "$root/keep-me" "$root/1000000000.1" "$root/legacy-1000000000"
+    _run_install
+    [ "$status" -eq 0 ]
+    [ -d "$root/keep-me" ]
+    [ ! -e "$root/1000000000.1" ]
+    [ ! -e "$root/legacy-1000000000" ]
+    [[ "$output" == *"Pruned backup set: 1000000000.1"* ]] || return 1
+    [[ "$output" == *"Pruned backup set: legacy-1000000000"* ]] || return 1
+    [[ "$output" != *"Pruned backup set: keep-me"* ]] || return 1
+}
+
+@test "DOTFILES_BACKUP_RETENTION_DAYS=never disables pruning" {
+    local root="$TEST_HOME/.claude/.backups"
+    mkdir -p "$root/1000000000/x"
+    touch -t 200001010000 "$root/1000000000"
+    HOME="$TEST_HOME" DOTFILES_BACKUP_RETENTION_DAYS=never run bash "$CORE_DIR/install.sh"
+    [ "$status" -eq 0 ]
+    [ -d "$root/1000000000" ]
+    [[ "$output" != *"Pruned"* ]] || return 1
+}
+
+@test "_prune_backups: 0 and off disable pruning; another non-numeric value warns and prunes nothing" {
+    local root="$TEST_HOME/.claude/.backups"
+    mkdir -p "$root/1000000000/x"
+    touch -t 200001010000 "$root/1000000000"
+    local v
+    for v in 0 off; do
+        run bash -c "HOME='$TEST_HOME'; DOTFILES_BACKUP_RETENTION_DAYS=$v; source '$CORE_DIR/scripts/lib-core-symlinks.sh'; _prune_backups"
+        [ "$status" -eq 0 ]
+        [ -d "$root/1000000000" ]
+        [ -z "$output" ]
+    done
+    run bash -c "HOME='$TEST_HOME'; DOTFILES_BACKUP_RETENTION_DAYS=soon; source '$CORE_DIR/scripts/lib-core-symlinks.sh'; _prune_backups"
+    [ "$status" -eq 0 ]
+    [ -d "$root/1000000000" ]
+    [[ "$output" == *"WARNING"*"DOTFILES_BACKUP_RETENTION_DAYS"* ]] || return 1
 }

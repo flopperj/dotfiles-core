@@ -15,10 +15,15 @@
 # shellcheck source=scripts/_lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
 
-# Layout for this run. install.sh exports DOTFILES_LAYOUT after detection so
-# overlay installers sourced later see the same answer; library functions read
-# it lazily so unit tests can source this file and set it per call.
+# Layout for this run. install.sh sets DOTFILES_LAYOUT once after detection;
+# library functions read it lazily so unit tests can source this file and set
+# it per call.
 _layout() { printf '%s\n' "${DOTFILES_LAYOUT:-$(_detect_layout)}"; }
+
+# Core checkout used by _link_entry's same-object guard when a caller passes
+# no third argument (the historical _link_file/_link_dir signatures).
+# install_core_symlinks sets it for the whole run.
+_LINK_CORE_DIR="${_LINK_CORE_DIR:-}"
 
 # Remove symlinks in a target directory whose targets no longer exist.
 # With an optional prefix, only dead symlinks pointing under that prefix are
@@ -51,8 +56,10 @@ _backup_root() { printf '%s\n' "${DOTFILES_BACKUP_ROOT:-$HOME/.claude/.backups}"
 #
 # Paths under $HOME move to <backup-root>/<suffix>/<path-relative-to-HOME>, so
 # a backup never sits beside the live entry in a directory Claude Code scans
-# (~/.claude/skills/, ~/.claude/agents/). Paths outside $HOME (git hook dirs)
-# keep the historical sibling shape <path>.bak.<suffix>.
+# (~/.claude/skills/, ~/.claude/agents/). Paths outside $HOME — for example the
+# hooks of a checkout that lives outside your home directory — keep the
+# historical sibling shape <path>.bak.<suffix>; a checkout under $HOME has its
+# hook files under $HOME, so those backups relocate (and are pruned) too.
 #
 # A counter suffix is appended when the destination already exists, so
 # repeated calls in the same second never overwrite a prior backup. Tests can
@@ -88,18 +95,31 @@ _backup_collision() {
     echo "  Backed up to $backup"
 }
 
-# Remove backup sets older than DOTFILES_BACKUP_RETENTION_DAYS (default 30).
-# Each install writes at most one <suffix>/ set, so pruning by the set
-# directory's own age is enough.
+# Remove backup sets older than DOTFILES_BACKUP_RETENTION_DAYS (default 30;
+# 0, never or off keeps everything). Only sets this installer creates are
+# candidates — <epoch>, <epoch>.<n> and legacy-<suffix> — so anything else a
+# user parks under the backup root is left alone. Each install writes at most
+# one set, so pruning by the set directory's own age is enough.
 _prune_backups() {
     local root days
     root="$(_backup_root)"
     days="${DOTFILES_BACKUP_RETENTION_DAYS:-30}"
+    case "$days" in
+        0|never|off) return 0 ;;
+        ''|*[!0-9]*)
+            echo "  WARNING: DOTFILES_BACKUP_RETENTION_DAYS='$days' is not a number of days (or 0/never/off); backups were not pruned."
+            return 0 ;;
+    esac
     [ -d "$root" ] || return 0
-    local set_dir
+    local set_dir name
     while IFS= read -r set_dir; do
+        name="$(basename "$set_dir")"
+        case "$name" in
+            legacy-*) ;;
+            *) [[ "$name" =~ ^[0-9]+(\.[0-9]+)?$ ]] || continue ;;
+        esac
         rm -rf "$set_dir"
-        echo "  Pruned backup set: $(basename "$set_dir")"
+        echo "  Pruned backup set: $name"
     done < <(find "$root" -mindepth 1 -maxdepth 1 -type d -mtime "+$days" 2>/dev/null)
 }
 
@@ -142,6 +162,11 @@ _same_content() {
 # Link one entry (file or directory) from core into $HOME.
 #
 #   symlink at dst, already pointing at src  → no-op
+#   dst is src itself, or sits inside the core checkout (a ~/.claude or
+#     ~/.claude/skills that is a symlink into core) → left alone with a note;
+#     core never removes, backs up or creates anything inside its own tree
+#   dst is the real ~/.claude/_shared or ~/.claude/evals directory → left
+#     alone; those are merged per entry, never collapsed to one symlink
 #   symlink at dst, pointing elsewhere       → replaced
 #   real entry, yadm layout                  → kept (overlay-owned); a note is
 #                                              printed, WARNING when it differs
@@ -149,14 +174,30 @@ _same_content() {
 #   real entry, local layout, differs        → backed up, then linked
 #
 # Returns 0 in every handled case so callers under `set -e` keep going.
-# Usage: _link_entry <src> <dst>
+# Usage: _link_entry <src> <dst> [<core-dir>]   (default: _LINK_CORE_DIR)
 _link_entry() {
     local src="$1"
     local dst="$2"
+    local core_dir="${3:-$_LINK_CORE_DIR}"
+    if [ -L "$dst" ] && [ "$(readlink "$dst")" = "$src" ]; then
+        return 0
+    fi
+    if [ ! -L "$dst" ] && [ -e "$dst" ] && [ "$src" -ef "$dst" ]; then
+        echo "  Left in place (already the core file itself): $dst"
+        return 0
+    fi
+    if _path_inside "$dst" "$core_dir"; then
+        echo "  Skipped (inside the core checkout): $dst"
+        return 0
+    fi
+    case "$dst" in
+        "$HOME/.claude/_shared"|"$HOME/.claude/evals")
+            if [ -d "$dst" ] && [ ! -L "$dst" ]; then
+                echo "  Left in place (merged directory, never replaced by one symlink): $dst"
+                return 0
+            fi ;;
+    esac
     if [ -L "$dst" ]; then
-        if [ "$(readlink "$dst")" = "$src" ]; then
-            return 0
-        fi
         rm "$dst"
     elif [ -e "$dst" ]; then
         if [ "$(_layout)" = "yadm" ]; then
@@ -188,16 +229,32 @@ _link_dir()  { _link_entry "$1" "$2"; }
 # it with _link_entry; when both sides have a real directory of the same name
 # the merge descends instead of colliding. Entries in dst that core did not
 # ship — an overlay's *.d/ fragment dirs, overlay-context.md, leakage
-# tokens — are never touched. A whole-directory symlink left by an older
-# core is replaced by the merged directory.
+# tokens — are never touched. A whole-directory symlink into the core
+# checkout, left by an older core, is replaced by the merged directory; a
+# symlink to anywhere else is not core's to remove, so it is left alone with
+# a WARNING and this root is skipped. A dst that is core's own directory
+# (through a symlinked ~/.claude) is left alone too.
 # Usage: _merge_link_tree <src-dir> <dst-dir> <core-dir>
 _merge_link_tree() {
     local src="$1"
     local dst="$2"
     local core_dir="$3"
 
+    if [ ! -L "$dst" ] && [ -d "$dst" ] && [ "$src" -ef "$dst" ]; then
+        echo "  Left in place (already the core directory itself): $dst"
+        return 0
+    fi
+    if _path_inside "$dst" "$core_dir"; then
+        echo "  Skipped (inside the core checkout): $dst"
+        return 0
+    fi
     if [ -L "$dst" ]; then
-        rm "$dst"
+        if _symlink_targets "$dst" "$core_dir"; then
+            rm "$dst"
+        else
+            echo "  WARNING: $dst is a symlink to $(readlink "$dst") (not managed by core) — left untouched; core's $(basename "$dst") entries were not merged. Remove the symlink to let core merge them."
+            return 0
+        fi
     elif [ -e "$dst" ] && [ ! -d "$dst" ]; then
         echo "  WARNING: $dst exists and is not a directory. Backing up."
         _backup_collision "$dst"
@@ -272,6 +329,7 @@ _install_prepush_hook() { _install_git_hook "$1" "pre-push"; }
 # Usage: install_core_symlinks <core_dir>
 install_core_symlinks() {
     local core_dir="$1"
+    _LINK_CORE_DIR="$core_dir"
 
     mkdir -p "$HOME/.claude"
     _relocate_legacy_backups
