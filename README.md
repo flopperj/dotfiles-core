@@ -62,7 +62,7 @@ The installer also installs two universal Claude Code plugins from the official 
 
 Plugin install is idempotent and gracefully skips if the `claude` CLI is unavailable. Overlays may layer additional plugins via their own `.claude/plugins.txt`; the two lists are union-installed.
 
-The installer is **idempotent** — re-run it any time. It detects existing symlinks, prompts before overwriting non-symlink files, and reports what changed.
+The installer is **idempotent** — re-run it any time. It leaves symlinks that already point into core alone, replaces a real file or directory whose content is byte-identical to core's silently, moves any other collision to `~/.claude/.backups/<timestamp>/<path>` before linking (it never prompts), and reports what changed.
 
 ## Verify the install
 
@@ -94,17 +94,18 @@ Once installed, try one of these to see the framework in action:
 - **Slash commands don't appear** → restart Claude Code. The CLI loads skills at session start, not while a session is running.
 - **`make test` fails with `DOTFILES_DIR not set`** → use `make test`, not raw `bats`. The Makefile injects `DOTFILES_DIR` for the test environment.
 - **Pre-commit or pre-push hook rejects a change citing leakage** → the check is intentional and withholds matched content by design. Compare the referenced file/line against the token list at `${XDG_CONFIG_HOME:-~/.config}/dotfiles-guard/leakage-tokens.txt` and rename the offending reference. If the hook reports the token list missing while the company-context marker exists, re-run your overlay's `install.sh`.
-- **Symlink collision warning** → `install.sh` backs up existing non-symlink files to `<file>.bak.<timestamp>` before linking. Inspect and delete the backup once you're sure.
+- **Symlink collision warning** → in the local layout `install.sh` moves a real file or directory that differs from core's to `~/.claude/.backups/<timestamp>/<path-relative-to-HOME>` before linking — never to a `.bak` sibling, which Claude Code would load as a skill. Inspect and delete the set once you're sure. Sets older than `DOTFILES_BACKUP_RETENTION_DAYS` (default 30) are pruned on the next install; set it to `0`, `never` or `off` to keep them, and `DOTFILES_BACKUP_ROOT` to move the store. In the yadm layout the entry is overlay-owned and is kept with a note instead.
 
 ## Uninstall
 
 ```bash
 bash install.sh --check     # list what was installed
-# Then manually remove the symlinks under ~/.claude/ that point into your clone:
+# Remove the symlinks under ~/.claude/ that point into your clone (this also
+# covers ~/.claude/CLAUDE.md and ~/.claude/AGENTS.md when core rendered them):
 find ~/.claude -maxdepth 3 -type l -lname "*dotfiles-core*" -delete
-# Or, more aggressively (removes all dotfiles-core-managed symlinks):
-rm ~/.claude/{CLAUDE,AGENTS,DoD}.md
-rm -rf ~/.claude/{_shared,skills,agents}
+# Do not `rm -rf ~/.claude/{_shared,evals,skills,agents}`: since v1.21.0
+# _shared and evals are real directories that may also hold overlay-tracked or
+# hand-written files, and skills/ and agents/ may hold overlay-only entries.
 # Finally, drop the clone itself:
 rm -rf ~/dotfiles-core   # or your overlay directory
 ```

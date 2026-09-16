@@ -148,15 +148,16 @@ If they differ → **WARN: submodule HEAD (`{current_sha}`) differs from pinned 
 
 If match → `ok  submodule dotfiles-core @ {short_sha}`
 
-#### 7c — Core-owned symlinks resolve into submodule path
+#### 7c — Core-owned skill paths resolve by layout
 
-For each of `~/.claude/skills/forge`, `~/.claude/skills/grill-me`, `~/.claude/skills/to-prd`:
+For each of `~/.claude/skills/forge`, `~/.claude/skills/grill-me`, `~/.claude/skills/to-prd`, judged by the layout from Step 1:
 
 ```bash
 readlink ~/.claude/skills/forge
 ```
 
-Expected: resolves to a path containing `.claude/dotfiles-core/`. If it resolves to the overlay's own in-tree copy or is missing → **WARN: {skill} symlink does not resolve through submodule — re-run install.sh**
+- **local layout** — expected: a symlink resolving to a path containing `.claude/dotfiles-core/`. A symlink to the overlay's own in-tree copy, a real directory, or a missing path → **WARN: {skill} does not resolve through the submodule — re-run install.sh**
+- **yadm layout** — a real (non-symlink) directory is overlay-owned and expected: the installer keeps it and `install.sh --check` reports it `ok (overlay-owned, yadm layout)`. Report `ok  {skill} (overlay-owned)`. If its content differs from `{dotfiles-dir}/.claude/dotfiles-core/.claude/skills/{skill}` → **WARN: {skill} is an overlay copy that differs from core — core is canonical; delete the overlay copy** (PROTOCOL rule 3). Missing → **WARN: {skill} missing — re-run install.sh**
 
 #### 7d — Rendered file freshness
 
