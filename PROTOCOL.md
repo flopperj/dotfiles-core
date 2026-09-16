@@ -186,22 +186,26 @@ the other's files. It applies in both layouts:
   in its own directory and installers symlink into `~/.claude/`.
 - **yadm** — the overlay is checked out directly into `$HOME` (yadm on a
   cloud workspace). Every overlay-tracked path under `~/.claude/` is then a real file or
-  directory owned by the overlay. `install.sh` detects this layout
-  (`_detect_layout` in `scripts/_lib.sh`, exported as `DOTFILES_LAYOUT`) from a
-  yadm repo answering for `$HOME` or a tracked `$HOME/.gitmodules` that declares
-  the `dotfiles-core` submodule; set `DOTFILES_LAYOUT=local|yadm` to override.
+  directory owned by the overlay. `install.sh` detects this layout with
+  `_detect_layout` (`scripts/_lib.sh`) from a yadm repo answering for `$HOME`
+  or a tracked `$HOME/.gitmodules` that declares the `dotfiles-core`
+  submodule; set `DOTFILES_LAYOUT=local|yadm` to override. The `DOTFILES_LAYOUT`
+  export inside `install.sh` serves core's own library functions only: an
+  overlay runs core as a child process, so it determines the layout itself by
+  sourcing core's `scripts/_lib.sh` and calling `_detect_layout`, or by its own
+  `DOTFILES_DIR == $HOME` check.
 
 | Path | Owner | Core installs it as | Overlay may |
 |---|---|---|---|
 | `~/.claude/agents/<name>.md` | core for the five reasoning agents; overlay for its own | per-file symlink | add its own agents; in local layout re-point a core agent to the submodule copy |
 | `~/.claude/skills/<name>/` | core for shipped skills; overlay for overlay-only skills | per-directory symlink | add overlay-only skills; must not keep a copy of a core skill (see below) |
 | `~/.claude/hooks/`, `~/.claude/workflows/`, `~/.claude/workflows/schemas/` | core | per-file symlinks | leave alone |
-| `~/.claude/_shared/` | **shared** — real directory | per-entry symlinks for core's children (`role-guards/`, `reviewer-blocks/`, `portable/`, `*.md`, …), merging into real sub-directories | own children the core never ships: `claude-md.d/`, `agents-md.d/`, `overlay-context.md`, `leakage-tokens.txt`, role-guard fragments for overlay agents |
-| `~/.claude/evals/` | **shared** — real directory | per-entry symlinks for `schemas/*`, `scripts/*`, `sets/*` | add its own eval scripts and sets under the same tree |
+| `~/.claude/_shared/` | **shared** — real directory | one symlink per core child (`role-guards/`, `reviewer-blocks/`, `portable/`, `*.md`, …); a child directory is linked as a single symlink unless a real directory already exists at that path, in which case the merge descends and links core's files beside the overlay's | own children the core never ships: `claude-md.d/`, `agents-md.d/`, `overlay-context.md`, `leakage-tokens.txt`, role-guard fragments for overlay agents |
+| `~/.claude/evals/` | **shared** — real directory | one symlink per core child (`schemas/`, `scripts/`, `sets/`); where the overlay already has a real directory of the same name (its own `scripts/`) the merge descends and links core's files (`scripts/emit-metric.sh`, …) beside the overlay's | add its own eval scripts and sets under the same tree |
 | `~/.claude/CLAUDE.md`, `~/.claude/AGENTS.md` | core renders the core-only view; the overlay re-points to its fragment-merged render | symlink to `CLAUDE.md.generated` / `AGENTS.md.generated` | replace the symlink target with its own render |
 | `~/.claude/overlay-context.md` | overlay | — | symlink or copy of its `_shared/overlay-context.md` |
 | `~/.claude/agent-memory/` | the user (seeded once by whichever installer ships the seed) | copy on first install; `--reseed` backs up first | seed its own agents |
-| `~/.claude/.backups/<timestamp>/<path>` | core (and overlays that reuse `_backup_collision`) | relocated backups, plus `legacy-<timestamp>/` sets holding pre-v1.21.0 sibling backups moved out of `skills/`, `agents/`, `_shared.bak.*`, `evals.bak.*`; sets older than `DOTFILES_BACKUP_RETENTION_DAYS` (30) are pruned on install | — |
+| `~/.claude/.backups/<timestamp>/<path>` | core (and overlays that reuse `_backup_collision`) | relocated backups (collisions and `--reseed` memory files), plus `legacy-<timestamp>/` sets holding pre-v1.21.0 sibling backups moved out of `skills/`, `agents/`, `_shared.bak.*`, `evals.bak.*`. Root: `DOTFILES_BACKUP_ROOT` (default `~/.claude/.backups`). On install, sets named `<epoch>`, `<epoch>.<n>` or `legacy-<suffix>` older than `DOTFILES_BACKUP_RETENTION_DAYS` (default 30) are pruned; `0`, `never` or `off` disables pruning, and any other directory under the root is left alone | — |
 
 Rules the installer enforces (`scripts/lib-core-symlinks.sh`):
 
@@ -213,21 +217,39 @@ Rules the installer enforces (`scripts/lib-core-symlinks.sh`):
    first. Backups never sit beside the live entry inside a directory Claude
    Code scans for skills or agents.
 2. **Shared directories are merged, not replaced.** A whole-directory symlink at
-   `~/.claude/_shared` or `~/.claude/evals` left by an older core is replaced by a
-   real directory holding per-entry symlinks. Entries core did not ship are never
-   touched, and stale-link cleanup inside these directories removes only dead
-   symlinks that point into the core checkout.
+   `~/.claude/_shared` or `~/.claude/evals` that points into the core checkout
+   (left by an older core) is replaced by a real directory holding per-entry
+   symlinks. A symlink there that points anywhere else was not shipped by core:
+   it is left untouched with a `WARNING` naming its target, core's entries are
+   not merged into it, and `install.sh --check` reports `COLLISION <name>
+   (symlink to <target>, not managed by core)`. Entries core did not ship are
+   never touched, stale-link cleanup inside these directories removes only dead
+   symlinks that point into the core checkout, and `_link_entry` refuses to
+   collapse either real directory into a single symlink even when called
+   directly.
 3. **Core is canonical for every skill it ships.** An overlay that tracks its own
    copy of a core skill gets that copy backed up (local) or flagged (yadm) on
    every install; the fix is to delete the overlay copy and carry any
    company-specific detail in `overlay-context.md` or a fragment.
 4. **`install.sh --check` applies the same table**: in the yadm layout an
    overlay-owned real entry at a core path reports `ok (overlay-owned, yadm
-   layout)`; a whole-directory `_shared`/`evals` symlink reports `STALE`.
+   layout)`; a whole-directory `_shared`/`evals` symlink into core reports
+   `STALE`, one pointing elsewhere reports `COLLISION`.
+5. **Core never edits its own checkout through `~/.claude`.** When `~/.claude`
+   (or `~/.claude/skills`) is itself a symlink into the core checkout, every
+   destination *is* the core file: the installer prints a note and leaves it in
+   place instead of comparing, removing, backing up or creating anything there.
 
 Overlay installers running after core must respect the same table: do not
 re-link `~/.claude/_shared` or `~/.claude/evals` wholesale, and do not back up a
-real entry under `~/.claude/` in the yadm layout.
+real entry under `~/.claude/` in the yadm layout. Core v1.21.0 keeps those two
+directories merged and refuses to collapse them, so an overlay that still links
+them whole flips each one between symlink and merged directory on alternate
+installs — the `jarama/dotfiles` overlay needs its PR #43 (branch
+`fix/cws-copied-tree-install`) or later. Core runs as a child process, so its
+`DOTFILES_LAYOUT` export does not reach the overlay: source core's
+`scripts/_lib.sh` and call `_detect_layout`, or use your own
+`DOTFILES_DIR == $HOME` check.
 
 ## Versioning
 
