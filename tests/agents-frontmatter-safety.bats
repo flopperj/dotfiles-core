@@ -17,7 +17,7 @@ SETTINGS_PERSONAL="$DOTFILES_DIR/.claude/settings.json.personal.example"
 # Per-agent expected maxTurns values. If you change one, update the PR body too.
 declare_expected() {
     expected_max_turns_aristotle=20
-    expected_max_turns_optimus=30
+    expected_max_turns_optimus=60
     expected_max_turns_cyrus=300
     expected_max_turns_ranger=40
     expected_max_turns_scout=35

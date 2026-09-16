@@ -65,3 +65,34 @@ _iter_core_skill_dirs() {
         printf '%s\n' "$d"
     done
 }
+
+# Detect how dotfiles are laid out on this machine.
+#
+# Prints one of:
+#   local  — the overlay (or a standalone core clone) lives in its own
+#            directory and the installer symlinks into ~/.claude/.
+#   yadm   — the overlay's files are checked out directly into $HOME (yadm,
+#            cloud workspaces). Overlay-tracked paths under ~/.claude/ are then real
+#            files owned by the overlay, and core must merge around them.
+#
+# Signals, in order: an explicit DOTFILES_LAYOUT override (tests, operators);
+# a yadm repo answering for $HOME; a tracked $HOME/.gitmodules declaring the
+# dotfiles-core submodule (a yadm tree that was copied into $HOME without its
+# repo directory still carries this file).
+#
+# Usage: layout="$(_detect_layout)"
+_detect_layout() {
+    if [ -n "${DOTFILES_LAYOUT:-}" ]; then
+        printf '%s\n' "$DOTFILES_LAYOUT"
+        return 0
+    fi
+    if command -v yadm >/dev/null 2>&1 && yadm rev-parse --git-dir >/dev/null 2>&1; then
+        echo yadm
+        return 0
+    fi
+    if [ -f "$HOME/.gitmodules" ] && grep -q 'dotfiles-core' "$HOME/.gitmodules" 2>/dev/null; then
+        echo yadm
+        return 0
+    fi
+    echo local
+}

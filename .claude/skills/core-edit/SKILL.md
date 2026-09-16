@@ -143,6 +143,13 @@ Pushed to origin (GHE).
 # In overlay root
 new_sha=$(git -C .claude/dotfiles-core rev-parse --short HEAD)
 git add .claude/dotfiles-core
+# Overlays that install from a copied tree (no VCS at $HOME) pin core in a
+# tracked version file; keep it in step with the submodule pointer.
+if [ -f .claude/dotfiles-core.version ]; then
+  git -C .claude/dotfiles-core describe --tags --exact-match HEAD 2>/dev/null \
+    || git -C .claude/dotfiles-core rev-parse HEAD > .claude/dotfiles-core.version
+  git add .claude/dotfiles-core.version
+fi
 git commit -m "core: bump pointer to ${new_sha} (<skill-name> update)"
 ```
 
