@@ -55,3 +55,17 @@ load 'test_helper'
     [ "$status" -eq 1 ]
     [[ "$output" != *"secret-org.io"* ]]
 }
+
+@test "corporate email shape in a skill companion file, a skill script and a nested _shared file is flagged" {
+    mkdir -p "$SCRATCH/bad/.claude/skills/demo/scripts" "$SCRATCH/bad/.claude/_shared/portable"
+    printf '%s\n' '---' 'name: demo' '---' 'See reference.md.' > "$SCRATCH/bad/.claude/skills/demo/SKILL.md"
+    echo 'Ask owner@acme-corp.com for the project id.' > "$SCRATCH/bad/.claude/skills/demo/reference.md"
+    printf '%s\n' '#!/usr/bin/env bash' 'echo "Default owner: owner@acme-corp.com"' > "$SCRATCH/bad/.claude/skills/demo/scripts/y.sh"
+    echo 'contact owner@acme-corp.com' > "$SCRATCH/bad/.claude/_shared/portable/notes.txt"
+    run bash "$CORE_DIR/scripts/check-leakage-shapes.sh" "$SCRATCH/bad"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"skills/demo/reference.md"* ]] || return 1
+    [[ "$output" == *"skills/demo/scripts/y.sh"* ]] || return 1
+    [[ "$output" == *"_shared/portable/notes.txt"* ]] || return 1
+    [[ "$output" != *"acme-corp.com"* ]] || return 1
+}
