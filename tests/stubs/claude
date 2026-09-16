@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Stand-in for the Claude Code CLI, put on PATH by the install-suite bats
+# files (tests/install.bats, tests/install-yadm-layout.bats).
+#
+# install.sh ends by running `claude plugin install …` for every entry in
+# plugins.txt. With the real CLI on PATH that step reaches the network, adds
+# seconds to every installer run and prints WARNING lines whenever a
+# marketplace lookup fails — noise that would trip the suites' "no WARNING"
+# assertions and tie them to the machine's CLI state. Without any CLI on PATH
+# the installer would try to download one. This stub answers every
+# invocation with exit 0 so those suites exercise only the symlink/backup
+# contract.
+#
+# tests/install-plugins.bats does not use this directory: it plants its own
+# recording `claude` (and a failing `curl`) per test to assert the plugin step
+# itself.
+echo "claude(stub) $*"
+exit 0

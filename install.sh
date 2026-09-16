@@ -45,8 +45,11 @@ source "$SCRIPTS_DIR/lib-core-seeds.sh"
 # shellcheck source=scripts/lib-plugins.sh
 source "$SCRIPTS_DIR/lib-plugins.sh"
 
-# Detect the layout once and export it so overlay installers sourced after
-# this script (and the library functions themselves) agree on the answer.
+# Detect the layout once so every library function in this run agrees on the
+# answer. The export reaches only this process and its children; an overlay
+# runs core as a child process (`bash …/install.sh`) and sources its own steps
+# afterwards, so it must detect the layout itself — source scripts/_lib.sh and
+# call _detect_layout, or use its own DOTFILES_DIR == $HOME check.
 DOTFILES_LAYOUT="$(_detect_layout)"
 export DOTFILES_LAYOUT
 

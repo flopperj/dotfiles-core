@@ -96,3 +96,51 @@ _detect_layout() {
     fi
     echo local
 }
+
+# Physical path of an existing directory (every symlinked component
+# resolved); prints nothing and returns 1 when it does not exist.
+#
+# Usage: phys="$(_phys_dir "$dir")" || …
+_phys_dir() {
+    (cd -P "$1" 2>/dev/null && pwd -P)
+}
+
+# True when <path> sits inside <dir> physically: the directory holding <path>
+# resolves to <dir> or below it. Symlinked ancestors are followed, the final
+# component is not, and <path> itself need not exist. A ~/.claude that is a
+# symlink into the core checkout therefore puts every entry under it inside
+# core, while a symlink *at* <path> pointing into core does not.
+#
+# Usage: if _path_inside "$dst" "$core_dir"; then …
+_path_inside() {
+    local path="$1" dir="$2" phys_parent phys_dir
+    [ -n "$path" ] && [ -n "$dir" ] || return 1
+    phys_dir="$(_phys_dir "$dir")" || return 1
+    phys_parent="$(_phys_dir "$(dirname "$path")")" || return 1
+    case "$phys_parent" in
+        "$phys_dir"|"$phys_dir"/*) return 0 ;;
+    esac
+    return 1
+}
+
+# True when the symlink at <link> resolves into <dir>, or dangles with a
+# literal target under <dir>. Tells a whole-directory link an older core left
+# at ~/.claude/_shared from one that somebody else created.
+#
+# Usage: if _symlink_targets "$link" "$core_dir"; then …
+_symlink_targets() {
+    local link="$1" dir="$2" phys_dir phys_target literal
+    [ -L "$link" ] || return 1
+    phys_dir="$(_phys_dir "$dir")" || return 1
+    if phys_target="$(_phys_dir "$link")"; then
+        case "$phys_target" in
+            "$phys_dir"|"$phys_dir"/*) return 0 ;;
+        esac
+        return 1
+    fi
+    literal="$(readlink "$link")"
+    case "$literal" in
+        "$dir"/*|"$phys_dir"/*) return 0 ;;
+    esac
+    return 1
+}

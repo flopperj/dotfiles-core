@@ -86,7 +86,11 @@ run_core_check() {
         echo "$merged (~/.claude/$merged/):"
         local merged_dst="$HOME/.claude/$merged"
         if [ -L "$merged_dst" ]; then
-            echo "  STALE $merged is a whole-directory symlink (re-run install.sh to merge per entry)"
+            if _symlink_targets "$merged_dst" "$core_dir"; then
+                echo "  STALE $merged is a whole-directory symlink (re-run install.sh to merge per entry)"
+            else
+                echo "  COLLISION $merged (symlink to $(readlink "$merged_dst"), not managed by core)"
+            fi
             errors=$((errors + 1))
         elif [ ! -d "$merged_dst" ]; then
             echo "  MISSING $merged"

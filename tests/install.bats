@@ -36,6 +36,10 @@ setup() {
     # tests/install-precommit-hook.bats exercises that function in full isolation
     # using its own SCRATCH fixture core — it does NOT set this variable.
     export _SKIP_PRECOMMIT_INSTALL=1
+
+    # tests/stubs/claude answers the installer's plugin step offline; see the
+    # header of that file. tests/install-plugins.bats plants its own stubs.
+    export PATH="$BATS_TEST_DIRNAME/stubs:$PATH"
 }
 
 teardown() {
@@ -119,7 +123,7 @@ teardown() {
 }
 
 # ---------------------------------------------------------------------------
-# 5. Normal install: _shared symlinked
+# 5. Normal install: _shared is a merged directory (per-entry symlinks)
 # ---------------------------------------------------------------------------
 
 @test "install makes ~/.claude/_shared a real directory with per-entry symlinks into core" {
@@ -142,7 +146,7 @@ teardown() {
 }
 
 # ---------------------------------------------------------------------------
-# 5b. Normal install: evals symlinked
+# 5b. Normal install: evals is a merged directory (per-entry symlinks)
 # ---------------------------------------------------------------------------
 
 @test "install makes ~/.claude/evals a real directory with per-entry symlinks into core" {
@@ -153,7 +157,7 @@ teardown() {
     [ -L "$SCRATCH/home/.claude/evals/schemas" ]
 }
 
-@test "evals symlink resolves to a tree containing emit-metric.sh" {
+@test "evals/scripts symlink resolves to a tree containing emit-metric.sh" {
     _run_install
     [ -f "$SCRATCH/home/.claude/evals/scripts/emit-metric.sh" ]
 }
@@ -248,13 +252,13 @@ teardown() {
     echo "existing content" > "$SCRATCH/home/.claude/agent-memory/cyrus-tdd-engineer/MEMORY.md"
     _run_install "--reseed"
     # After reseed, content should match the seed file (not "existing content")
-    ! grep -q "existing content" "$SCRATCH/home/.claude/agent-memory/cyrus-tdd-engineer/MEMORY.md"
+    ! grep -q "existing content" "$SCRATCH/home/.claude/agent-memory/cyrus-tdd-engineer/MEMORY.md" || return 1
 }
 
-@test "install --reseed backs up pre-reseed content to timestamped .bak file" {
+@test "install --reseed moves pre-reseed content into the relocated backup store" {
     # Operational-safety contract: --reseed destroys agent-accumulated content,
-    # so it must preserve the prior file in a timestamped backup. Without this,
-    # a user invoking --reseed silently loses customized memory.
+    # so it must preserve the prior file in a timestamped backup set. Without
+    # this, a user invoking --reseed silently loses customized memory.
     local target_dir="$SCRATCH/home/.claude/agent-memory/cyrus-tdd-engineer"
     local target="$target_dir/MEMORY.md"
     mkdir -p "$target_dir"
