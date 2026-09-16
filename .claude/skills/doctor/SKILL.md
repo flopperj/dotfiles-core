@@ -14,7 +14,7 @@ Run a comprehensive health check of the dotfiles installation.
 
 Determine the dotfiles repo location, by layout (`_detect_layout` in core's `scripts/_lib.sh`; see `PROTOCOL.md` § Path ownership):
 1. **yadm layout** — if `yadm rev-parse --show-toplevel` succeeds, that is the repo root (normally `$HOME`). If yadm is absent but `$HOME/.gitmodules` declares `dotfiles-core`, the root is `$HOME` (a tree copied into `$HOME` without its yadm repo).
-2. **local layout** — if `~/.claude/CLAUDE.md` is a symlink, resolve it: a target inside `<repo>/.claude/dotfiles-core/` (core's `CLAUDE.md.generated`) means the repo root is three levels up from the target's directory; a target `~/.claude/CLAUDE.md.generated` (overlay render) carries no repo path — resolve `~/.claude/overlay-context.md` or `~/.claude/skills/forge` instead and take the directory above `.claude/`.
+2. **local layout** — if `~/.claude/CLAUDE.md` is a symlink, resolve it: a target inside `<repo>/.claude/dotfiles-core/` (core's `CLAUDE.md.generated`) means the repo root is three levels up from the target's directory; a target `~/.claude/CLAUDE.md.generated` (overlay render) carries no repo path — resolve the `~/.claude/skills/forge` symlink instead and strip everything from `/.claude/dotfiles-core/` onward to get the repo root.
 3. Fall back to `~/dotfiles`.
 4. If none exists, report and stop.
 
