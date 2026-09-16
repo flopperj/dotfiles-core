@@ -4,7 +4,7 @@ description: "Use this agent when you need a detailed, actionable execution plan
 model: opus
 color: red
 memory: user
-maxTurns: 30
+maxTurns: 60
 ---
 
 > **Skill**: [`/optimus-planner`](../skills/optimus-planner/SKILL.md)

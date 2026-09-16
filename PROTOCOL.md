@@ -176,6 +176,59 @@ install time — see Cohort 3), re-running the scanner, and verifying that no
 existing legitimate mention is newly flagged. Each update is a manual audit.
 Positive grammar requires only adding one line to `consult-vocabulary.txt`.
 
+## Path ownership under `~/.claude`
+
+`install.sh` and an overlay installer both write into `~/.claude/`. This table
+says who owns each path so neither installer backs up, replaces, or deletes
+the other's files. It applies in both layouts:
+
+- **local** — the repo (core clone, or overlay with core as a submodule) lives
+  in its own directory and installers symlink into `~/.claude/`.
+- **yadm** — the overlay is checked out directly into `$HOME` (yadm on a
+  cloud workspace). Every overlay-tracked path under `~/.claude/` is then a real file or
+  directory owned by the overlay. `install.sh` detects this layout
+  (`_detect_layout` in `scripts/_lib.sh`, exported as `DOTFILES_LAYOUT`) from a
+  yadm repo answering for `$HOME` or a tracked `$HOME/.gitmodules` that declares
+  the `dotfiles-core` submodule; set `DOTFILES_LAYOUT=local|yadm` to override.
+
+| Path | Owner | Core installs it as | Overlay may |
+|---|---|---|---|
+| `~/.claude/agents/<name>.md` | core for the five reasoning agents; overlay for its own | per-file symlink | add its own agents; in local layout re-point a core agent to the submodule copy |
+| `~/.claude/skills/<name>/` | core for shipped skills; overlay for overlay-only skills | per-directory symlink | add overlay-only skills; must not keep a copy of a core skill (see below) |
+| `~/.claude/hooks/`, `~/.claude/workflows/`, `~/.claude/workflows/schemas/` | core | per-file symlinks | leave alone |
+| `~/.claude/_shared/` | **shared** — real directory | per-entry symlinks for core's children (`role-guards/`, `reviewer-blocks/`, `portable/`, `*.md`, …), merging into real sub-directories | own children the core never ships: `claude-md.d/`, `agents-md.d/`, `overlay-context.md`, `leakage-tokens.txt`, role-guard fragments for overlay agents |
+| `~/.claude/evals/` | **shared** — real directory | per-entry symlinks for `schemas/*`, `scripts/*`, `sets/*` | add its own eval scripts and sets under the same tree |
+| `~/.claude/CLAUDE.md`, `~/.claude/AGENTS.md` | core renders the core-only view; the overlay re-points to its fragment-merged render | symlink to `CLAUDE.md.generated` / `AGENTS.md.generated` | replace the symlink target with its own render |
+| `~/.claude/overlay-context.md` | overlay | — | symlink or copy of its `_shared/overlay-context.md` |
+| `~/.claude/agent-memory/` | the user (seeded once by whichever installer ships the seed) | copy on first install; `--reseed` backs up first | seed its own agents |
+| `~/.claude/.backups/<timestamp>/<path>` | core (and overlays that reuse `_backup_collision`) | relocated backups, plus `legacy-<timestamp>/` sets holding pre-v1.21.0 sibling backups moved out of `skills/`, `agents/`, `_shared.bak.*`, `evals.bak.*`; sets older than `DOTFILES_BACKUP_RETENTION_DAYS` (30) are pruned on install | — |
+
+Rules the installer enforces (`scripts/lib-core-symlinks.sh`):
+
+1. **A real entry at a path core wants to link is handled by layout.** In the
+   yadm layout it is overlay-owned: core leaves it untouched and prints a note
+   (a `WARNING` when its content differs from core's). In the local layout it is
+   a collision: identical content is replaced with the symlink silently;
+   differing content is moved to `~/.claude/.backups/<ts>/<path-relative-to-HOME>`
+   first. Backups never sit beside the live entry inside a directory Claude
+   Code scans for skills or agents.
+2. **Shared directories are merged, not replaced.** A whole-directory symlink at
+   `~/.claude/_shared` or `~/.claude/evals` left by an older core is replaced by a
+   real directory holding per-entry symlinks. Entries core did not ship are never
+   touched, and stale-link cleanup inside these directories removes only dead
+   symlinks that point into the core checkout.
+3. **Core is canonical for every skill it ships.** An overlay that tracks its own
+   copy of a core skill gets that copy backed up (local) or flagged (yadm) on
+   every install; the fix is to delete the overlay copy and carry any
+   company-specific detail in `overlay-context.md` or a fragment.
+4. **`install.sh --check` applies the same table**: in the yadm layout an
+   overlay-owned real entry at a core path reports `ok (overlay-owned, yadm
+   layout)`; a whole-directory `_shared`/`evals` symlink reports `STALE`.
+
+Overlay installers running after core must respect the same table: do not
+re-link `~/.claude/_shared` or `~/.claude/evals` wholesale, and do not back up a
+real entry under `~/.claude/` in the yadm layout.
+
 ## Versioning
 
 Protocol versions track the consult-instruction contract between core and overlays:

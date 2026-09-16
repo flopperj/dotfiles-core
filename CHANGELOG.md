@@ -1,6 +1,28 @@
 # Changelog
 
 > **How to update:** The pre-commit hook (`scripts/pre-commit.sh`) is auto-installed by `install.sh`. It runs a fast leakage check (`scripts/check-no-leakage.sh`) and re-renders the generated `CLAUDE.md.generated` and `AGENTS.md.generated` files on every commit. A pre-push gate (`scripts/pre-push.sh`, also auto-installed) scans every outgoing commit's tree and metadata before it leaves the machine. CI runs lint, consult-grammar, and the test suite (including synthetic-token leakage mechanism tests) on every PR; the company-token scan is a separate step that runs only when guard data is present on the runner. If you bypass the hooks or work in a context where hooks cannot run, keep this file current manually. Each release heading links to the diff on the public mirror.
+## v1.21.0 — 2026-09-16 (layout-aware installer contract, Optimus turn cap, skill companion files)
+
+Fallout from a live cloud workspace (yadm layout, overlay `jarama/dotfiles@8057d4d`, core v1.20.2) where `install.sh` replaced the overlay's `~/.claude/_shared` and `~/.claude/evals` wholesale, backed up 35 real skill directories as siblings that Claude Code then loaded as skills, and left the overlay installer without its fragment, context and leakage-token inputs.
+
+### Added
+
+- **Path ownership contract.** `PROTOCOL.md` § *Path ownership under `~/.claude`* names the owner of every path both installers write — core, overlay, or shared with per-entry linking — in the local and yadm layouts, and the rules `install.sh` enforces.
+- **Layout detection.** `_detect_layout` (`scripts/_lib.sh`) returns `local` or `yadm` from a yadm repo answering for `$HOME` or a tracked `$HOME/.gitmodules` declaring the core submodule; `install.sh` exports the answer as `DOTFILES_LAYOUT` for overlay installers, and `DOTFILES_LAYOUT=local|yadm` overrides it.
+- **Skill companion files.** `google-docs`, `google-drive`, `create-tech-spec` and `mermaid-diagrams` now ship the `scripts/`, reference and template files their `SKILL.md` already cited (`scripts/create_from_markdown.sh`, `tech-spec-template.md`, `reference.md`, …). They came from the `jarama/dotfiles` overlay with two company references generalized. Core is canonical for these four plus `self-evaluate` and `smart-statusline`; the overlay should `git rm` its six copies and its `.claude/evals/` duplicates (both older than core's).
+- `tests/install-yadm-layout.bats` (16 tests): a temp `$HOME` in the yadm layout with overlay-style `_shared/{claude-md.d,agents-md.d,overlay-context.md,leakage-tokens.txt}`, `evals/scripts/x.sh`, an overlay-only skill and a stale copy of a core skill survives two installs byte-for-byte with core files linked beside them, zero `*.bak.*` anywhere under `~/.claude`, a no-op second run and a clean `--check`; local-layout collision, migration, scoped stale-link cleanup and backup pruning.
+
+### Changed
+
+- **`_shared` and `evals` are merged, not replaced.** `install_core_symlinks` ensures a real directory and links each core child into it (`_merge_link_tree`, recursing where both sides have a real sub-directory). A whole-directory symlink from an older core is replaced by the merged directory. Overlay-owned children are never touched; `_clean_stale_symlinks` inside these directories removes only dead links pointing into the core checkout. `install.sh --check` checks every shipped entry and reports a leftover whole-directory symlink as `STALE`.
+- **Real entries at core paths are handled by layout** (`_link_entry`, which `_link_file`/`_link_dir` now delegate to). yadm: kept, with a note (`WARNING` when the content differs from core). local: replaced silently when byte-identical (`diff -rq` / `cmp`), otherwise backed up first. A symlink already pointing at core is left alone, so re-runs are quiet.
+- **Backups relocate.** `_backup_collision` moves a path under `$HOME` to `~/.claude/.backups/<timestamp>/<path-relative-to-HOME>` instead of a `.bak.<ts>` sibling, so a backup never lands in `~/.claude/skills/` or `~/.claude/agents/` where the host would load it. Paths outside `$HOME` (git hook files) keep the sibling shape. `_prune_backups` deletes sets older than `DOTFILES_BACKUP_RETENTION_DAYS` (default 30) at the start of each install. The `--reseed` memory backup follows the same relocation.
+- **Legacy sibling backups are moved out of the way.** `_relocate_legacy_backups` moves `~/.claude/skills/*.bak.*`, `~/.claude/agents/*.bak.*`, `~/.claude/_shared.bak.*` and `~/.claude/evals.bak.*` left by earlier cores into `~/.claude/.backups/legacy-<timestamp>/…` at the start of each install, so Claude Code stops loading `<skill>.bak.<ts>` as skills. Nothing is deleted; the set ages out under the retention window.
+- **`install.sh --check` is layout-aware**: in the yadm layout an overlay-owned real entry at a core skill or agent path reports `ok (overlay-owned, yadm layout)` instead of `MISSING`.
+- **Optimus `maxTurns` 30 → 60.** Plans on multi-layer tickets were hitting the cap mid-write. `agent-turn-cap-warning.md` and `tests/agents-frontmatter-safety.bats` updated. Frontmatter changes load on the next Claude Code session.
+- `/doctor` locates the repo root by layout (yadm: `yadm rev-parse --show-toplevel`, else `$HOME` when `.gitmodules` is tracked there; local: resolve the `CLAUDE.md` symlink). `/core-edit` Step 7 also updates `.claude/dotfiles-core.version` when the overlay tracks one.
+- `install.sh` header no longer claims it "does not handle yadm/CWS layouts".
+
 ## v1.20.3 — 2026-09-15 (handoff schemas dropped, reviewer untrusted-input rule, generated-block markers)
 
 Follow-ups from the review of the exported bundle in the team skills repo (collab-email/skills PR #3).

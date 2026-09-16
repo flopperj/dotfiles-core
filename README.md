@@ -52,7 +52,7 @@ Both install paths create symlinks under `~/.claude/`:
 
 - `~/.claude/skills/<each-skill>/` → skills inside the cloned repo (or, for overlay installs, into the submodule for universal skills and into the overlay for overlay-specific ones).
 - `~/.claude/agents/<each-agent>.md` → reasoning agent files.
-- `~/.claude/_shared/` → shared role-guards and responsibility-boundary docs.
+- `~/.claude/_shared/` and `~/.claude/evals/` → real directories holding per-entry symlinks to core's shared docs, role-guards, eval schemas and scripts. Overlay-owned children (`claude-md.d/`, `agents-md.d/`, `overlay-context.md`, leakage tokens) live beside them untouched. See [PROTOCOL.md § Path ownership](PROTOCOL.md#path-ownership-under-claude).
 - `~/.claude/CLAUDE.md` and `~/.claude/AGENTS.md` → rendered from numbered fragments at install time.
 
 The installer also installs two universal Claude Code plugins from the official Anthropic marketplace, declared in `plugins.txt` at the repo root:
