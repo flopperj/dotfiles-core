@@ -14,26 +14,26 @@ local (git + symlinks).
 
 ## Step 1: Detect environment
 
-Determine whether this is a CWS workspace or a local machine:
+Determine the layout the same way `/doctor` Step 1 does (`_detect_layout`
+in core's `scripts/_lib.sh`; see `PROTOCOL.md` § Path ownership):
 
-```bash
-if [ -n "${WORKSPACE_ID:-}" ] || [ -n "${CWS_WORKSPACE_ID:-}" ]; then
-  # CWS: yadm manages dotfiles directly at $HOME
-else
-  # Local: dotfiles repo is a separate directory with symlinks
-fi
-```
+1. **CWS (yadm layout)** — `yadm rev-parse --show-toplevel` succeeds: that
+   is the repo root (normally `$HOME`). If yadm is absent but
+   `$HOME/.gitmodules` declares `dotfiles-core`, the root is `$HOME` (a tree
+   copied into `$HOME` without its yadm repo; use `git -C $HOME`).
+2. **Local (local layout)** — otherwise. Resolve the `~/.claude/skills/forge`
+   symlink and strip everything from `/.claude/dotfiles-core/` onward to get
+   the repo root (a standalone core clone has no such segment; strip from
+   `/.claude/skills/` instead):
+   ```bash
+   target="$(readlink ~/.claude/skills/forge)"
+   dotfiles_dir="${target%%/.claude/dotfiles-core/*}"
+   ```
+   Fall back to `~/dotfiles` if the symlink doesn't exist.
 
-**CWS path**: The dotfiles repo root is `$HOME` (yadm checkout). Use
-`yadm` commands for all git operations.
+**CWS path**: Use `yadm` commands (or `git -C $HOME`) for all git operations.
 
-**Local path**: Detect the dotfiles directory by following the
-`~/.claude/CLAUDE.md` symlink back to its source:
-```bash
-cd "$(dirname "$(readlink ~/.claude/CLAUDE.md)")" && cd .. && pwd -P
-```
-Fall back to `~/dotfiles` if the symlink doesn't exist. Use `git`
-commands in that directory.
+**Local path**: Use `git` commands in `{dotfiles-dir}`.
 
 ---
 

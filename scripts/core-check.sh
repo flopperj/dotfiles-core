@@ -5,11 +5,55 @@
 # shellcheck source=scripts/_lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
 
+# Report one linked entry. Prints a status line; returns 1 on an error state.
+# In the yadm layout a real (non-symlink) entry at the path is overlay-owned
+# and expected, so it reports ok.
+# Usage: _check_entry <link> <label> <layout>
+_check_entry() {
+    local link="$1" label="$2" layout="$3"
+    if [ -L "$link" ] && [ -e "$link" ]; then
+        echo "  ok    $label"
+    elif [ -L "$link" ]; then
+        echo "  BROKEN $label (dead symlink)"
+        return 1
+    elif [ -e "$link" ] && [ "$layout" = "yadm" ]; then
+        echo "  ok    $label (overlay-owned, yadm layout)"
+    elif [ -e "$link" ]; then
+        echo "  COLLISION $label (exists and is not a symlink; re-run install.sh)"
+        return 1
+    else
+        echo "  MISSING $label"
+        return 1
+    fi
+}
+
+# Walk a core directory and check each shipped entry under the merged
+# destination, descending where both sides are real directories.
+# Returns the number of failing entries.
+# Usage: _check_tree <core-src-dir> <home-dst-dir> <layout>
+_check_tree() {
+    local src="$1" dst="$2" layout="$3"
+    local failures=0 child name target
+    for child in "$src"/* "$src"/.[!.]*; do
+        [ -e "$child" ] || continue
+        name="$(basename "$child")"
+        target="$dst/$name"
+        if [ -d "$child" ] && [ -d "$target" ] && [ ! -L "$target" ]; then
+            _check_tree "$child" "$target" "$layout" || failures=$((failures + $?))
+        else
+            _check_entry "$target" "${target#"$HOME"/.claude/}" "$layout" || failures=$((failures + 1))
+        fi
+    done
+    return "$failures"
+}
+
 run_core_check() {
     local core_dir="$1"
     local errors=0
+    local layout
+    layout="$(_detect_layout)"
 
-    echo "dotfiles-core symlink health check"
+    echo "dotfiles-core symlink health check (layout: $layout)"
     echo "==================================="
 
     # Check agents
@@ -20,16 +64,7 @@ run_core_check() {
         [ -f "$agent_file" ] || continue
         local filename
         filename="$(basename "$agent_file")"
-        local link="$HOME/.claude/agents/$filename"
-        if [ -L "$link" ] && [ -e "$link" ]; then
-            echo "  ok    $filename"
-        elif [ -L "$link" ]; then
-            echo "  BROKEN $filename (dead symlink)"
-            errors=$((errors + 1))
-        else
-            echo "  MISSING $filename"
-            errors=$((errors + 1))
-        fi
+        _check_entry "$HOME/.claude/agents/$filename" "$filename" "$layout" || errors=$((errors + 1))
     done
 
     # Check skills
@@ -39,45 +74,31 @@ run_core_check() {
     while IFS= read -r skill_dir; do
         local dirname
         dirname="$(basename "$skill_dir")"
-        local link="$HOME/.claude/skills/$dirname"
-        if [ -L "$link" ] && [ -e "$link" ]; then
-            echo "  ok    $dirname"
-        elif [ -L "$link" ]; then
-            echo "  BROKEN $dirname (dead symlink)"
-            errors=$((errors + 1))
-        else
-            echo "  MISSING $dirname"
-            errors=$((errors + 1))
-        fi
+        _check_entry "$HOME/.claude/skills/$dirname" "$dirname" "$layout" || errors=$((errors + 1))
     done < <(_iter_core_skill_dirs "$core_dir")
 
-    # Check _shared
-    echo ""
-    echo "_shared (~/.claude/_shared):"
-    local shared_link="$HOME/.claude/_shared"
-    if [ -L "$shared_link" ] && [ -e "$shared_link" ]; then
-        echo "  ok    _shared"
-    elif [ -L "$shared_link" ]; then
-        echo "  BROKEN _shared (dead symlink)"
-        errors=$((errors + 1))
-    else
-        echo "  MISSING _shared"
-        errors=$((errors + 1))
-    fi
-
-    # Check evals
-    echo ""
-    echo "evals (~/.claude/evals):"
-    local evals_link="$HOME/.claude/evals"
-    if [ -L "$evals_link" ] && [ -e "$evals_link" ]; then
-        echo "  ok    evals"
-    elif [ -L "$evals_link" ]; then
-        echo "  BROKEN evals (dead symlink)"
-        errors=$((errors + 1))
-    else
-        echo "  MISSING evals"
-        errors=$((errors + 1))
-    fi
+    # Check _shared and evals — merged directories: every entry core ships
+    # must be a live symlink inside a real directory (overlay-owned siblings
+    # are ignored).
+    local merged
+    for merged in _shared evals; do
+        echo ""
+        echo "$merged (~/.claude/$merged/):"
+        local merged_dst="$HOME/.claude/$merged"
+        if [ -L "$merged_dst" ]; then
+            if _symlink_targets "$merged_dst" "$core_dir"; then
+                echo "  STALE $merged is a whole-directory symlink (re-run install.sh to merge per entry)"
+            else
+                echo "  COLLISION $merged (symlink to $(readlink "$merged_dst"), not managed by core)"
+            fi
+            errors=$((errors + 1))
+        elif [ ! -d "$merged_dst" ]; then
+            echo "  MISSING $merged"
+            errors=$((errors + 1))
+        else
+            _check_tree "$core_dir/.claude/$merged" "$merged_dst" "$layout" || errors=$((errors + $?))
+        fi
+    done
 
     # Check workflows
     echo ""

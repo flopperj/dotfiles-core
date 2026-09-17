@@ -40,7 +40,8 @@ done < <(find "$SCAN_DIR" \
     -print0 2>/dev/null)
 
 # --- Shape 2: corporate email addresses in Claude publication surfaces ---
-# Scan agent/skill/shared markdown only; withhold matched content in output.
+# Scan agent markdown, every markdown file and every scripts/ file inside a
+# skill, and everything under _shared; withhold matched content in output.
 EMAIL_PATTERN='[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}'
 while IFS= read -r -d '' file; do
     grep -qI '' "$file" 2>/dev/null || continue
@@ -56,7 +57,7 @@ while IFS= read -r -d '' file; do
         _report "$file" "${lineno} "
     done < <(grep -inE "$EMAIL_PATTERN" "$file" 2>/dev/null || true)
 done < <(find "$SCAN_DIR/.claude" \
-    \( -path '*/agents/*.md' -o -path '*/skills/*/SKILL.md' -o -path '*/_shared/*.md' \) \
+    \( -path '*/agents/*.md' -o -path '*/skills/*/*.md' -o -path '*/skills/*/scripts/*' -o -path '*/_shared/*' \) \
     -type f \
     -print0 2>/dev/null)
 

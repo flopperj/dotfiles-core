@@ -12,10 +12,11 @@ Run a comprehensive health check of the dotfiles installation.
 
 ### Step 1 — Locate the dotfiles directory
 
-Determine the dotfiles repo location:
-1. If `~/.claude/CLAUDE.md` is a symlink, resolve its parent's parent to find the repo root.
-2. Fall back to `~/dotfiles`.
-3. If neither exists, report and stop.
+Determine the dotfiles repo location, by layout (`_detect_layout` in core's `scripts/_lib.sh`; see `PROTOCOL.md` § Path ownership):
+1. **yadm layout** — if `yadm rev-parse --show-toplevel` succeeds, that is the repo root (normally `$HOME`). If yadm is absent but `$HOME/.gitmodules` declares `dotfiles-core`, the root is `$HOME` (a tree copied into `$HOME` without its yadm repo).
+2. **local layout** — if `~/.claude/CLAUDE.md` is a symlink, resolve it: a target inside `<repo>/.claude/dotfiles-core/` (core's `CLAUDE.md.generated`) means the repo root is three levels up from the target's directory; a target `~/.claude/CLAUDE.md.generated` (overlay render) carries no repo path — resolve the `~/.claude/skills/forge` symlink instead and strip everything from `/.claude/dotfiles-core/` onward to get the repo root.
+3. Fall back to `~/dotfiles`.
+4. If none exists, report and stop.
 
 ### Step 2 — Run `install.sh --check`
 
@@ -147,15 +148,16 @@ If they differ → **WARN: submodule HEAD (`{current_sha}`) differs from pinned 
 
 If match → `ok  submodule dotfiles-core @ {short_sha}`
 
-#### 7c — Core-owned symlinks resolve into submodule path
+#### 7c — Core-owned skill paths resolve by layout
 
-For each of `~/.claude/skills/forge`, `~/.claude/skills/grill-me`, `~/.claude/skills/to-prd`:
+For each of `~/.claude/skills/forge`, `~/.claude/skills/grill-me`, `~/.claude/skills/to-prd`, judged by the layout from Step 1:
 
 ```bash
 readlink ~/.claude/skills/forge
 ```
 
-Expected: resolves to a path containing `.claude/dotfiles-core/`. If it resolves to the overlay's own in-tree copy or is missing → **WARN: {skill} symlink does not resolve through submodule — re-run install.sh**
+- **local layout** — expected: a symlink resolving to a path containing `.claude/dotfiles-core/`. A symlink to the overlay's own in-tree copy, a real directory, or a missing path → **WARN: {skill} does not resolve through the submodule — re-run install.sh**
+- **yadm layout** — a real (non-symlink) directory is overlay-owned and expected: the installer keeps it and `install.sh --check` reports it `ok (overlay-owned, yadm layout)`. Report `ok  {skill} (overlay-owned)`. If its content differs from `{dotfiles-dir}/.claude/dotfiles-core/.claude/skills/{skill}` → **WARN: {skill} is an overlay copy that differs from core — core is canonical; delete the overlay copy** (PROTOCOL rule 3). Missing → **WARN: {skill} missing — re-run install.sh**
 
 #### 7d — Rendered file freshness
 

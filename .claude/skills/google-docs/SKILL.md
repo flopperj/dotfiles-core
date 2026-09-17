@@ -8,13 +8,13 @@ user-invocable: true
 
 ## Prerequisites
 
-**Default project:** `rsg-api-auth-dev` (Google Docs and Drive APIs enabled)
+**Quota project:** `<your-gcp-project>` — the Google Cloud project your org enabled the Docs and Drive APIs on (see [google-cloud-setup.md](google-cloud-setup.md)).
 
 ```bash
 gcloud auth application-default login \
   --scopes="https://www.googleapis.com/auth/cloud-platform,https://www.googleapis.com/auth/documents,https://www.googleapis.com/auth/drive" \
   --client-id-file=/workspace/google-cloud-sdk/<your-org>_client_secrets.json \
-  --set-quota-project=rsg-api-auth-dev
+  --set-quota-project=<your-gcp-project>
 ```
 
 ## Scripts
