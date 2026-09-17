@@ -4,7 +4,7 @@ description: "Use this agent when you need a thorough, staff-level code review o
 model: opus
 color: green
 memory: user
-maxTurns: 40
+maxTurns: 80
 disallowedTools: Write, Edit, NotebookEdit
 ---
 

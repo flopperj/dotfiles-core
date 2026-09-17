@@ -4,7 +4,7 @@ description: "Use this agent when you need a thorough PR review performed on you
 model: sonnet
 color: yellow
 memory: user
-maxTurns: 35
+maxTurns: 70
 disallowedTools: Write, Edit, NotebookEdit
 ---
 

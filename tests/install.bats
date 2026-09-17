@@ -36,6 +36,10 @@ setup() {
     # tests/install-precommit-hook.bats exercises that function in full isolation
     # using its own SCRATCH fixture core — it does NOT set this variable.
     export _SKIP_PRECOMMIT_INSTALL=1
+
+    # tests/stubs/claude answers the installer's plugin step offline; see the
+    # header of that file. tests/install-plugins.bats plants its own stubs.
+    export PATH="$BATS_TEST_DIRNAME/stubs:$PATH"
 }
 
 teardown() {
@@ -119,24 +123,41 @@ teardown() {
 }
 
 # ---------------------------------------------------------------------------
-# 5. Normal install: _shared symlinked
+# 5. Normal install: _shared is a merged directory (per-entry symlinks)
 # ---------------------------------------------------------------------------
 
-@test "install symlinks _shared directory into ~/.claude/" {
+@test "install makes ~/.claude/_shared a real directory with per-entry symlinks into core" {
     _run_install
-    [ -L "$SCRATCH/home/.claude/_shared" ]
+    [ -d "$SCRATCH/home/.claude/_shared" ]
+    [ ! -L "$SCRATCH/home/.claude/_shared" ]
+    [ -L "$SCRATCH/home/.claude/_shared/role-guards" ]
+    [ -L "$SCRATCH/home/.claude/_shared/responsibility-boundaries.md" ]
+    [ "$(readlink "$SCRATCH/home/.claude/_shared/role-guards")" = "$CORE_DIR/.claude/_shared/role-guards" ]
+}
+
+@test "install replaces a legacy whole-directory _shared symlink with the merged directory" {
+    mkdir -p "$SCRATCH/home/.claude"
+    ln -s "$CORE_DIR/.claude/_shared" "$SCRATCH/home/.claude/_shared"
+    _run_install
+    [ "$status" -eq 0 ]
+    [ ! -L "$SCRATCH/home/.claude/_shared" ]
+    [ -d "$SCRATCH/home/.claude/_shared" ]
+    [ -L "$SCRATCH/home/.claude/_shared/role-guards" ]
 }
 
 # ---------------------------------------------------------------------------
-# 5b. Normal install: evals symlinked
+# 5b. Normal install: evals is a merged directory (per-entry symlinks)
 # ---------------------------------------------------------------------------
 
-@test "install symlinks evals directory into ~/.claude/" {
+@test "install makes ~/.claude/evals a real directory with per-entry symlinks into core" {
     _run_install
-    [ -L "$SCRATCH/home/.claude/evals" ]
+    [ -d "$SCRATCH/home/.claude/evals" ]
+    [ ! -L "$SCRATCH/home/.claude/evals" ]
+    [ -L "$SCRATCH/home/.claude/evals/scripts" ]
+    [ -L "$SCRATCH/home/.claude/evals/schemas" ]
 }
 
-@test "evals symlink resolves to a tree containing emit-metric.sh" {
+@test "evals/scripts symlink resolves to a tree containing emit-metric.sh" {
     _run_install
     [ -f "$SCRATCH/home/.claude/evals/scripts/emit-metric.sh" ]
 }
@@ -231,13 +252,13 @@ teardown() {
     echo "existing content" > "$SCRATCH/home/.claude/agent-memory/cyrus-tdd-engineer/MEMORY.md"
     _run_install "--reseed"
     # After reseed, content should match the seed file (not "existing content")
-    ! grep -q "existing content" "$SCRATCH/home/.claude/agent-memory/cyrus-tdd-engineer/MEMORY.md"
+    ! grep -q "existing content" "$SCRATCH/home/.claude/agent-memory/cyrus-tdd-engineer/MEMORY.md" || return 1
 }
 
-@test "install --reseed backs up pre-reseed content to timestamped .bak file" {
+@test "install --reseed moves pre-reseed content into the relocated backup store" {
     # Operational-safety contract: --reseed destroys agent-accumulated content,
-    # so it must preserve the prior file in a timestamped backup. Without this,
-    # a user invoking --reseed silently loses customized memory.
+    # so it must preserve the prior file in a timestamped backup set. Without
+    # this, a user invoking --reseed silently loses customized memory.
     local target_dir="$SCRATCH/home/.claude/agent-memory/cyrus-tdd-engineer"
     local target="$target_dir/MEMORY.md"
     mkdir -p "$target_dir"
@@ -245,14 +266,15 @@ teardown() {
 
     _run_install "--reseed"
 
-    # Live target was overwritten (asserted by sibling test)
-    # AND a backup containing the custom line must exist
-    local backup_count
-    backup_count="$(find "$target_dir" -maxdepth 1 -name 'MEMORY.md.bak.*' 2>/dev/null | wc -l)"
-    [ "$backup_count" -ge 1 ]
+    # Live target was overwritten (asserted by sibling test) AND a backup
+    # containing the custom line must exist. Backups of paths under $HOME
+    # are relocated to ~/.claude/.backups/<ts>/<relative-path>, never left
+    # beside the live file.
     local backup_file
-    backup_file="$(find "$target_dir" -maxdepth 1 -name 'MEMORY.md.bak.*' 2>/dev/null | head -1)"
+    backup_file="$(find "$SCRATCH/home/.claude/.backups" -type f -path '*/.claude/agent-memory/cyrus-tdd-engineer/MEMORY.md' 2>/dev/null | head -1)"
+    [ -n "$backup_file" ]
     grep -q "CUSTOM_LINE_DO_NOT_OVERWRITE" "$backup_file"
+    [ -z "$(find "$target_dir" -maxdepth 1 -name 'MEMORY.md.bak.*' 2>/dev/null)" ]
 }
 
 # ---------------------------------------------------------------------------
@@ -329,6 +351,22 @@ teardown() {
     # .bak.forced.1 must exist and contain "second"
     [ -f "${target}.bak.forced.1" ]
     grep -q "second" "${target}.bak.forced.1"
+}
+
+@test "_backup_collision relocates paths under \$HOME to ~/.claude/.backups/<suffix>/<relative-path>" {
+    local target="$SCRATCH/home/.claude/skills/some-skill"
+    mkdir -p "$target"
+    echo "real" > "$target/SKILL.md"
+    (
+        export HOME="$SCRATCH/home"
+        export _BACKUP_SUFFIX_OVERRIDE="forced"
+        source "$CORE_DIR/scripts/lib-core-symlinks.sh"
+        _backup_collision "$target"
+    )
+    [ ! -e "$target" ]
+    [ -z "$(find "$SCRATCH/home/.claude/skills" -maxdepth 1 -name '*.bak.*' 2>/dev/null)" ]
+    [ -f "$SCRATCH/home/.claude/.backups/forced/.claude/skills/some-skill/SKILL.md" ]
+    grep -q "real" "$SCRATCH/home/.claude/.backups/forced/.claude/skills/some-skill/SKILL.md"
 }
 
 # ---------------------------------------------------------------------------
