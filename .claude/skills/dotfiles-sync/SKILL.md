@@ -222,6 +222,31 @@ git -C {dotfiles-dir} submodule status .claude/dotfiles-core 2>/dev/null
 
 If the submodule is absent or not initialized, skip this entire Step 7.
 
+### Step 7a.1 — Reconcile checked-out core with the recorded pointer
+
+The checked-out submodule can lag the SHA the overlay records (a `+`
+prefix in the `submodule status` output). That drift is not an upstream
+change and must not be offered as a bump — the overlay already points
+where it should. Reconcile first so 7b compares the right SHA:
+
+```bash
+recorded=$(git -C {dotfiles-dir} ls-tree HEAD .claude/dotfiles-core | awk '{print $3}')
+checked_out=$(git -C {dotfiles-dir}/.claude/dotfiles-core rev-parse HEAD)
+if [ "$recorded" != "$checked_out" ]; then
+  git -C {dotfiles-dir} submodule update --init --recursive .claude/dotfiles-core
+fi
+# (or the yadm equivalents on CWS)
+```
+
+If the two differed, report:
+
+```
+dotfiles-core checkout was at <old-short-sha>; moved to the recorded pointer <new-short-sha>.
+```
+
+Then re-run `install.sh` at the end of the sync even if no overlay commits
+were pulled, since the core content on disk just changed.
+
 ### Step 7b — Fetch core updates
 
 ```bash
