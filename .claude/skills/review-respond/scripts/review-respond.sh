@@ -353,20 +353,63 @@ cmd_classify() {
             end)' "$FLAG_map"
 }
 
+# REST shows a dismissed review only as state DISMISSED, without the state it
+# had before, so "the push dismissed an approval" needs the GraphQL timeline
+# (ReviewDismissedEvent.previousReviewState). Without a timeline — or with a
+# file holding null from a failed call — the answer degrades to
+# NEEDS_LOOK:unknown whenever any review is DISMISSED and the PR is not approved.
 cmd_dismissed() {
     _parse_args "$@"
     _require_file --reviews "$FLAG_reviews"
     [ -n "$FLAG_head" ] || _die "--head is required"
-    [ -z "$FLAG_timeline" ] || _require_file --timeline "$FLAG_timeline"
-    _die "not implemented: dismissed (${FLAG_review_decision:-no decision})"
+    local have_timeline="false"
+    if [ -n "$FLAG_timeline" ]; then
+        _require_file --timeline "$FLAG_timeline"
+        if [ "$(jq -r 'if . == null then "null" else "present" end' "$FLAG_timeline")" = "present" ]; then
+            have_timeline="true"
+        fi
+    fi
+    if [ "$have_timeline" = "true" ]; then
+        jq -r "$JQ_DEFS"'
+            ($reviews[0] | flat) as $rs
+            | pages
+            | map(.data.repository.pullRequest.timelineItems.nodes // []) | add // []
+            | map(select(.previousReviewState == "APPROVED"))
+            | map(. as $e | ($e.review.author.login // "") as $login
+                  | select($login != "")
+                  | select(any($rs[]; (.user.login // "") == $login
+                                      and .state == "APPROVED"
+                                      and .commit_id == $head
+                                      and (.submitted_at // "") > $e.createdAt) | not)
+                  | $login)
+            | unique
+            | if length == 0 then "OK" else "NEEDS_LOOK:" + join(",") end' \
+            --arg head "$FLAG_head" --slurpfile reviews "$FLAG_reviews" "$FLAG_timeline"
+    else
+        jq -r "$JQ_DEFS"'
+            flat
+            | if ($decision != "APPROVED") and any(.[]; .state == "DISMISSED")
+              then "NEEDS_LOOK:unknown" else "OK" end' \
+            --arg decision "$FLAG_review_decision" "$FLAG_reviews"
+    fi
 }
 
+# Idempotency: a prior summary is recognised only by the exact hidden marker
+# rendered at the end of every body, posted by me, with the 🤖 prefix. Fuzzy
+# text matching could overwrite a teammate's or an unrelated 🤖 comment.
 cmd_find_prior() {
     _parse_args "$@"
     _require_file --comments "$FLAG_comments"
     [ -n "$FLAG_review" ] || _die "--review is required"
     [ -n "$FLAG_me" ] || _die "--me is required"
-    _die "not implemented: find-prior"
+    jq -r "$JQ_DEFS"'
+        flat
+        | map(select((.user.login // "") == $me
+                     and ((.body // "") | startswith("🤖"))
+                     and ((.body // "") | contains($marker))))
+        | if length == 0 then "NONE"
+          else (sort_by([(.created_at // ""), .id]) | last | .id | tostring) end' \
+        --arg me "$FLAG_me" --arg marker "<!-- review-respond review=${FLAG_review} -->" "$FLAG_comments"
 }
 
 cmd_detect_checks() {

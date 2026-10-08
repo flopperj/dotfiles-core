@@ -767,3 +767,231 @@ _run_map() {
     done
     [ "$violations" -eq 0 ]
 }
+
+# ---------------------------------------------------------------------------
+# dismissed and find-prior
+# ---------------------------------------------------------------------------
+
+HEAD_SHA="ccc0000000000000000000000000000000000000"
+
+# Reviews where bob's APPROVED review 900 was dismissed by a push.
+_fx_reviews_dismissed() {
+    _fx_reviews | jq '.[1].state = "DISMISSED"'
+}
+
+# A re-approval by $1 at commit $2 submitted at $3 (id 910).
+_review_approved() {
+    jq -n --arg login "$1" --arg sha "$2" --arg at "$3" \
+        '{id:910,user:{login:$login,type:"User"},state:"APPROVED",submitted_at:$at,commit_id:$sha}'
+}
+
+# GraphQL timeline (single response object) with one ReviewDismissedEvent per
+# "login:previousState" argument, all created at 2026-10-05T12:00:00Z.
+_fx_timeline() {
+    local nodes='[]' spec login state
+    for spec in "$@"; do
+        login="${spec%%:*}"
+        state="${spec#*:}"
+        nodes="$(jq -c --arg login "$login" --arg state "$state" \
+            '. + [{createdAt:"2026-10-05T12:00:00Z",previousReviewState:$state,review:{databaseId:900,author:{login:$login}}}]' <<<"$nodes")"
+    done
+    jq -n --argjson nodes "$nodes" '{data:{repository:{pullRequest:{timelineItems:{nodes:$nodes}}}}}'
+}
+
+_run_dismissed() {
+    run "$RR" dismissed --reviews "$TEST_HOME/reviews.json" --head "$HEAD_SHA" "$@"
+}
+
+@test "dismissed: dismissed approval with no re-approval at head gives NEEDS_LOOK:bob" {
+    _fx_reviews_dismissed | _write reviews.json
+    _fx_timeline bob:APPROVED | _write timeline.json
+    _run_dismissed --timeline "$TEST_HOME/timeline.json"
+    [ "$status" -eq 0 ]
+    [ "$output" = "NEEDS_LOOK:bob" ]
+}
+
+@test "dismissed: re-approval at head after the dismissal gives OK" {
+    { _fx_reviews_dismissed; _review_approved bob "$HEAD_SHA" 2026-10-06T10:00:00Z; } | jq -s '.[0] + [.[1]]' | _write reviews.json
+    _fx_timeline bob:APPROVED | _write timeline.json
+    _run_dismissed --timeline "$TEST_HOME/timeline.json"
+    [ "$status" -eq 0 ]
+    [ "$output" = "OK" ]
+}
+
+@test "dismissed: a re-approval at an older commit does not clear" {
+    { _fx_reviews_dismissed; _review_approved bob bbb0000000000000000000000000000000000000 2026-10-06T10:00:00Z; } | jq -s '.[0] + [.[1]]' | _write reviews.json
+    _fx_timeline bob:APPROVED | _write timeline.json
+    _run_dismissed --timeline "$TEST_HOME/timeline.json"
+    [ "$status" -eq 0 ]
+    [ "$output" = "NEEDS_LOOK:bob" ]
+}
+
+@test "dismissed: an approval at head submitted before the dismissal does not clear" {
+    { _fx_reviews_dismissed; _review_approved bob "$HEAD_SHA" 2026-10-04T10:00:00Z; } | jq -s '.[0] + [.[1]]' | _write reviews.json
+    _fx_timeline bob:APPROVED | _write timeline.json
+    _run_dismissed --timeline "$TEST_HOME/timeline.json"
+    [ "$status" -eq 0 ]
+    [ "$output" = "NEEDS_LOOK:bob" ]
+}
+
+@test "dismissed: a re-approval by someone else does not clear the dismissed reviewer" {
+    { _fx_reviews_dismissed; _review_approved carol "$HEAD_SHA" 2026-10-06T10:00:00Z; } | jq -s '.[0] + [.[1]]' | _write reviews.json
+    _fx_timeline bob:APPROVED | _write timeline.json
+    _run_dismissed --timeline "$TEST_HOME/timeline.json"
+    [ "$status" -eq 0 ]
+    [ "$output" = "NEEDS_LOOK:bob" ]
+}
+
+@test "dismissed: dismissed CHANGES_REQUESTED is ignored on the timeline path" {
+    _fx_reviews_dismissed | _write reviews.json
+    _fx_timeline carol:CHANGES_REQUESTED | _write timeline.json
+    _run_dismissed --timeline "$TEST_HOME/timeline.json"
+    [ "$status" -eq 0 ]
+    [ "$output" = "OK" ]
+}
+
+@test "dismissed: two uncleared reviewers are listed sorted" {
+    _fx_reviews_dismissed | _write reviews.json
+    _fx_timeline carol:APPROVED bob:APPROVED | _write timeline.json
+    _run_dismissed --timeline "$TEST_HOME/timeline.json"
+    [ "$status" -eq 0 ]
+    [ "$output" = "NEEDS_LOOK:bob,carol" ]
+}
+
+@test "dismissed: timeline accepts slurped pages" {
+    _fx_reviews_dismissed | _write reviews.json
+    _fx_timeline bob:APPROVED | jq '[.]' | _write timeline.json
+    _run_dismissed --timeline "$TEST_HOME/timeline.json"
+    [ "$status" -eq 0 ]
+    [ "$output" = "NEEDS_LOOK:bob" ]
+}
+
+@test "dismissed: an empty timeline gives OK even with a DISMISSED review in REST" {
+    _fx_reviews_dismissed | _write reviews.json
+    _fx_timeline | _write timeline.json
+    _run_dismissed --timeline "$TEST_HOME/timeline.json" --review-decision REVIEW_REQUIRED
+    [ "$status" -eq 0 ]
+    [ "$output" = "OK" ]
+}
+
+@test "dismissed fallback: DISMISSED review and decision REVIEW_REQUIRED gives NEEDS_LOOK:unknown" {
+    _fx_reviews_dismissed | _write reviews.json
+    _run_dismissed --review-decision REVIEW_REQUIRED
+    [ "$status" -eq 0 ]
+    [ "$output" = "NEEDS_LOOK:unknown" ]
+}
+
+@test "dismissed fallback: decision APPROVED gives OK" {
+    _fx_reviews_dismissed | _write reviews.json
+    _run_dismissed --review-decision APPROVED
+    [ "$status" -eq 0 ]
+    [ "$output" = "OK" ]
+}
+
+@test "dismissed fallback: no DISMISSED review gives OK" {
+    _fx_reviews | _write reviews.json
+    _run_dismissed --review-decision REVIEW_REQUIRED
+    [ "$status" -eq 0 ]
+    [ "$output" = "OK" ]
+}
+
+@test "dismissed fallback: a timeline file holding null behaves like no timeline" {
+    _fx_reviews_dismissed | _write reviews.json
+    echo 'null' | _write timeline.json
+    _run_dismissed --timeline "$TEST_HOME/timeline.json" --review-decision REVIEW_REQUIRED
+    [ "$status" -eq 0 ]
+    [ "$output" = "NEEDS_LOOK:unknown" ]
+}
+
+@test "dismissed fallback: an omitted --review-decision counts as not approved" {
+    _fx_reviews_dismissed | _write reviews.json
+    _run_dismissed
+    [ "$status" -eq 0 ]
+    [ "$output" = "NEEDS_LOOK:unknown" ]
+}
+
+# issues/7/comments --paginate --slurp: array of arrays.
+#   5001 alice, marker 900            5002 carol, marker 900 (not me)
+#   5003 alice, marker 901            5004 alice, marker 900 but no 🤖 prefix
+#   5005 alice, marker 900, later     5006 alice, marker 9001 (must not match 900)
+_fx_issue_comments() {
+    cat <<'JSON'
+[
+  [
+    {"id":5001,"user":{"login":"alice"},"created_at":"2026-10-05T13:00:00Z","body":"🤖 **Review round: Bob** ([review 900](https://github.example.com/acme/widgets/pull/7#pullrequestreview-900))\n\nHead is now `ccc0000`.\n\n<!-- review-respond review=900 -->"},
+    {"id":5002,"user":{"login":"carol"},"created_at":"2026-10-05T13:05:00Z","body":"🤖 something else\n\n<!-- review-respond review=900 -->"},
+    {"id":5003,"user":{"login":"alice"},"created_at":"2026-10-05T13:10:00Z","body":"🤖 **Review round: Carol**\n\n<!-- review-respond review=901 -->"}
+  ],
+  [
+    {"id":5004,"user":{"login":"alice"},"created_at":"2026-10-05T13:15:00Z","body":"**Review round: Bob**\n\n<!-- review-respond review=900 -->"},
+    {"id":5005,"user":{"login":"alice"},"created_at":"2026-10-06T09:00:00Z","body":"🤖 **Review round: Bob** (updated)\n\n<!-- review-respond review=900 -->"},
+    {"id":5006,"user":{"login":"alice"},"created_at":"2026-10-06T09:30:00Z","body":"🤖 **Review round: Bob**\n\n<!-- review-respond review=9001 -->"}
+  ]
+]
+JSON
+}
+
+# Keep only the comment ids given, preserving the array-of-arrays shape.
+_only_ids() {
+    jq --argjson ids "$1" 'map(map(select(.id as $i | $ids | index($i) != null)))'
+}
+
+_run_find_prior() {
+    run "$RR" find-prior --comments "$TEST_HOME/comments.json" --review 900 --me alice
+}
+
+@test "find-prior returns my marked comment for the review" {
+    _fx_issue_comments | _only_ids '[5001]' | _write comments.json
+    _run_find_prior
+    [ "$status" -eq 0 ]
+    [ "$output" = "5001" ]
+}
+
+@test "find-prior ignores another user's comment carrying the marker" {
+    _fx_issue_comments | _only_ids '[5002]' | _write comments.json
+    _run_find_prior
+    [ "$status" -eq 0 ]
+    [ "$output" = "NONE" ]
+}
+
+@test "find-prior ignores my comment for a different review id" {
+    _fx_issue_comments | _only_ids '[5003, 5006]' | _write comments.json
+    _run_find_prior
+    [ "$status" -eq 0 ]
+    [ "$output" = "NONE" ]
+}
+
+@test "find-prior ignores my comment without the 🤖 prefix" {
+    _fx_issue_comments | _only_ids '[5004]' | _write comments.json
+    _run_find_prior
+    [ "$status" -eq 0 ]
+    [ "$output" = "NONE" ]
+}
+
+@test "find-prior returns the latest when there are duplicates" {
+    _fx_issue_comments | _only_ids '[5005, 5001]' | _write comments.json
+    _run_find_prior
+    [ "$status" -eq 0 ]
+    [ "$output" = "5005" ]
+}
+
+@test "find-prior picks my comment out of the full mixed set" {
+    _fx_issue_comments | _write comments.json
+    _run_find_prior
+    [ "$status" -eq 0 ]
+    [ "$output" = "5005" ]
+}
+
+@test "find-prior with none prints NONE" {
+    echo '[[]]' | _write comments.json
+    _run_find_prior
+    [ "$status" -eq 0 ]
+    [ "$output" = "NONE" ]
+}
+
+@test "find-prior accepts a flat comment array" {
+    _fx_issue_comments | _only_ids '[5001]' | jq 'add' | _write comments.json
+    _run_find_prior
+    [ "$status" -eq 0 ]
+    [ "$output" = "5001" ]
+}
