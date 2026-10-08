@@ -253,6 +253,7 @@ The submodule SHA pin is intentional — your overlay records exactly which vers
 | `/performance-review` | Draft an evidence-backed self-review from Jira, GitHub, and tooling contributions into the company template |
 | `/pr-create-from-commits` | Create a PR from recent commits with template auto-detection; Merge order section for repo-split PRs |
 | `/ranger-reviewer` | Staff-level PR review with confidence scoring (Opus-tier) |
+| `/review-respond` | Post a per-review-round summary to a PR: each thread's outcome mapped to commits, extra commits, and test/lint/typecheck results at HEAD — summarize-only, approval-gated |
 | `/review-context` | Generate a per-project llms.txt for reviewer context |
 | `/scout-reviewer` | PR review with parallel analysis and confidence scoring (Sonnet-tier) |
 | `/self-evaluate` | Self-evaluate the dotfiles repo (overlay or core) for health and engineering quality |
