@@ -663,10 +663,83 @@ cmd_parse_test_output() {
         {runner: $r, files: ($files | num), tests_passed: ($p | num), tests_failed: ($f | num), parsed: $parsed}'
 }
 
+# render is where two promises are enforced mechanically rather than by prose:
+# a failed check can never be dropped from the Testing line (the whole body is
+# refused), and a row can never say "Fixed" without a commit behind it. The
+# body starts with the 🤖 marker and ends with a hidden review marker that
+# find-prior matches on. Defined through a heredoc because the Won't-fix cell
+# needs a literal apostrophe; read with the builtin so loading the script runs
+# no external command before the jq guard (read returns 1 at EOF, hence || true).
+JQ_RENDER=""
+IFS= read -r -d '' JQ_RENDER <<'JQ' || true
+def commas: tostring | if length <= 3 then . else (.[0:length-3] | commas) + "," + .[length-3:] end;
+def clean: tostring | gsub("\r"; "") | gsub("\n"; " ") | gsub("<!--"; "") | gsub("\\|"; "\\|");
+def clean_title: clean | gsub("\\["; "\\[") | gsub("\\]"; "\\]");
+def oxford: if length == 0 then "" elif length == 1 then .[0]
+            else (.[0:length-1] | join(", ")) + " and " + .[length-1] end;
+def with_detail($d): if $d != "" then ": " + $d else "" end;
+def cell:
+  ((.detail // "") | clean) as $d
+  | if .outcome == "fixed" then "Fixed in `" + .sha + "`" + with_detail($d)
+    elif .outcome == "wont_fix" then "Won't fix" + with_detail($d)
+    else "Needs discussion" + with_detail($d) end;
+def test_clause:
+  if .parsed == true and .tests_passed != null then
+    .label + " " + (if .files != null then (.files | commas) + " files / " else "" end)
+      + "**" + (.tests_passed | commas) + " tests passed**"
+  elif .parsed == true and .files != null then .label + " " + (.files | commas) + " files passed"
+  else .label + " passed (count not reported)" end;
+
+. as $in
+| ($in.rows // []) as $rows
+| ($in.testing.checks // []) as $checks
+| ($in.review.id | tostring) as $rid
+| ($in.head.short | tostring) as $short
+| ($in.pr_url // "") as $pr
+| (first($checks[] | select(.status != "passed") | .label | tostring) // null) as $failed
+| (first($rows[]
+     | if .outcome == "ambiguous" then "REFUSE:unresolved-ambiguous:" + (.comment_id | tostring)
+       elif .outcome == "fixed" and ((.sha // "") == "") then "REFUSE:fixed-without-sha:" + (.comment_id | tostring)
+       elif .outcome == "fixed" or .outcome == "wont_fix" or .outcome == "needs_discussion" then empty
+       else "REFUSE:unknown-outcome:" + (.comment_id | tostring) end) // null) as $row_refusal
+| if $failed != null then "REFUSE:checks-failed:" + $failed
+  elif ($rows | length) == 0 then "REFUSE:empty-rows"
+  elif $row_refusal != null then $row_refusal
+  else
+    (["🤖 **Review round: " + ($in.review.reviewer_name // "" | tostring) + "** ([review " + $rid
+      + "](" + $pr + "#pullrequestreview-" + $rid + "))"]) as $header
+    | (["Head is now `" + $short + "`."
+        + (if $in.needs_look == true then " The push dismissed the approval, so this needs another look." else "" end)]) as $head
+    | (["| Comment | Outcome |", "|---|---|"]
+       + ($rows | map("| [" + (.title | clean_title) + "](" + $pr + "#discussion_r" + (.comment_id | tostring)
+                      + ") | " + cell + " |"))) as $table
+    | (($in.also_found // []) | if length == 0 then [] else
+         ["**Also found:** " + (map(.text + " (" + (.shas | map("`" + . + "`") | join(", ")) + ").") | join(" "))] end) as $also
+    | ("**Testing at `" + $short + "`**"
+       + (if (($in.testing.cwd // "") != "") and ($in.testing.cwd != ".") then " (from `" + $in.testing.cwd + "`)" else "" end)) as $prefix
+    | (if ($checks | length) == 0 then [$prefix + ": no test, lint, or typecheck command detected."]
+       else
+         (([$checks[] | select(.kind == "test") | test_clause])
+          + ([$checks[] | select(.kind != "test") | .label] | if length == 0 then [] else [oxford + " clean"] end)) as $clauses
+         | [$prefix + ": " + ($clauses | join("; ")) + "."]
+       end) as $testing
+    | (["<!-- review-respond review=" + $rid + " -->"]) as $marker
+    | [$header, $head, $table, $also, $testing, $marker]
+      | map(select(length > 0) | join("\n")) | join("\n\n")
+  end
+JQ
+
 cmd_render() {
     _parse_args "$@"
     _require_file --input "$FLAG_input"
-    _die "not implemented: render"
+    local out
+    out="$(jq -r "$JQ_RENDER" "$FLAG_input")"
+    case "$out" in
+        REFUSE:*)
+            printf '%s\n' "$out"
+            exit 2 ;;
+    esac
+    printf '%s\n' "$out"
 }
 
 # ---------------------------------------------------------------------------

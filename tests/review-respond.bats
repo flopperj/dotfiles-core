@@ -1347,3 +1347,231 @@ LOG
     [ "$status" -eq 1 ]
     [[ "$output" == *"unknown runner: mocha"* ]]
 }
+
+# ---------------------------------------------------------------------------
+# render — golden shape, refusals, escaping
+# ---------------------------------------------------------------------------
+
+_fx_render_input() {
+    cat <<'JSON'
+{
+  "pr_url": "https://github.example.com/acme/widgets/pull/79",
+  "review": {"id": 900, "reviewer_name": "Bob"},
+  "head": {"short": "4bfe659"},
+  "needs_look": true,
+  "rows": [
+    {"comment_id": 101, "title": "Image search misconfig escapes fail-soft", "outcome": "fixed", "sha": "651eb74", "detail": ""},
+    {"comment_id": 102, "title": "Supersede rule depends on completion order", "outcome": "fixed", "sha": "7126064", "detail": "outcomes keep line order"},
+    {"comment_id": 103, "title": "Weak test assertions", "outcome": "fixed", "sha": "51423a4", "detail": ""}
+  ],
+  "also_found": [
+    {"text": "the image search base URLs were missing the `/imagesearch` path", "shas": ["4a4adea"]},
+    {"text": "`request_id` is now forwarded", "shas": ["19231d6"]}
+  ],
+  "testing": {"cwd": "app/", "checks": [
+    {"kind": "test", "label": "vitest", "status": "passed", "files": 159, "tests_passed": 2753, "parsed": true},
+    {"kind": "lint", "label": "eslint", "status": "passed"},
+    {"kind": "typecheck", "label": "`tsc --noEmit --skipLibCheck`", "status": "passed"}
+  ]}
+}
+JSON
+}
+
+_fx_render_golden() {
+    cat <<'MD'
+🤖 **Review round: Bob** ([review 900](https://github.example.com/acme/widgets/pull/79#pullrequestreview-900))
+
+Head is now `4bfe659`. The push dismissed the approval, so this needs another look.
+
+| Comment | Outcome |
+|---|---|
+| [Image search misconfig escapes fail-soft](https://github.example.com/acme/widgets/pull/79#discussion_r101) | Fixed in `651eb74` |
+| [Supersede rule depends on completion order](https://github.example.com/acme/widgets/pull/79#discussion_r102) | Fixed in `7126064`: outcomes keep line order |
+| [Weak test assertions](https://github.example.com/acme/widgets/pull/79#discussion_r103) | Fixed in `51423a4` |
+
+**Also found:** the image search base URLs were missing the `/imagesearch` path (`4a4adea`). `request_id` is now forwarded (`19231d6`).
+
+**Testing at `4bfe659`** (from `app/`): vitest 159 files / **2,753 tests passed**; eslint and `tsc --noEmit --skipLibCheck` clean.
+
+<!-- review-respond review=900 -->
+MD
+}
+
+# Render the golden input transformed by the jq filter $1; output in $output.
+_render_with() {
+    _fx_render_input | jq "$1" | _write input.json
+    run "$RR" render --input "$TEST_HOME/input.json"
+}
+
+@test "render golden: exemplar-shaped input renders byte-for-byte" {
+    _fx_render_input | _write input.json
+    _fx_render_golden | _write expected.md
+    "$RR" render --input "$TEST_HOME/input.json" > "$TEST_HOME/out.md"
+    cmp "$TEST_HOME/out.md" "$TEST_HOME/expected.md"
+}
+
+@test "render: needs_look false omits the dismissal clause" {
+    _render_with '.needs_look = false'
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | sed -n '3p')" = 'Head is now `4bfe659`.' ]
+}
+
+@test "render: wont_fix and needs_discussion cells" {
+    _render_with '.rows = [
+        {comment_id:101,title:"A",outcome:"wont_fix",detail:"by design"},
+        {comment_id:102,title:"B",outcome:"needs_discussion",detail:""},
+        {comment_id:103,title:"C",outcome:"needs_discussion",detail:"needs product input"},
+        {comment_id:104,title:"D",outcome:"wont_fix",detail:""}]'
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"| [A](https://github.example.com/acme/widgets/pull/79#discussion_r101) | Won't fix: by design |"* ]]
+    [[ "$output" == *"#discussion_r102) | Needs discussion |"* ]]
+    [[ "$output" == *"#discussion_r103) | Needs discussion: needs product input |"* ]]
+    [[ "$output" == *"#discussion_r104) | Won't fix |"* ]]
+}
+
+@test "render: empty also_found omits the section" {
+    _render_with '.also_found = []'
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"Also found"* ]] || return 1
+    # The table's last row is line 9; one blank line and then the Testing line follow.
+    [ "$(echo "$output" | sed -n '10,11p')" = "$(printf '\n**Testing at `4bfe659`** (from `app/`): vitest 159 files / **2,753 tests passed**; eslint and `tsc --noEmit --skipLibCheck` clean.')" ]
+}
+
+@test "render: pipe and brackets in a title are escaped" {
+    _render_with '.rows[0].title = "Handle a|b [x] case"'
+    [ "$status" -eq 0 ]
+    [[ "$output" == *'| [Handle a\|b \[x\] case](https://github.example.com/acme/widgets/pull/79#discussion_r101) | Fixed in `651eb74` |'* ]]
+}
+
+@test "render: newline in a detail collapses to a space and markup is neutralised" {
+    _render_with '.rows[0].detail = "line one\nline two | three <!-- hidden"'
+    [ "$status" -eq 0 ]
+    [[ "$output" == *'| Fixed in `651eb74`: line one line two \| three  hidden |'* ]]
+}
+
+@test "render: failed check refuses with REFUSE:checks-failed and exit 2" {
+    _render_with '.testing.checks[1].status = "failed"'
+    [ "$status" -eq 2 ]
+    [ "$output" = "REFUSE:checks-failed:eslint" ]
+}
+
+@test "render: a check with a missing status is not treated as passed" {
+    _render_with '.testing.checks[2] |= del(.status)'
+    [ "$status" -eq 2 ]
+    [ "$output" = 'REFUSE:checks-failed:`tsc --noEmit --skipLibCheck`' ]
+}
+
+@test "render: ambiguous row refuses" {
+    _render_with '.rows[1].outcome = "ambiguous"'
+    [ "$status" -eq 2 ]
+    [ "$output" = "REFUSE:unresolved-ambiguous:102" ]
+}
+
+@test "render: fixed row without sha refuses" {
+    _render_with '.rows[0].sha = null'
+    [ "$status" -eq 2 ]
+    [ "$output" = "REFUSE:fixed-without-sha:101" ]
+    _render_with '.rows[2].sha = ""'
+    [ "$status" -eq 2 ]
+    [ "$output" = "REFUSE:fixed-without-sha:103" ]
+}
+
+@test "render: unknown outcome refuses" {
+    _render_with '.rows[1].outcome = "tightened"'
+    [ "$status" -eq 2 ]
+    [ "$output" = "REFUSE:unknown-outcome:102" ]
+}
+
+@test "render: empty rows refuses" {
+    _render_with '.rows = []'
+    [ "$status" -eq 2 ]
+    [ "$output" = "REFUSE:empty-rows" ]
+}
+
+@test "render: a failing check is reported before any row problem" {
+    _render_with '.testing.checks[0].status = "failed" | .rows[0].outcome = "ambiguous"'
+    [ "$status" -eq 2 ]
+    [ "$output" = "REFUSE:checks-failed:vitest" ]
+}
+
+@test "render: unparsed test count renders 'passed (count not reported)'" {
+    _render_with '.testing.checks[0] = {kind:"test",label:"vitest",status:"passed",files:null,tests_passed:null,parsed:false}'
+    [ "$status" -eq 0 ]
+    [[ "$output" == *'**Testing at `4bfe659`** (from `app/`): vitest passed (count not reported); eslint and `tsc --noEmit --skipLibCheck` clean.'* ]]
+}
+
+@test "render: no checks renders the explicit no-command sentence" {
+    _render_with '.testing.checks = [] | .testing.cwd = "."'
+    [ "$status" -eq 0 ]
+    [[ "$output" == *'**Testing at `4bfe659`**: no test, lint, or typecheck command detected.'* ]]
+}
+
+@test "render: cwd '.' or empty omits the from-clause" {
+    _render_with '.testing.cwd = "."'
+    [ "$status" -eq 0 ]
+    [[ "$output" == *'**Testing at `4bfe659`**: vitest 159 files'* ]]
+    _render_with 'del(.testing.cwd)'
+    [ "$status" -eq 0 ]
+    [[ "$output" == *'**Testing at `4bfe659`**: vitest 159 files'* ]]
+}
+
+@test "render: files null drops the files clause" {
+    _render_with '.testing.checks[0].files = null | .testing.checks[0].tests_passed = 42'
+    [ "$status" -eq 0 ]
+    [[ "$output" == *': vitest **42 tests passed**; eslint and'* ]]
+}
+
+@test "render: go-style counts with null tests_passed render files passed" {
+    _render_with '.testing.checks[0] = {kind:"test",label:"go",status:"passed",files:3,tests_passed:null,parsed:true}'
+    [ "$status" -eq 0 ]
+    [[ "$output" == *': go 3 files passed; eslint and'* ]]
+}
+
+@test "render: non-test checks list with Oxford-free and" {
+    _render_with '.testing.checks = [.testing.checks[0], {kind:"lint",label:"eslint",status:"passed"}]'
+    [ "$status" -eq 0 ]
+    [[ "$output" == *'; eslint clean.'* ]]
+    _render_with '.testing.checks += [{kind:"lint",label:"stylelint",status:"passed"}]'
+    [ "$status" -eq 0 ]
+    [[ "$output" == *'; eslint, `tsc --noEmit --skipLibCheck` and stylelint clean.'* ]]
+}
+
+@test "render: two test checks produce two clauses" {
+    _render_with '.testing.checks = [.testing.checks[0], {kind:"test",label:"bats",status:"passed",files:null,tests_passed:12,parsed:true}]'
+    [ "$status" -eq 0 ]
+    [[ "$output" == *': vitest 159 files / **2,753 tests passed**; bats **12 tests passed**.'* ]]
+}
+
+@test "render: output begins with the 🤖 prefix and ends with the marker line" {
+    _fx_render_input | _write input.json
+    "$RR" render --input "$TEST_HOME/input.json" > "$TEST_HOME/out.md"
+    [ "$(head -c 5 "$TEST_HOME/out.md")" = "🤖 " ]
+    [ "$(tail -n 1 "$TEST_HOME/out.md")" = "<!-- review-respond review=900 -->" ]
+    [ "$(tail -c 1 "$TEST_HOME/out.md" | od -An -tx1 | tr -d ' \n')" = "0a" ]
+    [ "$(tail -c 2 "$TEST_HOME/out.md" | od -An -tx1 | tr -d ' \n')" != "0a0a" ]
+}
+
+@test "render: sections are separated by exactly one blank line" {
+    _fx_render_input | _write input.json
+    "$RR" render --input "$TEST_HOME/input.json" > "$TEST_HOME/out.md"
+    [ "$(grep -c '^$' "$TEST_HOME/out.md")" = "5" ]
+    [[ "$(tr '\n' '~' < "$TEST_HOME/out.md")" != *"~~~"* ]] || return 1
+}
+
+@test "render: three-digit count has no comma, seven-digit has two" {
+    _render_with '.testing.checks[0].tests_passed = 999'
+    [ "$status" -eq 0 ]
+    [[ "$output" == *'**999 tests passed**'* ]]
+    _render_with '.testing.checks[0].tests_passed = 1000'
+    [ "$status" -eq 0 ]
+    [[ "$output" == *'**1,000 tests passed**'* ]]
+    _render_with '.testing.checks[0].tests_passed = 1234567 | .testing.checks[0].files = 2048'
+    [ "$status" -eq 0 ]
+    [[ "$output" == *'vitest 2,048 files / **1,234,567 tests passed**'* ]]
+}
+
+@test "render: also_found with two shas lists both" {
+    _render_with '.also_found = [{text:"renamed the helper", shas:["aaa1111","bbb2222"]}]'
+    [ "$status" -eq 0 ]
+    [[ "$output" == *'**Also found:** renamed the helper (`aaa1111`, `bbb2222`).'* ]]
+}
