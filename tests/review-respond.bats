@@ -511,3 +511,259 @@ _commit_all() {
     [ "$(echo "$output" | jq -r '.[0].files[0].path')" = "a.txt" ]
     [ "$(echo "$output" | jq -c '.[0].files[0].hunks')" = '[{"old_start":1,"old_len":1,"new_start":1,"new_len":1}]' ]
 }
+
+# ---------------------------------------------------------------------------
+# map-threads and classify
+# ---------------------------------------------------------------------------
+
+# Threads for two reviews (900 is the one under test) and five commits:
+#   aaa1111 fix   src/a.ts @40      -> overlaps thread 101 (orig 40, line 42)
+#   bbb2222 docs  README.md @3      -> only touches review 901's thread: unlinked
+#   ccc3333 fix   src/b.ts @12,0    -> insertion anchored at 12: overlaps 102
+#   ddd4444 chore src/a.ts src/b.ts src/z.ts @1 -> touches 101/102, no overlap
+#   eee5555 feat  src/unrelated.ts  -> unlinked
+_fx_map_threads() {
+    cat <<'JSON'
+[
+  {"thread_id":"PRRT_1","comment_id":101,"review_id":900,"path":"src/a.ts","line":42,"original_line":40,"is_resolved":false,"is_outdated":false,"url":"https://github.example.com/acme/widgets/pull/7#discussion_r101","body":"Nit: rename this"},
+  {"thread_id":"PRRT_2","comment_id":102,"review_id":900,"path":"src/b.ts","line":null,"original_line":12,"is_resolved":false,"is_outdated":true,"url":"https://github.example.com/acme/widgets/pull/7#discussion_r102","body":"Handle the null case"},
+  {"thread_id":"PRRT_3","comment_id":103,"review_id":901,"path":"README.md","line":3,"original_line":3,"is_resolved":false,"is_outdated":false,"url":"https://github.example.com/acme/widgets/pull/7#discussion_r103","body":"Typo"},
+  {"thread_id":"PRRT_4","comment_id":104,"review_id":900,"path":"src/c.ts","line":100,"original_line":100,"is_resolved":false,"is_outdated":false,"url":"https://github.example.com/acme/widgets/pull/7#discussion_r104","body":"Untouched"}
+]
+JSON
+}
+
+_fx_map_commits() {
+    cat <<'JSON'
+[
+  {"sha":"aaa1111aaa1111aaa1111aaa1111aaa1111aaa11","short":"aaa1111","subject":"fix(core): fix a","type":"fix",
+   "files":[{"path":"src/a.ts","hunks":[{"old_start":40,"old_len":1,"new_start":40,"new_len":2}]}]},
+  {"sha":"bbb2222bbb2222bbb2222bbb2222bbb2222bbb22","short":"bbb2222","subject":"docs: update readme","type":"docs",
+   "files":[{"path":"README.md","hunks":[{"old_start":3,"old_len":1,"new_start":3,"new_len":1}]}]},
+  {"sha":"ccc3333ccc3333ccc3333ccc3333ccc3333ccc33","short":"ccc3333","subject":"fix(b): null case","type":"fix",
+   "files":[{"path":"src/b.ts","hunks":[{"old_start":12,"old_len":0,"new_start":13,"new_len":3}]}]},
+  {"sha":"ddd4444ddd4444ddd4444ddd4444ddd4444ddd44","short":"ddd4444","subject":"chore: format everything","type":"chore",
+   "files":[{"path":"src/a.ts","hunks":[{"old_start":1,"old_len":1,"new_start":1,"new_len":1}]},
+            {"path":"src/b.ts","hunks":[{"old_start":1,"old_len":1,"new_start":1,"new_len":1}]},
+            {"path":"src/z.ts","hunks":[{"old_start":1,"old_len":1,"new_start":1,"new_len":1}]}]},
+  {"sha":"eee5555eee5555eee5555eee5555eee5555eee55","short":"eee5555","subject":"feat: unrelated","type":"feat",
+   "files":[{"path":"src/unrelated.ts","hunks":[{"old_start":1,"old_len":1,"new_start":1,"new_len":1}]}]}
+]
+JSON
+}
+
+# One thread (review 900, comment 101) and one commit aaa1111 with one hunk on
+# the same path, for pinning the overlap rule one parameter at a time.
+# $1 path  $2 line (json)  $3 original_line (json)  $4-$7 old_start old_len new_start new_len
+_map_case() {
+    jq -n --arg p "$1" --argjson line "$2" --argjson ol "$3" \
+        '[{thread_id:"PRRT_1",comment_id:101,review_id:900,path:$p,line:$line,original_line:$ol,is_resolved:false,is_outdated:($line==null),url:"https://github.example.com/acme/widgets/pull/7#discussion_r101",body:"x"}]' \
+        > "$TEST_HOME/threads.json"
+    jq -n --arg p "$1" --argjson os "$4" --argjson ol "$5" --argjson ns "$6" --argjson nl "$7" \
+        '[{sha:"aaa1111aaa1111aaa1111aaa1111aaa1111aaa11",short:"aaa1111",subject:"fix: one",type:"fix",files:[{path:$p,hunks:[{old_start:$os,old_len:$ol,new_start:$ns,new_len:$nl}]}]}]' \
+        > "$TEST_HOME/commits.json"
+}
+
+# A classify input with one thread and the given touching/overlapping lists
+# over a fixed commits index: fix1 and fix2 are fixes, docs1 docs, chore1 chore.
+_fx_map() {
+    jq -n --argjson t "$1" --argjson o "$2" '{
+      threads: [{thread_id:"PRRT_1",comment_id:101,review_id:900,path:"src/a.ts",line:42,original_line:40,
+                 is_resolved:false,is_outdated:false,url:"https://github.example.com/acme/widgets/pull/7#discussion_r101",body:"x",
+                 touching:$t,overlapping:$o}],
+      unlinked_commits: [],
+      commits: [
+        {sha:"f1",short:"fix1",subject:"fix: first",type:"fix"},
+        {sha:"f2",short:"fix2",subject:"fix: second",type:"fix"},
+        {sha:"d1",short:"docs1",subject:"docs: readme",type:"docs"},
+        {sha:"c1",short:"chore1",subject:"chore: deps",type:"chore"}]}'
+}
+
+_run_map() {
+    run "$RR" map-threads --threads "$TEST_HOME/threads.json" --review 900 --commits "$TEST_HOME/commits.json" "$@"
+}
+
+@test "map-threads ignores threads from other reviews" {
+    _fx_map_threads | _write threads.json
+    _fx_map_commits | _write commits.json
+    _run_map
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '.threads | map(.comment_id)')" = "[101,102,104]" ]
+}
+
+@test "map-threads: a commit on another path does not touch" {
+    _fx_map_threads | _write threads.json
+    _fx_map_commits | _write commits.json
+    _run_map
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '.threads[] | select(.comment_id == 104) | [.touching, .overlapping]')" = "[[],[]]" ]
+}
+
+@test "map-threads keeps touching and overlapping in commit order" {
+    _fx_map_threads | _write threads.json
+    _fx_map_commits | _write commits.json
+    _run_map
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '.threads[] | select(.comment_id == 101) | [.touching, .overlapping]')" = '[["aaa1111","ddd4444"],["aaa1111"]]' ]
+    [ "$(echo "$output" | jq -c '.threads[] | select(.comment_id == 102) | [.touching, .overlapping]')" = '[["ccc3333","ddd4444"],["ccc3333"]]' ]
+}
+
+@test "map-threads: overlap on original_line within window" {
+    _map_case src/a.ts null 40 45 1 45 1
+    _run_map
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '.threads[0].overlapping')" = '["aaa1111"]' ]
+}
+
+@test "map-threads: overlap on current line via new-side range" {
+    _map_case src/a.ts 42 10 60 1 40 3
+    _run_map
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '.threads[0].overlapping')" = '["aaa1111"]' ]
+}
+
+@test "map-threads: a hunk just outside the window touches but does not overlap" {
+    _map_case src/a.ts null 40 46 1 46 1
+    _run_map
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '[.threads[0].touching, .threads[0].overlapping]')" = '[["aaa1111"],[]]' ]
+}
+
+@test "map-threads --window 0 is exact" {
+    _map_case src/a.ts null 40 41 1 41 1
+    _run_map --window 0
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '.threads[0].overlapping')" = '[]' ]
+    _map_case src/a.ts null 40 40 1 40 1
+    _run_map --window 0
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '.threads[0].overlapping')" = '["aaa1111"]' ]
+}
+
+@test "map-threads: zero-length deletion hunk (old_len 0) still overlaps its anchor line" {
+    _map_case src/b.ts null 12 12 0 13 3
+    _run_map --window 0
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '.threads[0].overlapping')" = '["aaa1111"]' ]
+}
+
+@test "map-threads: a null line never overlaps on the new side" {
+    _map_case src/a.ts null 400 1 1 1 1
+    _run_map
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '[.threads[0].touching, .threads[0].overlapping]')" = '[["aaa1111"],[]]' ]
+}
+
+@test "map-threads: unlinked_commits are commits touching no thread path" {
+    _fx_map_threads | _write threads.json
+    _fx_map_commits | _write commits.json
+    _run_map
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '.unlinked_commits')" = '["bbb2222","eee5555"]' ]
+}
+
+@test "map-threads carries a commits index for later steps" {
+    _fx_map_threads | _write threads.json
+    _fx_map_commits | _write commits.json
+    _run_map
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '.commits | map(.short)')" = '["aaa1111","bbb2222","ccc3333","ddd4444","eee5555"]' ]
+    [ "$(echo "$output" | jq -c '.commits[0] | keys')" = '["sha","short","subject","type"]' ]
+}
+
+@test "map-threads rejects a non-numeric --window" {
+    _fx_map_threads | _write threads.json
+    _fx_map_commits | _write commits.json
+    _run_map --window five
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"--window must be a non-negative integer"* ]]
+}
+
+@test "classify: no touching commit gives untouched with needs_discussion" {
+    _fx_map '[]' '[]' | _write map.json
+    run "$RR" classify --map "$TEST_HOME/map.json"
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '.threads[0] | [.class, .proposed]')" = '["untouched",{"outcome":"needs_discussion","detail":""}]' ]
+    [ "$(echo "$output" | jq -c '.threads[0] | has("suggested")')" = "false" ]
+}
+
+@test "classify: exactly one overlapping commit gives candidate with proposed fixed and that sha" {
+    _fx_map '["fix1","docs1"]' '["fix1"]' | _write map.json
+    run "$RR" classify --map "$TEST_HOME/map.json"
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '.threads[0] | [.class, .proposed]')" = '["candidate",{"outcome":"fixed","sha":"fix1","detail":"fix: first"}]' ]
+}
+
+@test "classify: two overlapping commits give ambiguous, never fixed" {
+    _fx_map '["fix1","fix2"]' '["fix1","fix2"]' | _write map.json
+    run "$RR" classify --map "$TEST_HOME/map.json"
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '.threads[0] | [.class, .proposed]')" = '["ambiguous",{"outcome":"ambiguous"}]' ]
+}
+
+@test "classify: touching but none overlapping gives ambiguous" {
+    _fx_map '["fix1"]' '[]' | _write map.json
+    run "$RR" classify --map "$TEST_HOME/map.json"
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -r '.threads[0].class')" = "ambiguous" ]
+    [ "$(echo "$output" | jq -r '.threads[0].proposed.outcome')" = "ambiguous" ]
+    [ "$(echo "$output" | jq -r '.threads[0].suggested')" = "fix1" ]
+}
+
+@test "classify: ambiguous with one non-docs candidate sets suggested but keeps class ambiguous" {
+    _fx_map '["docs1","fix1","chore1"]' '["docs1","fix1","chore1"]' | _write map.json
+    run "$RR" classify --map "$TEST_HOME/map.json"
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '.threads[0] | [.class, .proposed.outcome, .suggested]')" = '["ambiguous","ambiguous","fix1"]' ]
+}
+
+@test "classify: ambiguous with two non-docs candidates sets no suggested" {
+    _fx_map '["fix1","fix2","docs1"]' '["fix1","fix2","docs1"]' | _write map.json
+    run "$RR" classify --map "$TEST_HOME/map.json"
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '.threads[0] | [.class, has("suggested")]')" = '["ambiguous",false]' ]
+}
+
+@test "classify: suggestion considers overlapping commits only when any overlap" {
+    _fx_map '["fix1","fix2","docs1"]' '["docs1","fix2"]' | _write map.json
+    run "$RR" classify --map "$TEST_HOME/map.json"
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -r '.threads[0].suggested')" = "fix2" ]
+}
+
+@test "classify preserves unlinked_commits and the commits index" {
+    _fx_map_threads | _write threads.json
+    _fx_map_commits | _write commits.json
+    "$RR" map-threads --threads "$TEST_HOME/threads.json" --review 900 --commits "$TEST_HOME/commits.json" > "$TEST_HOME/map.json"
+    run "$RR" classify --map "$TEST_HOME/map.json"
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '.unlinked_commits')" = '["bbb2222","eee5555"]' ]
+    [ "$(echo "$output" | jq -c '.commits | length')" = "5" ]
+    [ "$(echo "$output" | jq -c '.threads | map(.class)')" = '["candidate","candidate","untouched"]' ]
+}
+
+@test "classify never emits outcome fixed for an ambiguous or untouched thread" {
+    local i=0 spec
+    for spec in \
+        '[] []' \
+        '["fix1"] []' \
+        '["fix1","fix2"] ["fix1","fix2"]' \
+        '["docs1","fix1"] ["docs1","fix1"]' \
+        '["fix1","fix2","docs1"] ["fix1","fix2","docs1"]' \
+        '["docs1","chore1"] ["docs1","chore1"]' \
+        '["docs1","chore1"] []' \
+        '["fix1","docs1"] ["fix1"]' ; do
+        # shellcheck disable=SC2086
+        set -- $spec
+        _fx_map "$1" "$2" > "$TEST_HOME/map-$i.json"
+        i=$((i + 1))
+    done
+    [ "$i" -eq 8 ]
+    local f violations=0 verdict
+    for f in "$TEST_HOME"/map-*.json; do
+        verdict="$("$RR" classify --map "$f" | jq -r '
+            [.threads[] | select((.class == "ambiguous" or .class == "untouched") and .proposed.outcome == "fixed")] | length')"
+        [ "$verdict" = "0" ] || violations=$((violations + 1))
+    done
+    [ "$violations" -eq 0 ]
+}
