@@ -287,6 +287,10 @@ cmd_commits() {
     } | jq -s '.'
 }
 
+# Thread line numbers are in the coordinates of the commit the reviewer drafted
+# against, which can predate the review's own commit_id, so hunk overlap is
+# windowed (default 5 lines each side). A miss lands in `ambiguous`, which the
+# gate resolves by hand — the safe direction.
 cmd_map_threads() {
     _parse_args "$@"
     _require_file --threads "$FLAG_threads"
@@ -296,13 +300,57 @@ cmd_map_threads() {
     case "$window" in
         ''|*[!0-9]*) _die "--window must be a non-negative integer" ;;
     esac
-    _die "not implemented: map-threads"
+    jq "$JQ_DEFS"'
+        ($commits[0] | flat) as $cs
+        | ($window | tonumber) as $w
+        | def near($s; $n; $L):
+            ($L != null) and (($s - $w) <= $L) and ($L <= ($s + ([$n, 1] | max) - 1 + $w));
+          (flat | map(select((.review_id | tostring) == $review))) as $ts
+        | ($ts | map(.path) | unique) as $paths
+        | {
+            threads: ($ts | map(. as $t
+                | ($cs | map(select(any(.files[]; .path == $t.path)))) as $touching
+                | ($touching | map(select(
+                      any(.files[] | select(.path == $t.path) | .hunks[];
+                          near(.old_start; .old_len; $t.original_line)
+                          or near(.new_start; .new_len; $t.line))))) as $overlapping
+                | $t + {touching: ($touching | map(.short)),
+                        overlapping: ($overlapping | map(.short))})),
+            unlinked_commits: ($cs
+                | map(select(all(.files[]; .path as $p | any($paths[]; . == $p) | not)))
+                | map(.short)),
+            commits: ($cs | map({sha: .sha, short: .short, subject: .subject, type: .type}))
+          }' \
+        --arg review "$FLAG_review" --arg window "$window" \
+        --slurpfile commits "$FLAG_commits" "$FLAG_threads"
 }
 
+# Policy only. "Fixed" is proposed solely when exactly one commit overlaps the
+# thread; anything less certain is `ambiguous` and must be chosen by a person.
+# Housekeeping commits (docs/chore/style/ci) touch many files, so when they
+# leave exactly one substantive candidate it is offered as `suggested` — a
+# default for the gate, never a change of class.
 cmd_classify() {
     _parse_args "$@"
     _require_file --map "$FLAG_map"
-    _die "not implemented: classify"
+    jq '
+        (.commits // []) as $cs
+        | def commit($short): ([$cs[] | select(.short == $short)] | .[0]);
+          def housekeeping($short): (commit($short).type // "") as $ty
+            | any(("docs", "chore", "style", "ci"); . == $ty);
+          .threads |= map(
+            if (.touching | length) == 0 then
+              . + {class: "untouched", proposed: {outcome: "needs_discussion", detail: ""}}
+            elif (.overlapping | length) == 1 then
+              . + {class: "candidate",
+                   proposed: {outcome: "fixed", sha: .overlapping[0],
+                              detail: (commit(.overlapping[0]).subject // "")}}
+            else
+              (if (.overlapping | length) > 0 then .overlapping else .touching end) as $cands
+              | ([$cands[] | select(housekeeping(.) | not)]) as $substantive
+              | . + {class: "ambiguous", proposed: {outcome: "ambiguous"}}
+              | if ($substantive | length) == 1 then . + {suggested: $substantive[0]} else . end
+            end)' "$FLAG_map"
 }
 
 cmd_dismissed() {
