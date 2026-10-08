@@ -5,7 +5,10 @@ on:
     branches: [main, master]
 jobs:
   check:
-    runs-on: ubuntu-latest
+    # The enterprise origin has no GitHub-hosted runners and its push hook
+    # rejects labels no runner serves; this repo's CI runs on the public mirror.
+    if: github.server_url == 'https://github.com'
+    runs-on: ${{ github.server_url == 'https://github.com' && 'ubuntu-latest' || 'self-hosted' }}
     steps:
       - uses: actions/checkout@v4
       # jq is ambient on ubuntu-latest, but the eval runner and several tests
