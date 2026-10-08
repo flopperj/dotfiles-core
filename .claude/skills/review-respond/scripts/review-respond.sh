@@ -412,11 +412,232 @@ cmd_find_prior() {
         --arg me "$FLAG_me" --arg marker "<!-- review-respond review=${FLAG_review} -->" "$FLAG_comments"
 }
 
+# Candidate emitters for detect-checks. Each prints zero or more
+# {kind,label,cmd,runner} objects; the caller keeps the first per kind in
+# manifest order. `runner` is limited to what parse-test-output can read, so
+# an unknown runner is null and the Testing line says "count not reported"
+# instead of guessing.
+JQ_RUNNER_OF='
+def runner_of($body):
+  if ($body | test("\\bvitest\\b")) then "vitest"
+  elif ($body | test("\\bjest\\b")) then "jest"
+  elif ($body | test("\\bpytest\\b")) then "pytest"
+  elif ($body | test("\\bbats\\b")) then "bats"
+  elif ($body | test("\\bphpunit\\b")) then "phpunit"
+  elif ($body | test("\\bgo test\\b")) then "go"
+  else null end;
+'
+
+_dc_package_json() {
+    local dir="$1" pm
+    [ -f "$dir/package.json" ] || return 0
+    if [ -f "$dir/pnpm-lock.yaml" ]; then pm="pnpm run"
+    elif [ -f "$dir/yarn.lock" ]; then pm="yarn"
+    elif [ -f "$dir/bun.lockb" ] || [ -f "$dir/bun.lock" ]; then pm="bun run"
+    else pm="npm run"
+    fi
+    jq -c "$JQ_RUNNER_OF"'
+        def known: ["vitest","jest","mocha","ava","tap","eslint","biome","prettier","stylelint",
+                    "tsc","tsd","vue-tsc","oxlint","xo","standard"];
+        def words: gsub("^\\s+|\\s+$"; "") | split(" ") | map(select(. != ""));
+        def unwrap:
+          if length > 0 and ((.[0] | test("^[A-Za-z_][A-Za-z0-9_]*=")) or (.[0] | IN("npx", "bunx", "cross-env")))
+          then .[1:] | unwrap else . end;
+        def label_for($name; $body):
+          ($body | words | unwrap) as $w | ($w[0] // "") as $first
+          | if $first == "tsc" then "`" + ($w | join(" ")) + "`"
+            elif ($first | IN(known[])) then $first
+            else $name end;
+        (.scripts // {}) as $s
+        | [ (if ($s.test | type) == "string" then {kind: "test", name: "test"} else empty end),
+            (if ($s.lint | type) == "string" then {kind: "lint", name: "lint"} else empty end),
+            (["typecheck", "type-check", "tsc", "check-types"]
+               | map(select(($s[.] | type) == "string")) | .[0] // empty
+               | {kind: "typecheck", name: .}) ]
+        | .[]
+        | . as $c | $s[$c.name] as $body
+        | {kind: $c.kind, label: label_for($c.name; $body), cmd: ($pm + " " + $c.name),
+           runner: (if $c.kind == "test" then runner_of($body) else null end)}' \
+        --arg pm "$pm" "$dir/package.json"
+}
+
+_dc_makefile() {
+    local dir="$1" target recipe
+    [ -f "$dir/Makefile" ] || return 0
+    local have_lint="false"
+    grep -qE '^lint[[:space:]]*:' "$dir/Makefile" && have_lint="true"
+    while IFS=$'\t' read -r target recipe; do
+        [ -n "$target" ] || continue
+        case "$target" in
+            test)
+                jq -c -n "$JQ_RUNNER_OF"'
+                    runner_of($recipe) as $r
+                    | {kind: "test", label: ($r // "make test"), cmd: "make test", runner: $r}' \
+                    --arg recipe "$recipe" ;;
+            lint)
+                jq -c -n '{kind: "lint", label: "make lint", cmd: "make lint", runner: null}' ;;
+            typecheck)
+                jq -c -n '{kind: "typecheck", label: "make typecheck", cmd: "make typecheck", runner: null}' ;;
+            check)
+                [ "$have_lint" = "true" ] \
+                    || jq -c -n '{kind: "lint", label: "make check", cmd: "make check", runner: null}' ;;
+        esac
+    done < <(awk '
+        /^(test|lint|typecheck|check)[[:space:]]*:/ {
+            cur = $0; sub(/[[:space:]]*:.*/, "", cur); seen[cur] = 1; next
+        }
+        /^\t/ { if (cur != "") recipe[cur] = recipe[cur] " " $0; next }
+        { cur = "" }
+        END { for (t in seen) { r = recipe[t]; gsub(/\t/, " ", r); print t "\t" r } }
+    ' "$dir/Makefile")
+}
+
+_dc_composer() {
+    local dir="$1"
+    [ -f "$dir/composer.json" ] || return 0
+    jq -c '
+        def body: if type == "array" then join(" ") else . end;
+        def tool($b): (["phpunit","pest","phpcs","php-cs-fixer","phpstan","psalm","phplint"]
+                       | map(select(. as $t | $b | test("\\b" + $t + "\\b"))) | .[0]);
+        (.scripts // {}) as $s
+        | [ (if $s.test != null then {kind: "test", name: "test"} else empty end),
+            (["lint", "phpcs"] | map(select($s[.] != null)) | .[0] // empty | {kind: "lint", name: .}),
+            (["phpstan", "psalm"] | map(select($s[.] != null)) | .[0] // empty | {kind: "typecheck", name: .}) ]
+        | .[]
+        | . as $c | ($s[$c.name] | body) as $b
+        | {kind: $c.kind, label: (tool($b) // $c.name), cmd: ("composer " + $c.name),
+           runner: (if $c.kind == "test" and ($b | test("\\bphpunit\\b")) then "phpunit" else null end)}' \
+        "$dir/composer.json"
+}
+
+_dc_python() {
+    local dir="$1"
+    local py="$dir/pyproject.toml"
+    if [ -f "$py" ] || [ -f "$dir/pytest.ini" ] || [ -f "$dir/tox.ini" ] \
+        || { [ -f "$dir/setup.cfg" ] && grep -qE '^\[tool:pytest\]' "$dir/setup.cfg"; }; then
+        jq -c -n '{kind: "test", label: "pytest", cmd: "python -m pytest -q", runner: "pytest"}'
+    fi
+    if { [ -f "$py" ] && grep -qE '^\[tool\.ruff' "$py"; } || [ -f "$dir/ruff.toml" ]; then
+        jq -c -n '{kind: "lint", label: "ruff", cmd: "ruff check .", runner: null}'
+    fi
+    if { [ -f "$py" ] && grep -qE '^\[tool\.mypy' "$py"; } || [ -f "$dir/mypy.ini" ]; then
+        jq -c -n '{kind: "typecheck", label: "mypy", cmd: "mypy .", runner: null}'
+    fi
+}
+
+_dc_go() {
+    local dir="$1"
+    [ -f "$dir/go.mod" ] || return 0
+    jq -c -n '{kind: "test", label: "go", cmd: "go test ./...", runner: "go"}'
+    jq -c -n '{kind: "lint", label: "go vet", cmd: "go vet ./...", runner: null}'
+}
+
 cmd_detect_checks() {
     _parse_args "$@"
     [ -n "$FLAG_dir" ] || _die "--dir is required"
     [ -d "$FLAG_dir" ] || _die "--dir: no such directory: $FLAG_dir"
-    _die "not implemented: detect-checks"
+    {
+        _dc_package_json "$FLAG_dir"
+        _dc_makefile "$FLAG_dir"
+        _dc_composer "$FLAG_dir"
+        _dc_python "$FLAG_dir"
+        _dc_go "$FLAG_dir"
+    } | jq -s '
+        . as $all
+        | ["test", "lint", "typecheck"]
+        | map(. as $k | ($all | map(select(.kind == $k)) | .[0]) // empty)'
+}
+
+# parse-test-output helpers. Each reads the ANSI-stripped log file $1 and sets
+# P_FILES / P_PASSED / P_FAILED ("" = unknown) and P_PARSED.
+_num_before() {
+    # $1 = text, $2 = word -> the number right before "<word>" in text, or ""
+    printf '%s' "$1" | grep -oE "[0-9]+ $2" | tail -1 | grep -oE '^[0-9]+' || true
+}
+
+_pt_vitest() {
+    local tf tl
+    tf="$(grep -E '^[[:space:]]*Test Files[[:space:]]' "$1" | tail -1 || true)"
+    tl="$(grep -E '^[[:space:]]*Tests[[:space:]]+[0-9]' "$1" | tail -1 || true)"
+    P_FILES="$(printf '%s' "$tf" | grep -oE '\([0-9]+\)' | tail -1 | tr -d '()' || true)"
+    [ -n "$P_FILES" ] || P_FILES="$(_num_before "$tf" passed)"
+    P_PASSED="$(_num_before "$tl" passed)"
+    P_FAILED="$(_num_before "$tl" failed)"
+}
+
+_pt_jest() {
+    local sl tl
+    sl="$(grep -E '^Test Suites:' "$1" | tail -1 || true)"
+    tl="$(grep -E '^Tests:' "$1" | tail -1 || true)"
+    P_FILES="$(_num_before "$sl" total)"
+    P_PASSED="$(_num_before "$tl" passed)"
+    P_FAILED="$(_num_before "$tl" failed)"
+}
+
+_pt_pytest() {
+    local line
+    line="$(grep -E '^=+ .*[0-9]+ (passed|failed)' "$1" | tail -1 || true)"
+    P_FILES=""
+    P_PASSED="$(_num_before "$line" passed)"
+    P_FAILED="$(_num_before "$line" failed)"
+    [ -z "$P_FAILED" ] || [ -n "$P_PASSED" ] || P_PASSED=0
+}
+
+_pt_bats() {
+    local line total ok nok
+    line="$(grep -E '^[0-9]+ tests?, [0-9]+ failures?' "$1" | tail -1 || true)"
+    P_FILES=""
+    if [ -n "$line" ]; then
+        total="$(printf '%s' "$line" | grep -oE '^[0-9]+')"
+        P_FAILED="$(printf '%s' "$line" | grep -oE '[0-9]+ failure' | grep -oE '^[0-9]+')"
+        P_PASSED=$((total - P_FAILED))
+        return 0
+    fi
+    ok="$(grep -cE '^ok ' "$1" || true)"
+    nok="$(grep -cE '^not ok ' "$1" || true)"
+    if [ "$((ok + nok))" -gt 0 ]; then
+        P_PASSED="$ok"
+        P_FAILED="$nok"
+    else
+        P_PASSED=""
+        P_FAILED=""
+    fi
+}
+
+_pt_phpunit() {
+    local ok line total failures errors
+    P_FILES=""
+    ok="$(grep -oE 'OK \([0-9]+ tests?' "$1" | tail -1 || true)"
+    if [ -n "$ok" ]; then
+        P_PASSED="$(printf '%s' "$ok" | grep -oE '[0-9]+')"
+        P_FAILED=0
+        return 0
+    fi
+    line="$(grep -E '^Tests: [0-9]+' "$1" | tail -1 || true)"
+    if [ -n "$line" ]; then
+        total="$(printf '%s' "$line" | grep -oE 'Tests: [0-9]+' | grep -oE '[0-9]+')"
+        failures="$(printf '%s' "$line" | grep -oE 'Failures: [0-9]+' | grep -oE '[0-9]+' || true)"
+        errors="$(printf '%s' "$line" | grep -oE 'Errors: [0-9]+' | grep -oE '[0-9]+' || true)"
+        P_FAILED=$(( ${failures:-0} + ${errors:-0} ))
+        P_PASSED=$((total - P_FAILED))
+        return 0
+    fi
+    P_PASSED=""
+    P_FAILED=""
+}
+
+_pt_go() {
+    local ok fails
+    ok="$(grep -cE '^ok[[:space:]]' "$1" || true)"
+    fails="$(grep -cE '^FAIL[[:space:]]' "$1" || true)"
+    P_PASSED=""
+    if [ "$((ok + fails))" -gt 0 ]; then
+        P_FILES="$ok"
+        P_FAILED="$fails"
+    else
+        P_FILES=""
+        P_FAILED=""
+    fi
 }
 
 cmd_parse_test_output() {
@@ -426,7 +647,20 @@ cmd_parse_test_output() {
         '') _die "--runner is required" ;;
         *) _die "unknown runner: $FLAG_runner" ;;
     esac
-    _die "not implemented: parse-test-output"
+    # Not `local`: the EXIT trap runs after this function has returned.
+    PT_LOG="$(mktemp)"
+    trap 'rm -f "$PT_LOG"' EXIT
+    sed -E $'s/\x1b\\[[0-9;?]*[A-Za-z]//g' > "$PT_LOG"
+    P_FILES=""; P_PASSED=""; P_FAILED=""
+    "_pt_$FLAG_runner" "$PT_LOG"
+    # A summary that names a passed count but no failed count means zero failed.
+    [ -z "$P_PASSED" ] || [ -n "$P_FAILED" ] || P_FAILED=0
+    local parsed="false"
+    if [ -n "$P_PASSED" ] || [ -n "$P_FILES" ]; then parsed="true"; fi
+    jq -n --arg r "$FLAG_runner" --arg files "$P_FILES" --arg p "$P_PASSED" --arg f "$P_FAILED" \
+        --argjson parsed "$parsed" '
+        def num: if . == "" then null else tonumber end;
+        {runner: $r, files: ($files | num), tests_passed: ($p | num), tests_failed: ($f | num), parsed: $parsed}'
 }
 
 cmd_render() {

@@ -995,3 +995,355 @@ _run_find_prior() {
     [ "$status" -eq 0 ]
     [ "$output" = "5001" ]
 }
+
+# ---------------------------------------------------------------------------
+# detect-checks — real scratch manifest directories
+# ---------------------------------------------------------------------------
+
+_proj() {
+    PROJ="$TEST_HOME/proj"
+    mkdir -p "$PROJ"
+    export PROJ
+}
+
+_pkg() {
+    # $1 = scripts object (JSON)
+    jq -n --argjson s "$1" '{name:"widgets",private:true,scripts:$s}' > "$PROJ/package.json"
+}
+
+_run_detect() {
+    run "$RR" detect-checks --dir "$PROJ"
+}
+
+@test "detect-checks: npm package with test/lint/typecheck scripts" {
+    _proj
+    _pkg '{"test":"vitest run","lint":"eslint . --ext .ts","typecheck":"tsc --noEmit --skipLibCheck"}'
+    _run_detect
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '.')" = '[{"kind":"test","label":"vitest","cmd":"npm run test","runner":"vitest"},{"kind":"lint","label":"eslint","cmd":"npm run lint","runner":null},{"kind":"typecheck","label":"`tsc --noEmit --skipLibCheck`","cmd":"npm run typecheck","runner":null}]' ]
+}
+
+@test "detect-checks: pnpm lockfile switches the runner prefix" {
+    _proj
+    _pkg '{"test":"vitest run"}'
+    : > "$PROJ/pnpm-lock.yaml"
+    _run_detect
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -r '.[0].cmd')" = "pnpm run test" ]
+}
+
+@test "detect-checks: yarn and bun lockfiles switch the prefix too" {
+    _proj
+    _pkg '{"test":"jest"}'
+    : > "$PROJ/yarn.lock"
+    _run_detect
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -r '.[0].cmd')" = "yarn test" ]
+    rm "$PROJ/yarn.lock"
+    : > "$PROJ/bun.lockb"
+    _run_detect
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -r '.[0].cmd')" = "bun run test" ]
+}
+
+@test "detect-checks: tsc script body becomes the backticked label" {
+    _proj
+    _pkg '{"type-check":"tsc -p tsconfig.json"}'
+    _run_detect
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '.')" = '[{"kind":"typecheck","label":"`tsc -p tsconfig.json`","cmd":"npm run type-check","runner":null}]' ]
+}
+
+@test "detect-checks: env wrappers are skipped when labelling and the runner is inferred" {
+    _proj
+    _pkg '{"test":"cross-env CI=true vitest run --coverage","lint":"node scripts/lint.js"}'
+    _run_detect
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c 'map([.label, .runner])')" = '[["vitest","vitest"],["lint",null]]' ]
+}
+
+@test "detect-checks: a test script with no known runner reports runner null" {
+    _proj
+    _pkg '{"test":"node --test"}'
+    _run_detect
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '.[0] | [.label, .runner]')" = '["test",null]' ]
+}
+
+@test "detect-checks: Makefile test and lint targets" {
+    _proj
+    printf '.PHONY: test lint\n\ntest:\n\tDOTFILES_DIR=$(PWD) bats tests/*.bats\n\nlint:\n\tshellcheck scripts/*.sh\n' > "$PROJ/Makefile"
+    _run_detect
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '.')" = '[{"kind":"test","label":"bats","cmd":"make test","runner":"bats"},{"kind":"lint","label":"make lint","cmd":"make lint","runner":null}]' ]
+}
+
+@test "detect-checks: Makefile target names must match exactly" {
+    _proj
+    printf 'test-unit:\n\tgo test ./...\nlinting:\n\ttrue\ncheck-leakage:\n\ttrue\n' > "$PROJ/Makefile"
+    _run_detect
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '.')" = '[]' ]
+}
+
+@test "detect-checks: Makefile check target maps to lint only without a lint target" {
+    _proj
+    printf 'test:\n\tpytest -q\ncheck:\n\truff check .\n' > "$PROJ/Makefile"
+    _run_detect
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c 'map([.kind, .cmd, .runner])')" = '[["test","make test","pytest"],["lint","make check",null]]' ]
+    printf 'test:\n\tpytest -q\nlint:\n\truff check .\ncheck:\n\truff check .\n' > "$PROJ/Makefile"
+    _run_detect
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c 'map(.cmd)')" = '["make test","make lint"]' ]
+}
+
+@test "detect-checks: composer phpunit and phpstan" {
+    _proj
+    printf '{"scripts":{"test":"phpunit --testdox","lint":"phpcs --standard=PSR12 src","phpstan":"phpstan analyse"}}\n' > "$PROJ/composer.json"
+    _run_detect
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '.')" = '[{"kind":"test","label":"phpunit","cmd":"composer test","runner":"phpunit"},{"kind":"lint","label":"phpcs","cmd":"composer lint","runner":null},{"kind":"typecheck","label":"phpstan","cmd":"composer phpstan","runner":null}]' ]
+}
+
+@test "detect-checks: composer array-valued scripts and psalm" {
+    _proj
+    printf '{"scripts":{"test":["@php vendor/bin/phpunit"],"psalm":"psalm --no-cache"}}\n' > "$PROJ/composer.json"
+    _run_detect
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c 'map([.kind, .label, .runner])')" = '[["test","phpunit","phpunit"],["typecheck","psalm",null]]' ]
+}
+
+@test "detect-checks: pyproject with ruff and mypy" {
+    _proj
+    printf '[project]\nname = "widgets"\n\n[tool.ruff]\nline-length = 100\n\n[tool.mypy]\nstrict = true\n' > "$PROJ/pyproject.toml"
+    _run_detect
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '.')" = '[{"kind":"test","label":"pytest","cmd":"python -m pytest -q","runner":"pytest"},{"kind":"lint","label":"ruff","cmd":"ruff check .","runner":null},{"kind":"typecheck","label":"mypy","cmd":"mypy .","runner":null}]' ]
+}
+
+@test "detect-checks: pytest.ini alone yields only the test command" {
+    _proj
+    printf '[pytest]\ntestpaths = tests\n' > "$PROJ/pytest.ini"
+    _run_detect
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c 'map(.kind)')" = '["test"]' ]
+}
+
+@test "detect-checks: setup.cfg counts only with a [tool:pytest] section" {
+    _proj
+    printf '[metadata]\nname = widgets\n' > "$PROJ/setup.cfg"
+    _run_detect
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '.')" = '[]' ]
+    printf '[metadata]\nname = widgets\n[tool:pytest]\naddopts = -q\n' > "$PROJ/setup.cfg"
+    _run_detect
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c 'map(.kind)')" = '["test"]' ]
+}
+
+@test "detect-checks: go.mod" {
+    _proj
+    printf 'module example.com/acme/widgets\n\ngo 1.22\n' > "$PROJ/go.mod"
+    _run_detect
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '.')" = '[{"kind":"test","label":"go","cmd":"go test ./...","runner":"go"},{"kind":"lint","label":"go vet","cmd":"go vet ./...","runner":null}]' ]
+}
+
+@test "detect-checks: empty dir prints []" {
+    _proj
+    _run_detect
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '.')" = '[]' ]
+}
+
+@test "detect-checks: package.json wins over Makefile for the test kind" {
+    _proj
+    _pkg '{"test":"vitest run"}'
+    printf 'test:\n\tbats tests\nlint:\n\tshellcheck scripts/*.sh\n' > "$PROJ/Makefile"
+    _run_detect
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c 'map([.kind, .cmd])')" = '[["test","npm run test"],["lint","make lint"]]' ]
+}
+
+@test "detect-checks: output is always ordered test, lint, typecheck" {
+    _proj
+    _pkg '{"typecheck":"tsc --noEmit","lint":"eslint .","test":"jest"}'
+    _run_detect
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c 'map(.kind)')" = '["test","lint","typecheck"]' ]
+}
+
+# ---------------------------------------------------------------------------
+# parse-test-output — inline runner logs on stdin
+# ---------------------------------------------------------------------------
+
+_parse() {
+    # $1 = runner; log on stdin
+    run bash -c '"$RR" parse-test-output --runner "$1"' _ "$1"
+}
+
+@test "parse-test-output vitest all passing" {
+    _parse vitest <<'LOG'
+ RUN  v3.1.1 /work/widgets
+
+ ✓ src/a.test.ts (12 tests) 34ms
+ ✓ src/b.test.ts (7 tests) 12ms
+
+ Test Files  159 passed (159)
+      Tests  2753 passed (2753)
+   Start at  10:00:00
+   Duration  12.34s (transform 1.2s, setup 0ms, collect 3.4s, tests 7.1s)
+LOG
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '.')" = '{"runner":"vitest","files":159,"tests_passed":2753,"tests_failed":0,"parsed":true}' ]
+}
+
+@test "parse-test-output vitest with failures sets tests_failed" {
+    _parse vitest <<'LOG'
+ Test Files  1 failed | 158 passed (159)
+      Tests  3 failed | 2750 passed (2753)
+LOG
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '.')" = '{"runner":"vitest","files":159,"tests_passed":2750,"tests_failed":3,"parsed":true}' ]
+}
+
+@test "parse-test-output strips ANSI colour codes" {
+    printf ' \033[2mTest Files\033[22m  \033[1;32m159 passed\033[39;22m (159)\n      \033[2mTests\033[22m  \033[1;32m2753 passed\033[39;22m (2753)\n' > "$TEST_HOME/vitest.log"
+    _parse vitest < "$TEST_HOME/vitest.log"
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '[.files, .tests_passed, .tests_failed, .parsed]')" = '[159,2753,0,true]' ]
+}
+
+@test "parse-test-output jest" {
+    _parse jest <<'LOG'
+PASS src/a.test.ts
+FAIL src/b.test.ts
+  ● renders › shows the thing
+
+Test Suites: 1 failed, 11 passed, 12 total
+Tests:       2 failed, 118 passed, 120 total
+Snapshots:   0 total
+Time:        4.2 s
+LOG
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '.')" = '{"runner":"jest","files":12,"tests_passed":118,"tests_failed":2,"parsed":true}' ]
+    _parse jest <<'LOG'
+Test Suites: 12 passed, 12 total
+Tests:       120 passed, 120 total
+LOG
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '[.files, .tests_passed, .tests_failed]')" = '[12,120,0]' ]
+}
+
+@test "parse-test-output pytest passed and failed" {
+    _parse pytest <<'LOG'
+============================= test session starts ==============================
+collected 122 items
+
+tests/test_a.py ....F.                                                   [ 50%]
+tests/test_b.py .....F                                                   [100%]
+
+========================= 120 passed, 2 failed in 3.21s ========================
+LOG
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '.')" = '{"runner":"pytest","files":null,"tests_passed":120,"tests_failed":2,"parsed":true}' ]
+    _parse pytest <<'LOG'
+=================== 2 failed, 120 passed, 1 skipped in 1.20s ===================
+LOG
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '[.tests_passed, .tests_failed]')" = '[120,2]' ]
+    _parse pytest <<'LOG'
+============================== 50 passed in 0.50s ==============================
+LOG
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '[.tests_passed, .tests_failed]')" = '[50,0]' ]
+}
+
+@test "parse-test-output bats pretty and TAP fallback" {
+    _parse bats <<'LOG'
+ ✓ first thing
+ ✓ second thing
+ ✗ third thing
+   (in test file tests/x.bats, line 9)
+
+3 tests, 1 failure
+LOG
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '.')" = '{"runner":"bats","files":null,"tests_passed":2,"tests_failed":1,"parsed":true}' ]
+    _parse bats <<'LOG'
+ ✓ only thing
+
+1 test, 0 failures
+LOG
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '[.tests_passed, .tests_failed]')" = '[1,0]' ]
+    _parse bats <<'LOG'
+1..3
+ok 1 first thing
+not ok 2 second thing
+# (in test file tests/x.bats, line 9)
+ok 3 third thing
+LOG
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '[.tests_passed, .tests_failed, .parsed]')" = '[2,1,true]' ]
+}
+
+@test "parse-test-output phpunit OK and failure forms" {
+    _parse phpunit <<'LOG'
+PHPUnit 10.5.0 by Sebastian Bergmann and contributors.
+
+.........................                                         25 / 25 (100%)
+
+Time: 00:00.123, Memory: 8.00 MB
+
+OK (25 tests, 60 assertions)
+LOG
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '.')" = '{"runner":"phpunit","files":null,"tests_passed":25,"tests_failed":0,"parsed":true}' ]
+    _parse phpunit <<'LOG'
+FAILURES!
+Tests: 25, Assertions: 60, Failures: 2.
+LOG
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '[.tests_passed, .tests_failed]')" = '[23,2]' ]
+    _parse phpunit <<'LOG'
+ERRORS!
+Tests: 25, Assertions: 60, Errors: 1, Failures: 2.
+LOG
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '[.tests_passed, .tests_failed]')" = '[22,3]' ]
+}
+
+@test "parse-test-output go" {
+    _parse go <<'LOG'
+ok  	example.com/acme/widgets/pkg/a	0.012s
+ok  	example.com/acme/widgets/pkg/b	(cached)
+--- FAIL: TestThing (0.00s)
+FAIL	example.com/acme/widgets/pkg/c	0.100s
+LOG
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '.')" = '{"runner":"go","files":2,"tests_passed":null,"tests_failed":1,"parsed":true}' ]
+}
+
+@test "parse-test-output unrecognised log gives parsed false and null counts" {
+    local runner
+    for runner in vitest jest pytest bats phpunit go; do
+        _parse "$runner" <<'LOG'
+nothing to see here
+LOG
+        [ "$status" -eq 0 ] || return 1
+        [ "$(echo "$output" | jq -c '.')" = "{\"runner\":\"$runner\",\"files\":null,\"tests_passed\":null,\"tests_failed\":null,\"parsed\":false}" ] || {
+            echo "unexpected for $runner: $output"
+            return 1
+        }
+    done
+}
+
+@test "parse-test-output rejects an unknown runner" {
+    _parse mocha <<'LOG'
+  12 passing (1s)
+LOG
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"unknown runner: mocha"* ]]
+}
