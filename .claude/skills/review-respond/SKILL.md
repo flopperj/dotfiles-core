@@ -49,7 +49,7 @@ Every decision is a `scripts/review-respond.sh` subcommand; the token it prints 
 
 1. `git rev-parse HEAD` must equal `headRefOid`, and `git status --porcelain` must be empty. Otherwise stop with: *check out the PR head (`gh pr checkout <n>`) and commit or stash — the Testing line must describe the pushed head.*
 2. `me = $(gh api --hostname <host> user --jq .login)`.
-3. `RUN_DIR=~/.claude/tasks/<project>/review-respond/<n>-pending/` (`<project>` is the repo basename). Rename it to `<n>-<review_id>/` once the review is selected.
+3. `RUN_DIR="$HOME/.claude/tasks/<project>/review-respond/<n>-pending/"` (`<project>` is the repo basename) — an absolute path, never `~/…`: neither bash nor `gh` expands a tilde after `@` or inside a `-F` value, so a `~` here makes the Step 10 update fail with `open ~/…: no such file`. Rename it to `<n>-<review_id>/` once the review is selected.
 
 ### Step 2: Gather
 
@@ -75,7 +75,7 @@ query($owner:String!,$repo:String!,$number:Int!){ repository(owner:$owner,name:$
 gh api --hostname <host> repos/<o>/<r>/issues/<n>/comments --paginate --slurp > <run_dir>/issue-comments.json
 ```
 
-- `<run_dir>` is the literal path from Step 1 — spell it out inside `gh` commands; the `$RUN_DIR` shell variable is fine for `review-respond.sh` calls.
+- `<run_dir>` is the literal **absolute** path from Step 1 (for example `/home/alice/.claude/tasks/widgets/review-respond/79-900`) — spell it out inside `gh` commands; the `$RUN_DIR` shell variable is fine for `review-respond.sh` calls.
 - The thread query extends the shape `briefing` uses for unresolved-thread counts, adding the fields and pagination this skill needs.
 - If the thread query fails, fall back to `gh api --hostname <host> repos/<o>/<r>/pulls/<n>/comments --paginate --slurp > <run_dir>/comments.raw.json` and use `threads --rest` below; tell the user that resolution state is unknown and every thread will count as unresolved.
 - If the timeline query fails, omit `--timeline` in Step 7 (the script then degrades to `NEEDS_LOOK:unknown`).
@@ -230,7 +230,7 @@ This follows `~/.claude/AGENTS.md` § PR Reviews & Comments and § Automated Com
 - Step 6: `detect-checks --dir app` → vitest / eslint / `tsc --noEmit --skipLibCheck`; all exit 0; `parse-test-output --runner vitest` → `{"files":159,"tests_passed":2753,"parsed":true}`.
 - Step 7: `dismissed` → `OK`.
 - Step 9: `find-prior` → `NONE`; the gate shows the body and the evidence table; the user picks `[p]`.
-- Step 10: `gh pr comment 79 --repo github.example.com/acme/widgets --body-file ~/.claude/tasks/widgets/review-respond/79-900/body.md`.
+- Step 10: `gh pr comment 79 --repo github.example.com/acme/widgets --body-file /home/alice/.claude/tasks/widgets/review-respond/79-900/body.md`.
 
 Body posted:
 
@@ -268,7 +268,7 @@ Step 6 runs `CI=true FORCE_COLOR=0 npm run lint`; it exits 1. The skill prints t
 
 ### Example 4 — A re-run updates the earlier comment
 
-The user pushes one more commit and runs `/review-respond` again for the same review. `find-prior --review 900 --me alice` → `5001`, so the gate's default is `[u]pdate #5001`. On confirmation: `gh api --hostname github.example.com -X PATCH repos/acme/widgets/issues/comments/5001 -F body=@~/.claude/tasks/widgets/review-respond/79-900/body.md --jq .html_url`. One summary per review round, kept current.
+The user pushes one more commit and runs `/review-respond` again for the same review. `find-prior --review 900 --me alice` → `5001`, so the gate's default is `[u]pdate #5001`. On confirmation: `gh api --hostname github.example.com -X PATCH repos/acme/widgets/issues/comments/5001 -F body=@/home/alice/.claude/tasks/widgets/review-respond/79-900/body.md --jq .html_url`. One summary per review round, kept current.
 
 ## Responsibility boundaries
 
