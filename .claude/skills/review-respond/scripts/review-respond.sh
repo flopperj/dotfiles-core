@@ -137,28 +137,86 @@ _require_file() {
 }
 
 # ---------------------------------------------------------------------------
+# Shared jq definitions.
+# `gh api --paginate --slurp` yields an array of pages (REST: array of arrays;
+# GraphQL: array of response objects), while a single call yields one page.
+# Every reader accepts both so a caller never has to remember which it saved.
+# ---------------------------------------------------------------------------
+JQ_DEFS='
+def pages: if type == "array" then . else [.] end;
+def flat: if type == "array" then [.[] | if type == "array" then .[] else . end] else [.] end;
+'
+
+# ---------------------------------------------------------------------------
 # Subcommands
 # ---------------------------------------------------------------------------
 cmd_threads() {
     _parse_args "$@"
     if [ -n "$FLAG_graphql" ]; then
         _require_file --graphql "$FLAG_graphql"
+        jq "$JQ_DEFS"'
+            pages
+            | map(.data.repository.pullRequest.reviewThreads.nodes // []) | add // []
+            | map(select(((.comments.nodes // []) | length) > 0))
+            | map(. as $t | .comments.nodes[0] as $c
+                  | {thread_id: $t.id,
+                     comment_id: $c.databaseId,
+                     review_id: $c.pullRequestReview.databaseId,
+                     path: $t.path,
+                     line: $t.line,
+                     original_line: $t.originalLine,
+                     is_resolved: $t.isResolved,
+                     is_outdated: $t.isOutdated,
+                     url: $c.url,
+                     body: $c.body})' "$FLAG_graphql"
     elif [ -n "$FLAG_rest" ]; then
         _require_file --rest "$FLAG_rest"
+        jq "$JQ_DEFS"'
+            flat
+            | map(select(.in_reply_to_id == null))
+            | map({thread_id: null,
+                   comment_id: .id,
+                   review_id: .pull_request_review_id,
+                   path: .path,
+                   line: .line,
+                   original_line: .original_line,
+                   is_resolved: null,
+                   is_outdated: (.line == null),
+                   url: .html_url,
+                   body: .body})' "$FLAG_rest"
     else
         _die "threads needs --graphql <file> or --rest <file>"
     fi
-    _die "not implemented: threads"
 }
 
 cmd_select_review() {
     _parse_args "$@"
     _require_file --reviews "$FLAG_reviews"
-    if [ -z "$FLAG_review" ]; then
-        _require_file --threads "$FLAG_threads"
-        [ -n "$FLAG_author" ] || _die "--author is required"
+    if [ -n "$FLAG_review" ]; then
+        jq -r "$JQ_DEFS"'
+            flat
+            | if any(.[]; (.id | tostring) == $id) then $id else "NONE:review-not-found" end' \
+            --arg id "$FLAG_review" "$FLAG_reviews"
+        return 0
     fi
-    _die "not implemented: select-review"
+    _require_file --threads "$FLAG_threads"
+    [ -n "$FLAG_author" ] || _die "--author is required"
+    # A review qualifies when it still asks for something: CHANGES_REQUESTED, or
+    # any of its threads not known to be resolved (null = unknown, so the REST
+    # fallback counts as unresolved). Author, bot and pending reviews never do.
+    jq -r "$JQ_DEFS"'
+        ($threads[0] | flat) as $ts
+        | flat
+        | map(select((.user.login // "") != $author
+                     and (.user.type // "") != "Bot"
+                     and .state != "PENDING"))
+        | map(. as $r
+              | select($r.state == "CHANGES_REQUESTED"
+                       or any($ts[]; (.review_id | tostring) == ($r.id | tostring)
+                                     and .is_resolved != true)))
+        | if length == 0 then "NONE:no-qualifying-review"
+          else (max_by(.submitted_at // "") | .id | tostring) end' \
+        --arg author "$FLAG_author" --slurpfile threads "$FLAG_threads" "$FLAG_reviews"
 }
 
 cmd_commits() {

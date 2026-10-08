@@ -66,6 +66,88 @@ teardown() {
 }
 
 # ---------------------------------------------------------------------------
+# Fixture builders. Hosts and logins are neutral by rule: github.example.com,
+# acme/widgets, alice (PR author), bob and carol (reviewers).
+# ---------------------------------------------------------------------------
+
+PR_URL="https://github.example.com/acme/widgets/pull/7"
+
+# `gh api graphql --paginate --slurp` output: an ARRAY of page objects. Four
+# thread nodes across two pages; the last node has no comments and is dropped.
+_fx_threads_graphql_pages() {
+    cat <<'JSON'
+[
+  {"data":{"repository":{"pullRequest":{"reviewThreads":{
+    "pageInfo":{"hasNextPage":true,"endCursor":"c1"},
+    "nodes":[
+      {"id":"PRRT_1","isResolved":false,"isOutdated":false,"path":"src/a.ts","line":42,"originalLine":40,
+       "comments":{"nodes":[{"databaseId":101,"url":"https://github.example.com/acme/widgets/pull/7#discussion_r101",
+                              "body":"Nit: rename this","pullRequestReview":{"databaseId":900}}]}},
+      {"id":"PRRT_2","isResolved":true,"isOutdated":true,"path":"src/b.ts","line":null,"originalLine":12,
+       "comments":{"nodes":[{"databaseId":102,"url":"https://github.example.com/acme/widgets/pull/7#discussion_r102",
+                              "body":"Handle the null case","pullRequestReview":{"databaseId":900}}]}}
+    ]}}}}},
+  {"data":{"repository":{"pullRequest":{"reviewThreads":{
+    "pageInfo":{"hasNextPage":false,"endCursor":null},
+    "nodes":[
+      {"id":"PRRT_3","isResolved":false,"isOutdated":false,"path":"README.md","line":3,"originalLine":3,
+       "comments":{"nodes":[{"databaseId":103,"url":"https://github.example.com/acme/widgets/pull/7#discussion_r103",
+                              "body":"Typo","pullRequestReview":{"databaseId":901}}]}},
+      {"id":"PRRT_4","isResolved":false,"isOutdated":false,"path":"src/c.ts","line":9,"originalLine":9,
+       "comments":{"nodes":[]}}
+    ]}}}}}
+]
+JSON
+}
+
+# One page object (the non-slurped shape).
+_fx_threads_graphql_single() {
+    _fx_threads_graphql_pages | jq '.[0]'
+}
+
+# `gh api pulls/7/comments --paginate --slurp` output: an array of arrays.
+# 201 is a reply to 101 and must be dropped.
+_fx_comments_rest_pages() {
+    cat <<'JSON'
+[
+  [
+    {"id":101,"pull_request_review_id":900,"path":"src/a.ts","line":42,"original_line":40,
+     "commit_id":"bbb","original_commit_id":"aaa","body":"Nit: rename this",
+     "html_url":"https://github.example.com/acme/widgets/pull/7#discussion_r101","user":{"login":"bob"}},
+    {"id":201,"pull_request_review_id":900,"in_reply_to_id":101,"path":"src/a.ts","line":42,"original_line":40,
+     "body":"Done","html_url":"https://github.example.com/acme/widgets/pull/7#discussion_r201","user":{"login":"alice"}}
+  ],
+  [
+    {"id":102,"pull_request_review_id":900,"path":"src/b.ts","line":null,"original_line":12,
+     "commit_id":"bbb","original_commit_id":"aaa","body":"Handle the null case",
+     "html_url":"https://github.example.com/acme/widgets/pull/7#discussion_r102","user":{"login":"bob"}}
+  ]
+]
+JSON
+}
+
+# `pulls/7/reviews` after `jq add`: a flat array. alice is the PR author.
+_fx_reviews() {
+    cat <<'JSON'
+[
+  {"id":800,"user":{"login":"alice","type":"User"},"state":"COMMENTED","submitted_at":"2026-10-01T10:00:00Z","commit_id":"aaa0000000000000000000000000000000000000"},
+  {"id":900,"user":{"login":"bob","type":"User"},"state":"CHANGES_REQUESTED","submitted_at":"2026-10-02T10:00:00Z","commit_id":"aaa0000000000000000000000000000000000000"}
+]
+JSON
+}
+
+# Normalized threads (the `threads` output shape) for select-review tests.
+# $1 = review_id, $2 = is_resolved JSON literal (true|false|null)
+_fx_norm_thread() {
+    jq -n --argjson rid "$1" --argjson res "$2" '{thread_id:"PRRT_x",comment_id:(100+$rid),review_id:$rid,path:"src/a.ts",line:42,original_line:40,is_resolved:$res,is_outdated:false,url:"https://github.example.com/acme/widgets/pull/7#discussion_r101",body:"x"}'
+}
+
+_write() {
+    # $1 = file name under TEST_HOME; stdin = content
+    cat > "$TEST_HOME/$1"
+}
+
+# ---------------------------------------------------------------------------
 # Skeleton: usage, dispatch, jq guard
 # ---------------------------------------------------------------------------
 
@@ -113,4 +195,141 @@ teardown() {
             return 1
         }
     done
+}
+
+# ---------------------------------------------------------------------------
+# threads — GraphQL and REST normalization
+# ---------------------------------------------------------------------------
+
+@test "threads --graphql flattens a slurped multi-page response" {
+    _fx_threads_graphql_pages | _write pages.json
+    run "$RR" threads --graphql "$TEST_HOME/pages.json"
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq 'length')" = "3" ]
+    [ "$(echo "$output" | jq -c 'map(.comment_id)')" = "[101,102,103]" ]
+    [ "$(echo "$output" | jq -c 'map(.thread_id)')" = '["PRRT_1","PRRT_2","PRRT_3"]' ]
+    [ "$(echo "$output" | jq -c 'map(.review_id)')" = "[900,900,901]" ]
+    [ "$(echo "$output" | jq -r '.[0].url')" = "$PR_URL#discussion_r101" ]
+    [ "$(echo "$output" | jq -r '.[0].body')" = "Nit: rename this" ]
+    [ "$(echo "$output" | jq -r '.[0].path')" = "src/a.ts" ]
+}
+
+@test "threads --graphql accepts a single response object" {
+    _fx_threads_graphql_single | _write single.json
+    run "$RR" threads --graphql "$TEST_HOME/single.json"
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c 'map(.comment_id)')" = "[101,102]" ]
+}
+
+@test "threads --graphql maps originalLine to original_line and keeps line null when outdated" {
+    _fx_threads_graphql_pages | _write pages.json
+    run "$RR" threads --graphql "$TEST_HOME/pages.json"
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '.[1] | [.line, .original_line, .is_outdated, .is_resolved]')" = "[null,12,true,true]" ]
+    [ "$(echo "$output" | jq -c '.[0] | [.line, .original_line, .is_outdated, .is_resolved]')" = "[42,40,false,false]" ]
+}
+
+@test "threads --rest keeps top-level comments only and sets is_resolved null" {
+    _fx_comments_rest_pages | _write comments.json
+    run "$RR" threads --rest "$TEST_HOME/comments.json"
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c 'map(.comment_id)')" = "[101,102]" ]
+    [ "$(echo "$output" | jq -c 'map(.is_resolved)')" = "[null,null]" ]
+    [ "$(echo "$output" | jq -c 'map(.is_outdated)')" = "[false,true]" ]
+    [ "$(echo "$output" | jq -c 'map(.review_id)')" = "[900,900]" ]
+    [ "$(echo "$output" | jq -c '.[1] | [.line, .original_line]')" = "[null,12]" ]
+    [ "$(echo "$output" | jq -r '.[0].url')" = "$PR_URL#discussion_r101" ]
+}
+
+@test "threads --rest accepts an already-flat comment array" {
+    _fx_comments_rest_pages | jq 'add' | _write flat.json
+    run "$RR" threads --rest "$TEST_HOME/flat.json"
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c 'map(.comment_id)')" = "[101,102]" ]
+}
+
+# ---------------------------------------------------------------------------
+# select-review
+# ---------------------------------------------------------------------------
+
+@test "select-review picks the latest CHANGES_REQUESTED non-author review" {
+    _fx_reviews | jq '. + [{"id":901,"user":{"login":"carol","type":"User"},"state":"CHANGES_REQUESTED","submitted_at":"2026-10-03T10:00:00Z","commit_id":"aaa"}]' | _write reviews.json
+    echo '[]' | _write threads.json
+    run "$RR" select-review --reviews "$TEST_HOME/reviews.json" --threads "$TEST_HOME/threads.json" --author alice
+    [ "$status" -eq 0 ]
+    [ "$output" = "901" ]
+}
+
+@test "select-review picks an APPROVED-then-DISMISSED review that still has unresolved threads" {
+    _fx_reviews | jq '.[1].state = "DISMISSED" | . + [{"id":901,"user":{"login":"carol","type":"User"},"state":"COMMENTED","submitted_at":"2026-10-03T10:00:00Z","commit_id":"aaa"}]' | _write reviews.json
+    { _fx_norm_thread 900 false; _fx_norm_thread 901 true; } | jq -s '.' | _write threads.json
+    run "$RR" select-review --reviews "$TEST_HOME/reviews.json" --threads "$TEST_HOME/threads.json" --author alice
+    [ "$status" -eq 0 ]
+    [ "$output" = "900" ]
+}
+
+@test "select-review ignores the PR author's own reviews" {
+    _fx_reviews | jq '. + [{"id":905,"user":{"login":"alice","type":"User"},"state":"CHANGES_REQUESTED","submitted_at":"2026-10-07T10:00:00Z","commit_id":"aaa"}]' | _write reviews.json
+    echo '[]' | _write threads.json
+    run "$RR" select-review --reviews "$TEST_HOME/reviews.json" --threads "$TEST_HOME/threads.json" --author alice
+    [ "$status" -eq 0 ]
+    [ "$output" = "900" ]
+}
+
+@test "select-review ignores Bot reviewers and PENDING reviews" {
+    _fx_reviews | jq '. + [
+        {"id":902,"user":{"login":"widget-bot[bot]","type":"Bot"},"state":"CHANGES_REQUESTED","submitted_at":"2026-10-04T10:00:00Z","commit_id":"aaa"},
+        {"id":903,"user":{"login":"bob","type":"User"},"state":"PENDING","submitted_at":null,"commit_id":"aaa"}]' | _write reviews.json
+    _fx_norm_thread 903 false | jq -s '.' | _write threads.json
+    run "$RR" select-review --reviews "$TEST_HOME/reviews.json" --threads "$TEST_HOME/threads.json" --author alice
+    [ "$status" -eq 0 ]
+    [ "$output" = "900" ]
+}
+
+@test "select-review skips a COMMENTED review whose threads are all resolved" {
+    _fx_reviews | jq '. + [{"id":904,"user":{"login":"carol","type":"User"},"state":"COMMENTED","submitted_at":"2026-10-06T10:00:00Z","commit_id":"aaa"}]' | _write reviews.json
+    { _fx_norm_thread 904 true; _fx_norm_thread 904 true; } | jq -s '.' | _write threads.json
+    run "$RR" select-review --reviews "$TEST_HOME/reviews.json" --threads "$TEST_HOME/threads.json" --author alice
+    [ "$status" -eq 0 ]
+    [ "$output" = "900" ]
+}
+
+@test "select-review treats null is_resolved as unresolved" {
+    _fx_reviews | jq '. + [{"id":904,"user":{"login":"carol","type":"User"},"state":"COMMENTED","submitted_at":"2026-10-06T10:00:00Z","commit_id":"aaa"}]' | _write reviews.json
+    _fx_norm_thread 904 null | jq -s '.' | _write threads.json
+    run "$RR" select-review --reviews "$TEST_HOME/reviews.json" --threads "$TEST_HOME/threads.json" --author alice
+    [ "$status" -eq 0 ]
+    [ "$output" = "904" ]
+}
+
+@test "select-review --review honors an explicit id" {
+    _fx_reviews | _write reviews.json
+    echo '[]' | _write threads.json
+    run "$RR" select-review --reviews "$TEST_HOME/reviews.json" --threads "$TEST_HOME/threads.json" --author alice --review 800
+    [ "$status" -eq 0 ]
+    [ "$output" = "800" ]
+}
+
+@test "select-review --review unknown id prints NONE:review-not-found" {
+    _fx_reviews | _write reviews.json
+    echo '[]' | _write threads.json
+    run "$RR" select-review --reviews "$TEST_HOME/reviews.json" --threads "$TEST_HOME/threads.json" --author alice --review 123456
+    [ "$status" -eq 0 ]
+    [ "$output" = "NONE:review-not-found" ]
+}
+
+@test "select-review with nothing qualifying prints NONE:no-qualifying-review" {
+    _fx_reviews | jq '.[1].state = "COMMENTED"' | _write reviews.json
+    _fx_norm_thread 900 true | jq -s '.' | _write threads.json
+    run "$RR" select-review --reviews "$TEST_HOME/reviews.json" --threads "$TEST_HOME/threads.json" --author alice
+    [ "$status" -eq 0 ]
+    [ "$output" = "NONE:no-qualifying-review" ]
+}
+
+@test "select-review accepts a slurped array-of-arrays reviews file" {
+    _fx_reviews | jq '[.]' | _write reviews.json
+    echo '[]' | _write threads.json
+    run "$RR" select-review --reviews "$TEST_HOME/reviews.json" --threads "$TEST_HOME/threads.json" --author alice
+    [ "$status" -eq 0 ]
+    [ "$output" = "900" ]
 }
