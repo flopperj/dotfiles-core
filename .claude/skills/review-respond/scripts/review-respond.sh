@@ -219,12 +219,72 @@ cmd_select_review() {
         --arg author "$FLAG_author" --slurpfile threads "$FLAG_threads" "$FLAG_reviews"
 }
 
+# One `git show -U0` per commit, parsed into {path, hunks}. Diff output is pinned
+# against the user's config: explicit a/ b/ prefixes (diff.noprefix,
+# diff.mnemonicPrefix), --no-ext-diff (difftastic and friends), --no-color,
+# --no-renames so a rename is a delete plus an add and every block carries
+# ---/+++ lines with identical header paths. git appends a TAB to the ---/+++
+# path when it contains a space, so that is stripped. Paths git C-quotes
+# (quotes, backslashes, control characters) are left as printed.
+JQ_COMMIT='
+def hunk:
+  capture("^@@ -(?<os>[0-9]+)(,(?<ol>[0-9]+))? \\+(?<ns>[0-9]+)(,(?<nl>[0-9]+))? @@")
+  | {old_start: (.os | tonumber), old_len: ((.ol // "1") | tonumber),
+     new_start: (.ns | tonumber), new_len: ((.nl // "1") | tonumber)};
+def depath: sub("\t$"; "");
+def header_path:
+  ltrimstr("diff --git ") | . as $r | ($r | length) as $n
+  | if ($n >= 5) and ((($n - 5) % 2) == 0) then
+      ((($n - 5) / 2) | floor) as $k | (2 + $k) as $a | (5 + $k) as $b
+      | if ($r[0:2] == "a/") and ($r[$a:$b] == " b/") and ($r[2:$a] == $r[$b:])
+        then $r[2:$a] else null end
+    else null end;
+[inputs] as $lines
+| reduce $lines[] as $l ({files: [], cur: null, minus: null, in_header: false};
+    if ($l | startswith("diff --git ")) then
+      (if .cur != null then .files += [.cur] else . end)
+      | .cur = {path: ($l | header_path), hunks: []} | .minus = null | .in_header = true
+    elif .in_header and ($l | startswith("--- ")) then
+      .minus = ($l | ltrimstr("--- ") | depath)
+    elif .in_header and ($l | startswith("+++ ")) then
+      ($l | ltrimstr("+++ ") | depath) as $plus
+      | .cur.path = (if $plus == "/dev/null" then (.minus | ltrimstr("a/"))
+                     else ($plus | ltrimstr("b/")) end)
+    elif ($l | startswith("@@ ")) then
+      .in_header = false | .cur.hunks += [($l | hunk)]
+    else . end)
+| (if .cur != null then .files += [.cur] else . end)
+| {sha: $sha, short: $short, subject: $subject,
+   type: ([$subject | capture("^(?<t>[a-z]+)(\\(.*\\))?!?:")] | .[0].t // ""),
+   files: (.files | map(select(.path != null)))}
+'
+
 cmd_commits() {
     _parse_args "$@"
     [ -n "$FLAG_base" ] || _die "--base is required"
     local head="${FLAG_head:-HEAD}" dir="${FLAG_repo_dir:-.}"
     [ -d "$dir" ] || _die "--repo-dir: no such directory: $dir"
-    _die "not implemented: commits ($head)"
+    if ! git -C "$dir" cat-file -e "${FLAG_base}^{commit}" 2>/dev/null; then
+        printf 'ERROR:base-missing\n'
+        exit 3
+    fi
+    git -C "$dir" rev-parse --verify --quiet "${head}^{commit}" >/dev/null \
+        || _die "--head: not a commit: $head"
+    if ! git -C "$dir" merge-base --is-ancestor "$FLAG_base" "$head"; then
+        printf 'ERROR:base-not-ancestor\n'
+        exit 3
+    fi
+    local sha short subject
+    {
+        while IFS=$'\x1f' read -r sha short subject; do
+            [ -n "$sha" ] || continue
+            git -C "$dir" -c core.quotepath=false --no-pager show -U0 --format= \
+                --no-color --no-ext-diff --no-renames --src-prefix=a/ --dst-prefix=b/ \
+                --inter-hunk-context=0 "$sha" \
+              | jq -R -n --arg sha "$sha" --arg short "$short" --arg subject "$subject" "$JQ_COMMIT"
+        done < <(git -C "$dir" --no-pager log --first-parent --no-merges --reverse \
+                    --format='%H%x1f%h%x1f%s' "${FLAG_base}..${head}")
+    } | jq -s '.'
 }
 
 cmd_map_threads() {
