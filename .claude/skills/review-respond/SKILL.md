@@ -41,7 +41,7 @@ Every decision is a `scripts/review-respond.sh` subcommand; the token it prints 
 1. Input is a PR URL, a `#N` / `owner/repo#N` reference, or nothing (the current branch's PR).
    - URL: parse `https://<host>/<owner>/<repo>/pull/<n>`.
    - Otherwise run `gh pr view [<n>] --json url,number,headRefOid,headRefName,author,state,reviewDecision,isCrossRepository` and parse `url` the same way.
-2. **Write the parsed host as a literal in every later command**: `gh api --hostname <host> …`, `gh pr comment <n> --repo <host>/<owner>/<repo> …`. Never pass the host through `$GH_HOST` or another shell variable — some enterprise exec guards reject a host taken from a variable, and a literal is what the user can audit in the transcript. On github.com, `--hostname github.com` is fine.
+2. **Write every later `gh` command fully literal** — the parsed host (`gh api --hostname <host> …`, `gh pr comment <n> --repo <host>/<owner>/<repo> …`), owner/repo, number, file paths and `-F` values. Never pass any of them through `$GH_HOST`, `$RUN_DIR` or another shell variable, and never put command substitution inside a `gh` command: enterprise exec guards reject a `gh` command that contains a variable or substitution anywhere in it, not only in the host, and a literal is what the user can audit in the transcript. On github.com, `--hostname github.com` is fine.
 3. On a `gh` auth error, tell the user to run `gh auth login --hostname <host>` and stop.
 4. If `state` is not `OPEN`, warn and continue only on explicit confirmation.
 
@@ -54,7 +54,7 @@ Every decision is a `scripts/review-respond.sh` subcommand; the token it prints 
 ### Step 2: Gather
 
 ```bash
-gh api --hostname <host> repos/<o>/<r>/pulls/<n>/reviews --paginate --slurp | jq 'add' > $RUN_DIR/reviews.json
+gh api --hostname <host> repos/<o>/<r>/pulls/<n>/reviews --paginate --slurp | jq 'add' > <run_dir>/reviews.json
 
 gh api graphql --hostname <host> --paginate --slurp \
   -F owner=<o> -F repo=<r> -F number=<n> -f query='
@@ -64,19 +64,20 @@ query($owner:String!,$repo:String!,$number:Int!,$endCursor:String){
       pageInfo{ hasNextPage endCursor }
       nodes{ id isResolved isOutdated path line originalLine
         comments(first:1){ nodes{ databaseId url body pullRequestReview{ databaseId } } } } } } } }' \
-  > $RUN_DIR/threads.raw.json
+  > <run_dir>/threads.raw.json
 
 gh api graphql --hostname <host> -F owner=<o> -F repo=<r> -F number=<n> -f query='
 query($owner:String!,$repo:String!,$number:Int!){ repository(owner:$owner,name:$repo){ pullRequest(number:$number){
   timelineItems(last:100, itemTypes:[REVIEW_DISMISSED_EVENT]){ nodes{ ... on ReviewDismissedEvent{
     createdAt previousReviewState review{ databaseId author{ login } } } } } } } }' \
-  > $RUN_DIR/timeline.json
+  > <run_dir>/timeline.json
 
-gh api --hostname <host> repos/<o>/<r>/issues/<n>/comments --paginate --slurp > $RUN_DIR/issue-comments.json
+gh api --hostname <host> repos/<o>/<r>/issues/<n>/comments --paginate --slurp > <run_dir>/issue-comments.json
 ```
 
+- `<run_dir>` is the literal path from Step 1 — spell it out inside `gh` commands; the `$RUN_DIR` shell variable is fine for `review-respond.sh` calls.
 - The thread query extends the shape `briefing` uses for unresolved-thread counts, adding the fields and pagination this skill needs.
-- If the thread query fails, fall back to `gh api --hostname <host> repos/<o>/<r>/pulls/<n>/comments --paginate --slurp > $RUN_DIR/comments.raw.json` and use `threads --rest` below; tell the user that resolution state is unknown and every thread will count as unresolved.
+- If the thread query fails, fall back to `gh api --hostname <host> repos/<o>/<r>/pulls/<n>/comments --paginate --slurp > <run_dir>/comments.raw.json` and use `threads --rest` below; tell the user that resolution state is unknown and every thread will count as unresolved.
 - If the timeline query fails, omit `--timeline` in Step 7 (the script then degrades to `NEEDS_LOOK:unknown`).
 
 ### Step 3: Select the review
@@ -158,8 +159,8 @@ This follows `~/.claude/AGENTS.md` § PR Reviews & Comments and § Automated Com
 
 ### Step 10: Post
 
-- New: `gh pr comment <n> --repo <host>/<o>/<r> --body-file $RUN_DIR/body.md`
-- Update: `gh api --hostname <host> -X PATCH repos/<o>/<r>/issues/comments/<id> -F body=@$RUN_DIR/body.md --jq .html_url`
+- New: `gh pr comment <n> --repo <host>/<o>/<r> --body-file <run_dir>/body.md`
+- Update: `gh api --hostname <host> -X PATCH repos/<o>/<r>/issues/comments/<id> -F body=@<run_dir>/body.md --jq .html_url`
 - This is a **PR-level comment, never a pending review**: the "always pending" rule covers inline review comments only.
 - Print the comment URL.
 
@@ -175,7 +176,7 @@ This follows `~/.claude/AGENTS.md` § PR Reviews & Comments and § Automated Com
 
 ## Checklist
 
-- [ ] Host parsed from the PR URL and written as a **literal** `--hostname <host>` / `--repo <host>/<o>/<r>` in every `gh` call (no shell variable)
+- [ ] Every `gh` call is **fully literal** — host (`--hostname <host>` / `--repo <host>/<o>/<r>`), owner/repo, number, paths and `-F` values — with no shell variable or command substitution inside it
 - [ ] `git rev-parse HEAD` equals `headRefOid` and `git status --porcelain` is empty before any check runs
 - [ ] Raw inputs (`reviews.json`, `threads.raw.json`, `timeline.json`, `issue-comments.json`) saved in `RUN_DIR`
 - [ ] The review was chosen by `select-review` (or an explicit `--review`), never by eye; `NONE:*` stops the run
@@ -229,7 +230,7 @@ This follows `~/.claude/AGENTS.md` § PR Reviews & Comments and § Automated Com
 - Step 6: `detect-checks --dir app` → vitest / eslint / `tsc --noEmit --skipLibCheck`; all exit 0; `parse-test-output --runner vitest` → `{"files":159,"tests_passed":2753,"parsed":true}`.
 - Step 7: `dismissed` → `OK`.
 - Step 9: `find-prior` → `NONE`; the gate shows the body and the evidence table; the user picks `[p]`.
-- Step 10: `gh pr comment 79 --repo github.example.com/acme/widgets --body-file $RUN_DIR/body.md`.
+- Step 10: `gh pr comment 79 --repo github.example.com/acme/widgets --body-file ~/.claude/tasks/widgets/review-respond/79-900/body.md`.
 
 Body posted:
 
@@ -267,7 +268,7 @@ Step 6 runs `CI=true FORCE_COLOR=0 npm run lint`; it exits 1. The skill prints t
 
 ### Example 4 — A re-run updates the earlier comment
 
-The user pushes one more commit and runs `/review-respond` again for the same review. `find-prior --review 900 --me alice` → `5001`, so the gate's default is `[u]pdate #5001`. On confirmation: `gh api --hostname github.example.com -X PATCH repos/acme/widgets/issues/comments/5001 -F body=@$RUN_DIR/body.md --jq .html_url`. One summary per review round, kept current.
+The user pushes one more commit and runs `/review-respond` again for the same review. `find-prior --review 900 --me alice` → `5001`, so the gate's default is `[u]pdate #5001`. On confirmation: `gh api --hostname github.example.com -X PATCH repos/acme/widgets/issues/comments/5001 -F body=@~/.claude/tasks/widgets/review-respond/79-900/body.md --jq .html_url`. One summary per review round, kept current.
 
 ## Responsibility boundaries
 
