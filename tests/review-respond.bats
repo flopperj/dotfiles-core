@@ -333,3 +333,181 @@ _write() {
     [ "$status" -eq 0 ]
     [ "$output" = "900" ]
 }
+
+# ---------------------------------------------------------------------------
+# commits — real git in a scratch repo (no mocks)
+# ---------------------------------------------------------------------------
+
+_g() { git -C "$REPO" -c user.email=t@example.com -c user.name=t -c commit.gpgsign=false "$@"; }
+
+_mkrepo() {
+    REPO="$TEST_HOME/repo"
+    export REPO
+    git init -q "$REPO"
+    _g symbolic-ref HEAD refs/heads/main
+}
+
+# Stage everything, commit with $1 as the subject, print the new sha.
+_commit_all() {
+    _g add -A
+    _g commit -q -m "$1"
+    _g rev-parse HEAD
+}
+
+@test "commits lists commits after base in order with short sha, subject and type" {
+    _mkrepo
+    echo seed > "$REPO/a.txt"
+    base="$(_commit_all 'chore: seed')"
+    echo one > "$REPO/a.txt"
+    c1="$(_commit_all 'fix(core): first change')"
+    echo two > "$REPO/README.md"
+    c2="$(_commit_all 'feat(api)!: breaking second')"
+    echo three > "$REPO/a.txt"
+    c3="$(_commit_all 'Tweak things')"
+    run "$RR" commits --base "$base" --repo-dir "$REPO"
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq 'length')" = "3" ]
+    [ "$(echo "$output" | jq -r '.[0].sha')" = "$c1" ]
+    [ "$(echo "$output" | jq -r '.[1].sha')" = "$c2" ]
+    [ "$(echo "$output" | jq -r '.[2].sha')" = "$c3" ]
+    [ "$(echo "$output" | jq -r '.[0].short')" = "$(_g rev-parse --short "$c1")" ]
+    [ "$(echo "$output" | jq -c 'map(.subject)')" = '["fix(core): first change","feat(api)!: breaking second","Tweak things"]' ]
+    [ "$(echo "$output" | jq -c 'map(.type)')" = '["fix","feat",""]' ]
+    [ "$(echo "$output" | jq -r '.[0].files[0].path')" = "a.txt" ]
+}
+
+@test "commits honours --head to stop before the branch tip" {
+    _mkrepo
+    echo seed > "$REPO/a.txt"
+    base="$(_commit_all 'chore: seed')"
+    echo one > "$REPO/a.txt"
+    c1="$(_commit_all 'fix: one')"
+    echo two > "$REPO/a.txt"
+    _commit_all 'fix: two' >/dev/null
+    run "$RR" commits --base "$base" --head main~1 --repo-dir "$REPO"
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c 'map(.sha)')" = "[\"$c1\"]" ]
+}
+
+@test "commits parses single-line and ranged hunk headers" {
+    _mkrepo
+    seq 1 50 > "$REPO/fifty.txt"
+    base="$(_commit_all 'chore: seed')"
+    sed -e 's/^20$/twenty/' -e '40d' "$REPO/fifty.txt" > "$REPO/fifty.tmp"
+    mv "$REPO/fifty.tmp" "$REPO/fifty.txt"
+    _commit_all 'fix: edit 20 and drop 40' >/dev/null
+    run "$RR" commits --base "$base" --repo-dir "$REPO"
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '.[0].files[0].hunks')" = '[{"old_start":20,"old_len":1,"new_start":20,"new_len":1},{"old_start":40,"old_len":1,"new_start":39,"new_len":0}]' ]
+}
+
+@test "commits parses a multi-line hunk with both counts" {
+    _mkrepo
+    seq 1 10 > "$REPO/ten.txt"
+    base="$(_commit_all 'chore: seed')"
+    { seq 1 2; echo a; echo b; echo c; seq 6 10; } > "$REPO/ten.txt"
+    _commit_all 'fix: replace 3-5 with a-c' >/dev/null
+    run "$RR" commits --base "$base" --repo-dir "$REPO"
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '.[0].files[0].hunks')" = '[{"old_start":3,"old_len":3,"new_start":3,"new_len":3}]' ]
+}
+
+@test "commits records multiple files per commit" {
+    _mkrepo
+    echo seed > "$REPO/a.txt"
+    base="$(_commit_all 'chore: seed')"
+    echo one > "$REPO/a.txt"
+    echo two > "$REPO/b.txt"
+    _commit_all 'fix: touch two files' >/dev/null
+    run "$RR" commits --base "$base" --repo-dir "$REPO"
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '.[0].files | map(.path) | sort')" = '["a.txt","b.txt"]' ]
+    [ "$(echo "$output" | jq -c '.[0].files | map(.hunks | length)')" = '[1,1]' ]
+}
+
+@test "commits records a deleted file under its old path with a zero-length new side" {
+    _mkrepo
+    echo gone > "$REPO/gone.txt"
+    echo keep > "$REPO/keep.txt"
+    base="$(_commit_all 'chore: seed')"
+    _g rm -q gone.txt
+    _commit_all 'chore: delete gone' >/dev/null
+    run "$RR" commits --base "$base" --repo-dir "$REPO"
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '.[0].files')" = '[{"path":"gone.txt","hunks":[{"old_start":1,"old_len":1,"new_start":0,"new_len":0}]}]' ]
+}
+
+@test "commits excludes merge commits and merged-in side commits" {
+    _mkrepo
+    echo seed > "$REPO/a.txt"
+    base="$(_commit_all 'chore: seed')"
+    echo main1 > "$REPO/a.txt"
+    m1="$(_commit_all 'fix: on main')"
+    _g checkout -q -b side "$base"
+    echo side1 > "$REPO/side.txt"
+    _commit_all 'feat: on side' >/dev/null
+    _g checkout -q main
+    _g merge -q --no-ff -m 'Merge branch side' side
+    run "$RR" commits --base "$base" --repo-dir "$REPO"
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c 'map(.sha)')" = "[\"$m1\"]" ]
+}
+
+@test "commits prints ERROR:base-missing exit 3 for an unknown sha" {
+    _mkrepo
+    echo seed > "$REPO/a.txt"
+    _commit_all 'chore: seed' >/dev/null
+    run "$RR" commits --base 0000000000000000000000000000000000000001 --repo-dir "$REPO"
+    [ "$status" -eq 3 ]
+    [ "$output" = "ERROR:base-missing" ]
+}
+
+@test "commits prints ERROR:base-not-ancestor exit 3 after history rewrite" {
+    _mkrepo
+    echo seed > "$REPO/a.txt"
+    base="$(_commit_all 'chore: seed')"
+    echo one > "$REPO/a.txt"
+    old="$(_commit_all 'fix: reviewed then rewritten')"
+    _g reset -q --hard "$base"
+    echo one-rewritten > "$REPO/a.txt"
+    _commit_all 'fix: rewritten' >/dev/null
+    run "$RR" commits --base "$old" --repo-dir "$REPO"
+    [ "$status" -eq 3 ]
+    [ "$output" = "ERROR:base-not-ancestor" ]
+}
+
+@test "commits on an empty range prints []" {
+    _mkrepo
+    echo seed > "$REPO/a.txt"
+    head="$(_commit_all 'chore: seed')"
+    run "$RR" commits --base "$head" --repo-dir "$REPO"
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '.')" = "[]" ]
+}
+
+@test "commits handles a path with spaces" {
+    _mkrepo
+    echo hello > "$REPO/my file.txt"
+    base="$(_commit_all 'chore: seed')"
+    echo 'hello world' > "$REPO/my file.txt"
+    _commit_all 'fix: spaced path' >/dev/null
+    run "$RR" commits --base "$base" --repo-dir "$REPO"
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -r '.[0].files[0].path')" = "my file.txt" ]
+    [ "$(echo "$output" | jq -c '.[0].files[0].hunks')" = '[{"old_start":1,"old_len":1,"new_start":1,"new_len":1}]' ]
+}
+
+@test "commits output is unaffected by diff.noprefix and diff.external in the repo config" {
+    _mkrepo
+    echo seed > "$REPO/a.txt"
+    base="$(_commit_all 'chore: seed')"
+    echo one > "$REPO/a.txt"
+    _commit_all 'fix: one' >/dev/null
+    _g config diff.noprefix true
+    _g config diff.external /bin/false
+    _g config color.ui always
+    run "$RR" commits --base "$base" --repo-dir "$REPO"
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -r '.[0].files[0].path')" = "a.txt" ]
+    [ "$(echo "$output" | jq -c '.[0].files[0].hunks')" = '[{"old_start":1,"old_len":1,"new_start":1,"new_len":1}]' ]
+}
