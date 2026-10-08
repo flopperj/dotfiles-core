@@ -203,3 +203,45 @@ EOF
     run bash "$LINT"
     [ "$status" -eq 0 ]
 }
+
+# ---------------------------------------------------------------------------
+# team-lead-waves args shape
+# ---------------------------------------------------------------------------
+# team-lead/SKILL.md tells callers to pass the wave plan as a JSON object;
+# JSON.parse(String(object)) is "[object Object]" and yields a null plan.
+# The behavioral half needs node (optional dependency) and skips without it.
+
+@test "team-lead-waves accepts the wave plan as an object or a JSON string" {
+    local wf="$CORE_DIR/.claude/workflows/team-lead-waves.js"
+    [ -f "$wf" ]
+
+    [ -z "$(grep -E 'JSON\.parse\(String\(args' "$wf" || true)" ]
+    grep -qE '^const plan = planFromArgs\(args\)' "$wf"
+
+    command -v node >/dev/null 2>&1 || skip "node not installed (not a core dependency)"
+
+    local fn
+    fn="$(sed -n '/^function planFromArgs/,/^}/p' "$wf")"
+    [ -n "$fn" ]
+
+    run node -e "$fn
+const plan = { waves: [{ index: 1, tickets: ['PROJ-1'], parallel: false }], domain: 'backend' }
+const cases = [
+  [plan, plan],
+  [JSON.stringify(plan), plan],
+  ['not json', null],
+  ['', null],
+  [undefined, null],
+  [null, null]
+]
+for (const [input, want] of cases) {
+  const got = planFromArgs(input)
+  if (JSON.stringify(got) !== JSON.stringify(want)) {
+    console.error('planFromArgs(' + JSON.stringify(input) + ') = ' + JSON.stringify(got) + ', want ' + JSON.stringify(want))
+    process.exit(1)
+  }
+}
+console.log('ok')"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"ok"* ]]
+}
