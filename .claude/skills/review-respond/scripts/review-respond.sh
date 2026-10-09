@@ -50,6 +50,13 @@ _die() {
     exit 1
 }
 
+# A decision token that must survive `> file`: the skill redirects stdout into
+# a run-dir file, so the token is written to stderr as well.
+_token_both() {
+    printf '%s\n' "$1"
+    printf '%s\n' "$1" >&2
+}
+
 _usage() {
     cat >&2 <<'USAGE'
 usage: review-respond.sh <subcommand> [flags]
@@ -265,13 +272,13 @@ cmd_commits() {
     local head="${FLAG_head:-HEAD}" dir="${FLAG_repo_dir:-.}"
     [ -d "$dir" ] || _die "--repo-dir: no such directory: $dir"
     if ! git -C "$dir" cat-file -e "${FLAG_base}^{commit}" 2>/dev/null; then
-        printf 'ERROR:base-missing\n'
+        _token_both ERROR:base-missing
         exit 3
     fi
     git -C "$dir" rev-parse --verify --quiet "${head}^{commit}" >/dev/null \
         || _die "--head: not a commit: $head"
     if ! git -C "$dir" merge-base --is-ancestor "$FLAG_base" "$head"; then
-        printf 'ERROR:base-not-ancestor\n'
+        _token_both ERROR:base-not-ancestor
         exit 3
     fi
     local sha short subject

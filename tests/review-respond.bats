@@ -467,16 +467,21 @@ _commit_all() {
     [ "$(echo "$output" | jq -c 'map(.sha)')" = "[\"$m1\"]" ]
 }
 
-@test "commits prints ERROR:base-missing exit 3 for an unknown sha" {
+# The ERROR token must reach stderr as well as stdout: the skill redirects
+# stdout into commits.json, and a token that lands only there is swallowed.
+@test "commits prints ERROR:base-missing exit 3 for an unknown sha, on both streams" {
     _mkrepo
     echo seed > "$REPO/a.txt"
     _commit_all 'chore: seed' >/dev/null
-    run "$RR" commits --base 0000000000000000000000000000000000000001 --repo-dir "$REPO"
+    local status=0
+    "$RR" commits --base 0000000000000000000000000000000000000001 --repo-dir "$REPO" \
+        > "$TEST_HOME/out" 2> "$TEST_HOME/err" || status=$?
     [ "$status" -eq 3 ]
-    [ "$output" = "ERROR:base-missing" ]
+    [ "$(cat "$TEST_HOME/out")" = "ERROR:base-missing" ]
+    [ "$(cat "$TEST_HOME/err")" = "ERROR:base-missing" ]
 }
 
-@test "commits prints ERROR:base-not-ancestor exit 3 after history rewrite" {
+@test "commits prints ERROR:base-not-ancestor exit 3 after history rewrite, on both streams" {
     _mkrepo
     echo seed > "$REPO/a.txt"
     base="$(_commit_all 'chore: seed')"
@@ -485,9 +490,12 @@ _commit_all() {
     _g reset -q --hard "$base"
     echo one-rewritten > "$REPO/a.txt"
     _commit_all 'fix: rewritten' >/dev/null
-    run "$RR" commits --base "$old" --repo-dir "$REPO"
+    local status=0
+    "$RR" commits --base "$old" --repo-dir "$REPO" \
+        > "$TEST_HOME/out" 2> "$TEST_HOME/err" || status=$?
     [ "$status" -eq 3 ]
-    [ "$output" = "ERROR:base-not-ancestor" ]
+    [ "$(cat "$TEST_HOME/out")" = "ERROR:base-not-ancestor" ]
+    [ "$(cat "$TEST_HOME/err")" = "ERROR:base-not-ancestor" ]
 }
 
 @test "commits on an empty range prints []" {
