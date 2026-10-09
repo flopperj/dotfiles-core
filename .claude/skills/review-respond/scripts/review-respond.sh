@@ -449,7 +449,8 @@ _dc_package_json() {
             elif ($first | IN(known[])) then $first
             else $name end;
         (.scripts // {}) as $s
-        | [ (if ($s.test | type) == "string" then {kind: "test", name: "test"} else empty end),
+        | [ (if ($s.test | type) == "string" and ($s.test | test("no test specified") | not)
+            then {kind: "test", name: "test"} else empty end),
             (if ($s.lint | type) == "string" then {kind: "lint", name: "lint"} else empty end),
             (["typecheck", "type-check", "tsc", "check-types"]
                | map(select(($s[.] | type) == "string")) | .[0] // empty
@@ -510,10 +511,14 @@ _dc_composer() {
         "$dir/composer.json"
 }
 
+# pytest is emitted only where it is configured; a bare pyproject.toml or
+# tox.ini says nothing about how the project is tested.
 _dc_python() {
     local dir="$1"
     local py="$dir/pyproject.toml"
-    if [ -f "$py" ] || [ -f "$dir/pytest.ini" ] || [ -f "$dir/tox.ini" ] \
+    if { [ -f "$py" ] && grep -qE '^\[tool\.pytest' "$py"; } \
+        || [ -f "$dir/pytest.ini" ] \
+        || { [ -f "$dir/tox.ini" ] && grep -qE '^\[pytest\]' "$dir/tox.ini"; } \
         || { [ -f "$dir/setup.cfg" ] && grep -qE '^\[tool:pytest\]' "$dir/setup.cfg"; }; then
         jq -c -n '{kind: "test", label: "pytest", cmd: "python3 -m pytest", runner: "pytest"}'
     fi
