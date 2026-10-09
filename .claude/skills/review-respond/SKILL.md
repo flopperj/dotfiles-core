@@ -194,7 +194,7 @@ This follows `~/.claude/AGENTS.md` § PR Reviews & Comments and § Automated Com
 
 ## Tools
 
-- **`scripts/review-respond.sh`** — the tested decision core (`tests/review-respond.bats`; shellchecked by `make lint`). No gh or network calls; only `commits` reads git, read-only. Exit codes: 0 ok/decision token, 1 usage or malformed input, 2 render refusal, 3 git precondition.
+- **`scripts/review-respond.sh`** — the tested decision core (`tests/review-respond.bats`; shellchecked by `make lint`). No gh or network calls; only `commits` reads git, read-only. Exit codes: 0 ok/decision token, 1 usage or malformed input (flag values, missing files), 2 render refusal, 3 git precondition, 5 an input file that is not valid JSON (jq's own parse-error status).
   - `threads --graphql <file> | --rest <file>` → normalized thread array (all reviews)
   - `select-review --reviews <file> --threads <file> --author <login> [--review <id>]` → `<review_id>` | `NONE:no-qualifying-review` | `NONE:review-not-found`
   - `commits --base <sha> [--head <ref>] [--repo-dir <dir>]` → commit array with per-file hunks | `ERROR:base-missing` | `ERROR:base-not-ancestor` (exit 3)
