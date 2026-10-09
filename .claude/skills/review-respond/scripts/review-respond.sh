@@ -653,7 +653,12 @@ cmd_parse_test_output() {
     # Not `local`: the EXIT trap runs after this function has returned.
     PT_LOG="$(mktemp)"
     trap 'rm -f "$PT_LOG"' EXIT
-    sed -E $'s/\x1b\\[[0-9;?]*[A-Za-z]//g' > "$PT_LOG"
+    # A runner log is not guaranteed to be valid UTF-8 (one corrupt byte in a
+    # test name is enough). Under a UTF-8 locale BSD sed exits 1 on it, and
+    # BSD grep treats the whole file as binary and matches nothing. The summary
+    # lines read below are ASCII, so the strip runs byte-wise and every
+    # non-ASCII byte is dropped first.
+    LC_ALL=C sed -E $'s/\x1b\\[[0-9;?]*[A-Za-z]//g' | LC_ALL=C tr -d '\200-\377' > "$PT_LOG"
     P_FILES=""; P_PASSED=""; P_FAILED=""
     "_pt_$FLAG_runner" "$PT_LOG"
     # A summary that names a passed count but no failed count means zero failed.
