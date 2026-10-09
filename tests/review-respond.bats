@@ -1080,6 +1080,14 @@ _run_detect() {
     [ "$(echo "$output" | jq -c 'map([.label, .runner])')" = '[["vitest","vitest"],["lint",null]]' ]
 }
 
+@test "detect-checks: npm's placeholder test script is not a test command" {
+    _proj
+    _pkg '{"test":"echo \"Error: no test specified\" && exit 1","lint":"eslint ."}'
+    _run_detect
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c 'map(.kind)')" = '["lint"]' ]
+}
+
 @test "detect-checks: a test script with no known runner reports runner null" {
     _proj
     _pkg '{"test":"node --test"}'
@@ -1132,9 +1140,29 @@ _run_detect() {
     [ "$(echo "$output" | jq -c 'map([.kind, .label, .runner])')" = '[["test","phpunit","phpunit"],["typecheck","psalm",null]]' ]
 }
 
-@test "detect-checks: pyproject with ruff and mypy" {
+@test "detect-checks: pyproject without a pytest section yields no test command" {
     _proj
-    printf '[project]\nname = "widgets"\n\n[tool.ruff]\nline-length = 100\n\n[tool.mypy]\nstrict = true\n' > "$PROJ/pyproject.toml"
+    printf '[project]\nname = "widgets"\n\n[tool.ruff]\nline-length = 100\n' > "$PROJ/pyproject.toml"
+    _run_detect
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c 'map(.kind)')" = '["lint"]' ]
+}
+
+@test "detect-checks: tox.ini counts only with a [pytest] section" {
+    _proj
+    printf '[tox]\nenvlist = py312\n' > "$PROJ/tox.ini"
+    _run_detect
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '.')" = '[]' ]
+    printf '[tox]\nenvlist = py312\n\n[pytest]\naddopts = -ra\n' > "$PROJ/tox.ini"
+    _run_detect
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c 'map(.kind)')" = '["test"]' ]
+}
+
+@test "detect-checks: pyproject with pytest, ruff and mypy" {
+    _proj
+    printf '[project]\nname = "widgets"\n\n[tool.pytest.ini_options]\ntestpaths = ["tests"]\n\n[tool.ruff]\nline-length = 100\n\n[tool.mypy]\nstrict = true\n' > "$PROJ/pyproject.toml"
     _run_detect
     [ "$status" -eq 0 ]
     [ "$(echo "$output" | jq -c '.')" = '[{"kind":"test","label":"pytest","cmd":"python3 -m pytest","runner":"pytest"},{"kind":"lint","label":"ruff","cmd":"ruff check .","runner":null},{"kind":"typecheck","label":"mypy","cmd":"mypy .","runner":null}]' ]
