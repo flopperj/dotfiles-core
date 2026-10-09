@@ -253,7 +253,9 @@ _write() {
 # ---------------------------------------------------------------------------
 
 @test "select-review picks the latest CHANGES_REQUESTED non-author review" {
-    _fx_reviews | jq '. + [{"id":901,"user":{"login":"carol","type":"User"},"state":"CHANGES_REQUESTED","submitted_at":"2026-10-03T10:00:00Z","commit_id":"aaa"}]' | _write reviews.json
+    # The newest review is placed first so that only submitted_at, not input
+    # order, can make it the pick.
+    _fx_reviews | jq '[{"id":901,"user":{"login":"carol","type":"User"},"state":"CHANGES_REQUESTED","submitted_at":"2026-10-03T10:00:00Z","commit_id":"aaa"}] + .' | _write reviews.json
     echo '[]' | _write threads.json
     run "$RR" select-review --reviews "$TEST_HOME/reviews.json" --threads "$TEST_HOME/threads.json" --author alice
     [ "$status" -eq 0 ]
@@ -277,13 +279,25 @@ _write() {
 }
 
 @test "select-review ignores Bot reviewers and PENDING reviews" {
+    # GitHub reports submitted_at null for a PENDING review; this fixture dates
+    # it after bob's so that only the state filter, not the sort key, excludes it.
     _fx_reviews | jq '. + [
         {"id":902,"user":{"login":"widget-bot[bot]","type":"Bot"},"state":"CHANGES_REQUESTED","submitted_at":"2026-10-04T10:00:00Z","commit_id":"aaa"},
-        {"id":903,"user":{"login":"bob","type":"User"},"state":"PENDING","submitted_at":null,"commit_id":"aaa"}]' | _write reviews.json
+        {"id":903,"user":{"login":"bob","type":"User"},"state":"PENDING","submitted_at":"2026-10-05T10:00:00Z","commit_id":"aaa"}]' | _write reviews.json
     _fx_norm_thread 903 false | jq -s '.' | _write threads.json
     run "$RR" select-review --reviews "$TEST_HOME/reviews.json" --threads "$TEST_HOME/threads.json" --author alice
     [ "$status" -eq 0 ]
     [ "$output" = "900" ]
+}
+
+@test "select-review with only bot and PENDING reviews prints NONE:no-qualifying-review" {
+    _fx_reviews | jq '.[1].state = "COMMENTED" | . + [
+        {"id":902,"user":{"login":"widget-bot[bot]","type":"Bot"},"state":"CHANGES_REQUESTED","submitted_at":"2026-10-04T10:00:00Z","commit_id":"aaa"},
+        {"id":903,"user":{"login":"bob","type":"User"},"state":"PENDING","submitted_at":null,"commit_id":"aaa"}]' | _write reviews.json
+    { _fx_norm_thread 900 true; _fx_norm_thread 903 false; } | jq -s '.' | _write threads.json
+    run "$RR" select-review --reviews "$TEST_HOME/reviews.json" --threads "$TEST_HOME/threads.json" --author alice
+    [ "$status" -eq 0 ]
+    [ "$output" = "NONE:no-qualifying-review" ]
 }
 
 @test "select-review skips a COMMENTED review whose threads are all resolved" {
@@ -971,14 +985,16 @@ _run_find_prior() {
 }
 
 @test "find-prior returns the latest when there are duplicates" {
-    _fx_issue_comments | _only_ids '[5005, 5001]' | _write comments.json
+    # Pages reversed so the latest comment comes first in input order and only
+    # the created_at sort can pick it.
+    _fx_issue_comments | _only_ids '[5005, 5001]' | jq 'reverse' | _write comments.json
     _run_find_prior
     [ "$status" -eq 0 ]
     [ "$output" = "5005" ]
 }
 
 @test "find-prior picks my comment out of the full mixed set" {
-    _fx_issue_comments | _write comments.json
+    _fx_issue_comments | jq 'reverse' | _write comments.json
     _run_find_prior
     [ "$status" -eq 0 ]
     [ "$output" = "5005" ]
