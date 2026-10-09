@@ -961,11 +961,13 @@ _run_find_prior() {
     [ "$output" = "NONE" ]
 }
 
-@test "find-prior ignores my comment without the 🤖 prefix" {
+@test "find-prior matches my marked comment without the 🤖 prefix" {
+    # The gate lets the user post without the marker prefix; a re-run must
+    # still find that comment or it would post a duplicate.
     _fx_issue_comments | _only_ids '[5004]' | _write comments.json
     _run_find_prior
     [ "$status" -eq 0 ]
-    [ "$output" = "NONE" ]
+    [ "$output" = "5004" ]
 }
 
 @test "find-prior returns the latest when there are duplicates" {

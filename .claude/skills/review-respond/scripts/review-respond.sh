@@ -395,8 +395,9 @@ cmd_dismissed() {
 }
 
 # Idempotency: a prior summary is recognised only by the exact hidden marker
-# rendered at the end of every body, posted by me, with the 🤖 prefix. Fuzzy
-# text matching could overwrite a teammate's or an unrelated 🤖 comment.
+# rendered at the end of every body, posted by me. The 🤖 prefix is not part
+# of the match because the gate may post without it. Fuzzy text matching
+# could overwrite a teammate's or an unrelated comment.
 cmd_find_prior() {
     _parse_args "$@"
     _require_file --comments "$FLAG_comments"
@@ -405,7 +406,6 @@ cmd_find_prior() {
     jq -r "$JQ_DEFS"'
         flat
         | map(select((.user.login // "") == $me
-                     and ((.body // "") | startswith("🤖"))
                      and ((.body // "") | contains($marker))))
         | if length == 0 then "NONE"
           else (sort_by([(.created_at // ""), .id]) | last | .id | tostring) end' \

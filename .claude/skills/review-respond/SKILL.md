@@ -155,7 +155,7 @@ This follows `~/.claude/AGENTS.md` § PR Reviews & Comments and § Automated Com
 2. Below it, show the evidence table: one line per row with its class and the `touching` / `overlapping` shas, so the user sees why each "Fixed" was proposed.
 3. Run `review-respond.sh find-prior --comments $RUN_DIR/issue-comments.json --review <review_id> --me <me>`. An id makes **update** the default action; `NONE` makes **post** the default.
 4. Menu: `[p]ost` / `[u]pdate #<id>` / `[e]dit` (titles, outcomes, also-found text, reviewer name — then re-render) / `[c]ancel`.
-5. Never post without an explicit choice. If the user explicitly asks for no 🤖 prefix, honor the carve-out and remove the leading `🤖 ` from the body before posting.
+5. Never post without an explicit choice. If the user explicitly asks for no 🤖 prefix, honor the carve-out and remove the leading `🤖 ` from the body before posting; `find-prior` matches on the hidden review marker and `--me` alone, so a re-run still finds and updates that comment.
 
 ### Step 10: Post
 
