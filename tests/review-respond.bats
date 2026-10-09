@@ -155,7 +155,7 @@ _write() {
 @test "no subcommand prints usage and exits 1" {
     run "$RR"
     [ "$status" -eq 1 ]
-    [[ "$output" == *"usage:"* ]]
+    [[ "$output" == *"usage:"* ]] || return 1
     [[ "$output" == *"review-respond.sh <subcommand>"* ]]
 }
 
@@ -1528,9 +1528,9 @@ _render_with() {
         {comment_id:103,title:"C",outcome:"needs_discussion",detail:"needs product input"},
         {comment_id:104,title:"D",outcome:"wont_fix",detail:""}]'
     [ "$status" -eq 0 ]
-    [[ "$output" == *"| [A](https://github.example.com/acme/widgets/pull/79#discussion_r101) | Won't fix: by design |"* ]]
-    [[ "$output" == *"#discussion_r102) | Needs discussion |"* ]]
-    [[ "$output" == *"#discussion_r103) | Needs discussion: needs product input |"* ]]
+    [[ "$output" == *"| [A](https://github.example.com/acme/widgets/pull/79#discussion_r101) | Won't fix: by design |"* ]] || return 1
+    [[ "$output" == *"#discussion_r102) | Needs discussion |"* ]] || return 1
+    [[ "$output" == *"#discussion_r103) | Needs discussion: needs product input |"* ]] || return 1
     [[ "$output" == *"#discussion_r104) | Won't fix |"* ]]
 }
 
@@ -1658,10 +1658,10 @@ _render_with() {
 @test "render: cwd '.' or empty omits the from-clause" {
     _render_with '.testing.cwd = "."'
     [ "$status" -eq 0 ]
-    [[ "$output" == *'**Testing at `4bfe659`**: vitest 159 files'* ]]
+    [[ "$output" == *'**Testing at `4bfe659`**: vitest 159 files'* ]] || return 1
     _render_with 'del(.testing.cwd)'
     [ "$status" -eq 0 ]
-    [[ "$output" == *'**Testing at `4bfe659`**: vitest 159 files'* ]]
+    [[ "$output" == *'**Testing at `4bfe659`**: vitest 159 files'* ]] || return 1
 }
 
 @test "render: files null drops the files clause" {
@@ -1682,7 +1682,7 @@ _render_with() {
 @test "render: non-test checks list with Oxford-free and" {
     _render_with '.testing.checks = [.testing.checks[0], {kind:"lint",label:"eslint",status:"passed"}]'
     [ "$status" -eq 0 ]
-    [[ "$output" == *'; eslint clean.'* ]]
+    [[ "$output" == *'; eslint clean.'* ]] || return 1
     _render_with '.testing.checks += [{kind:"lint",label:"stylelint",status:"passed"}]'
     [ "$status" -eq 0 ]
     [[ "$output" == *'; eslint, `tsc --noEmit --skipLibCheck` and stylelint clean.'* ]]
@@ -1713,10 +1713,10 @@ _render_with() {
 @test "render: three-digit count has no comma, seven-digit has two" {
     _render_with '.testing.checks[0].tests_passed = 999'
     [ "$status" -eq 0 ]
-    [[ "$output" == *'**999 tests passed**'* ]]
+    [[ "$output" == *'**999 tests passed**'* ]] || return 1
     _render_with '.testing.checks[0].tests_passed = 1000'
     [ "$status" -eq 0 ]
-    [[ "$output" == *'**1,000 tests passed**'* ]]
+    [[ "$output" == *'**1,000 tests passed**'* ]] || return 1
     _render_with '.testing.checks[0].tests_passed = 1234567 | .testing.checks[0].files = 2048'
     [ "$status" -eq 0 ]
     [[ "$output" == *'vitest 2,048 files / **1,234,567 tests passed**'* ]]
