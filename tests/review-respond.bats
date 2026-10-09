@@ -1225,6 +1225,21 @@ LOG
     [ "$(echo "$output" | jq -c '[.files, .tests_passed, .tests_failed, .parsed]')" = '[159,2753,0,true]' ]
 }
 
+@test "parse-test-output survives non-UTF-8 bytes in the log under a UTF-8 locale" {
+    # BSD sed exits 1 ("illegal byte sequence") on \xff under a UTF-8 locale,
+    # which under set -e ended the script with no JSON at all; BSD grep then
+    # treats a log holding an invalid byte as binary and matches nothing.
+    printf 'PASS src/a.test.ts\n  renders \xff\xfe garbage\nTest Suites: 1 passed, 1 total\nTests:       2 passed, 2 total\n' > "$TEST_HOME/jest-bytes.log"
+    run bash -c 'LC_ALL=C.UTF-8 "$RR" parse-test-output --runner jest < "$1"' _ "$TEST_HOME/jest-bytes.log"
+    [ "$status" -eq 0 ]
+    echo "$output" | jq -e . >/dev/null
+    [ "$(echo "$output" | jq -c '[.files, .tests_passed, .tests_failed, .parsed]')" = '[1,2,0,true]' ]
+    printf 'Test Suites: 1 passed, 1 total\nTests: \xff\xfe 2 passed, 2 total\n' > "$TEST_HOME/jest-bytes2.log"
+    run bash -c 'LC_ALL=C.UTF-8 "$RR" parse-test-output --runner jest < "$1"' _ "$TEST_HOME/jest-bytes2.log"
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '[.tests_passed, .tests_failed, .parsed]')" = '[2,0,true]' ]
+}
+
 @test "parse-test-output jest" {
     _parse jest <<'LOG'
 PASS src/a.test.ts
