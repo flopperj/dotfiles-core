@@ -61,12 +61,19 @@ const VALID_DOMAINS = ['backend', 'frontend', 'infra', 'unknown']
 
 phase('Plan intake')
 
-let plan = null
-try {
-  plan = JSON.parse(String(args ?? ''))
-} catch (e) {
-  plan = null
+// args is the wave plan: an object when the caller passes JSON values, as
+// team-lead/SKILL.md asks, or a JSON string. String() on an object yields
+// "[object Object]", which parses to nothing.
+function planFromArgs(value) {
+  if (value == null) return null
+  if (typeof value === 'object') return value
+  try {
+    return JSON.parse(String(value))
+  } catch (e) {
+    return null
+  }
 }
+const plan = planFromArgs(args)
 
 const isValidWave = (w) =>
   w !== null &&
