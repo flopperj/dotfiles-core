@@ -223,6 +223,42 @@ to `"cancel"`. On `cancel`/`only`/`single` emit `final_order` equal to
 
 ---
 
+### `review_round_posted`
+
+Emitted by **review-respond** once per run that ends in a post or an update of
+its PR-level review-round summary. Runs that stop earlier (no qualifying
+review, a failing check, a render refusal, cancel at the gate) emit nothing.
+Named consumers: agent-stats (counts by `action`), and the `ambiguous_asked`
+ratio over time shows whether the thread-to-commit hunk window needs tuning.
+
+```json
+{
+  "timestamp": "2026-10-08T10:00:00Z",
+  "event_type": "review_round_posted",
+  "agent": "review-respond",
+  "project": "my-repo",
+  "data": {
+    "pr": 79,
+    "review_id": 900,
+    "action": "post",
+    "rows": 3,
+    "fixed": 3,
+    "wont_fix": 0,
+    "needs_discussion": 0,
+    "ambiguous_asked": 1,
+    "also_found": 2
+  }
+}
+```
+
+`action` is `post` (a new comment) or `update` (the earlier summary for the
+same review was PATCHed). `rows` is the number of threads in the table and
+equals `fixed + wont_fix + needs_discussion`; `ambiguous_asked` counts the rows
+the user had to resolve at the gate before rendering; `also_found` counts the
+commits listed outside the table.
+
+---
+
 ## Hard rules
 
 ### Fail open — never block a pipeline on metrics

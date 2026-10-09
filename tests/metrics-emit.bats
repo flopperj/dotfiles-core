@@ -180,10 +180,23 @@ teardown() {
     [[ "$output" == *"draft-07"* ]]
 }
 
-@test "schema pins the five known event types" {
+@test "schema pins the six known event types" {
     local schema="$DOTFILES_DIR/.claude/evals/schemas/metrics-event.schema.json"
     run jq -r '.properties.event_type.enum | sort | join(",")' "$schema"
-    [ "$output" = "agent_truncated,multi_repo_split,pipeline_complete,swarm_complete,ticket_classified" ]
+    [ "$output" = "agent_truncated,multi_repo_split,pipeline_complete,review_round_posted,swarm_complete,ticket_classified" ]
+}
+
+@test "schema review_round_posted branch requires the row counts and pins action to post|update" {
+    local schema="$DOTFILES_DIR/.claude/evals/schemas/metrics-event.schema.json"
+    run jq -e '
+        [.properties.data.oneOf[] | select(.description | startswith("review_round_posted"))][0]
+        | ((.required | sort) == (["pr","review_id","action","rows","fixed","wont_fix","needs_discussion","ambiguous_asked","also_found"] | sort))
+          and (.properties.action.enum == ["post","update"])
+          and ([.properties.rows, .properties.fixed, .properties.wont_fix, .properties.needs_discussion,
+                .properties.ambiguous_asked, .properties.also_found]
+               | all(.type == "integer" and .minimum == 0))
+    ' "$schema"
+    [ "$status" -eq 0 ] || return 1
 }
 
 # ---------------------------------------------------------------------------

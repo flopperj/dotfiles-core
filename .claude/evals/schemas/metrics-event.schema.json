@@ -12,7 +12,7 @@
     },
     "event_type": {
       "type": "string",
-      "enum": ["ticket_classified", "pipeline_complete", "agent_truncated", "swarm_complete", "multi_repo_split"],
+      "enum": ["ticket_classified", "pipeline_complete", "agent_truncated", "swarm_complete", "multi_repo_split", "review_round_posted"],
       "description": "The type of pipeline event. Extend this enum when new emit points are added with a named consumer."
     },
     "agent": {
@@ -229,6 +229,54 @@
             "final_order": {
               "type": "array",
               "items": { "type": "string" }
+            }
+          }
+        },
+        {
+          "description": "review_round_posted — emitted by review-respond once per run that posts or updates its PR-level review-round summary. Runs that stop earlier (no qualifying review, failing check, render refusal, cancel at the gate) emit nothing. Consumed by agent-stats (counts by action).",
+          "required": ["pr", "review_id", "action", "rows", "fixed", "wont_fix", "needs_discussion", "ambiguous_asked", "also_found"],
+          "properties": {
+            "pr": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Pull request number"
+            },
+            "review_id": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Database id of the review the summary answers"
+            },
+            "action": {
+              "type": "string",
+              "enum": ["post", "update"],
+              "description": "post = a new comment; update = the earlier summary for the same review was PATCHed"
+            },
+            "rows": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Threads in the table; equals fixed + wont_fix + needs_discussion"
+            },
+            "fixed": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "wont_fix": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "needs_discussion": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "ambiguous_asked": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Rows the user had to resolve at the gate before rendering"
+            },
+            "also_found": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Commits listed outside the table"
             }
           }
         }
