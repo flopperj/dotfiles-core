@@ -100,7 +100,7 @@ review-respond.sh map-threads --threads $RUN_DIR/threads.json --review <review_i
 review-respond.sh classify --map $RUN_DIR/map.json > $RUN_DIR/classified.json
 ```
 
-- `ERROR:base-missing` after the fetch retry: stop.
+- `ERROR:base-missing` after the fetch retry: stop. (`commits` prints its `ERROR:*` tokens on stderr as well as stdout, so the `> $RUN_DIR/commits.json` redirect does not hide them.)
 - `ERROR:base-not-ancestor`: the branch was rewritten since the review. Offer `--base $(git merge-base <commit_id> HEAD)` only if `git cat-file -e` succeeds, and only on the user's confirmation; otherwise stop.
 - `map-threads --window <n>` widens or narrows the ±5-line hunk window if the user asks.
 
