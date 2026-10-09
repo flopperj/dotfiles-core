@@ -709,7 +709,8 @@ def test_clause:
   if .parsed == true and .tests_passed != null then
     check_label + " " + (if .files != null then (.files | commas) + " files / " else "" end)
       + "**" + (.tests_passed | commas) + " tests passed**"
-  elif .parsed == true and .files != null then check_label + " " + (.files | commas) + " files passed"
+  elif .parsed == true and .files != null then
+    check_label + " " + (.files | commas) + (if .label == "go" then " packages passed" else " files passed" end)
   else check_label + " passed (count not reported)" end;
 
 . as $in
@@ -724,7 +725,9 @@ def test_clause:
        elif .outcome == "fixed" and ((.sha // "") == "") then "REFUSE:fixed-without-sha:" + (.comment_id | tostring)
        elif .outcome == "fixed" or .outcome == "wont_fix" or .outcome == "needs_discussion" then empty
        else "REFUSE:unknown-outcome:" + (.comment_id | tostring) end) // null) as $row_refusal
-| if $failed != null then "REFUSE:checks-failed:" + $failed
+| if ($in.review.id // null) == null then "REFUSE:missing-review"
+  elif (($in.head.short // "") | tostring) == "" then "REFUSE:missing-head"
+  elif $failed != null then "REFUSE:checks-failed:" + $failed
   elif ($rows | length) == 0 then "REFUSE:empty-rows"
   elif $row_refusal != null then $row_refusal
   else
