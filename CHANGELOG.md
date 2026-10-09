@@ -20,7 +20,8 @@ The review loop had a reviewer half (Scout/Ranger leave comments) and a fixer ha
 
 ### Fixed
 
-- `/code-auditor`: the `code-auditor-score` workflow could receive object-valued `args` and rendered them as `[object Object]`, forcing every scorer to re-derive the target. `describeTarget()` now flattens an object to `key: value` text (a `true` flag becomes its bare key) and the skill tells callers to pass a plain string (#38).
+- `/code-auditor`: the `code-auditor-score` workflow could receive object-valued `args` and rendered them as `[object Object]`, forcing every scorer to re-derive the target. `describeTarget()` now flattens an object to `key: value` text (`false`/`null` entries drop, so a false `autonomous` flag does not match the detection) and the skill tells callers to pass a plain string (#38).
+- `team-lead-waves` workflow: the wave plan was read with `JSON.parse(String(args))`, which is `[object Object]` for the JSON object `team-lead/SKILL.md` asks callers to pass, so every object-shaped call fell through to the prose fallback. `planFromArgs()` accepts the object directly and still parses a JSON string (#40).
 
 ## v1.21.0 — 2026-09-16 (layout-aware installer contract, Optimus turn cap, skill companion files)
 
