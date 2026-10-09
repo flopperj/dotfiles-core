@@ -1619,6 +1619,24 @@ _render_with() {
     [ "$output" = "REFUSE:empty-rows" ]
 }
 
+@test "render: missing head.short refuses with REFUSE:missing-head" {
+    _render_with 'del(.head)'
+    [ "$status" -eq 2 ]
+    [ "$output" = "REFUSE:missing-head" ]
+    _render_with '.head.short = ""'
+    [ "$status" -eq 2 ]
+    [ "$output" = "REFUSE:missing-head" ]
+}
+
+@test "render: missing review.id refuses with REFUSE:missing-review" {
+    _render_with 'del(.review.id)'
+    [ "$status" -eq 2 ]
+    [ "$output" = "REFUSE:missing-review" ]
+    _render_with '.review = null'
+    [ "$status" -eq 2 ]
+    [ "$output" = "REFUSE:missing-review" ]
+}
+
 @test "render: a failing check is reported before any row problem" {
     _render_with '.testing.checks[0].status = "failed" | .rows[0].outcome = "ambiguous"'
     [ "$status" -eq 2 ]
@@ -1652,10 +1670,13 @@ _render_with() {
     [[ "$output" == *': vitest **42 tests passed**; eslint and'* ]]
 }
 
-@test "render: go-style counts with null tests_passed render files passed" {
+@test "render: go counts packages, other runners count files, when tests_passed is null" {
     _render_with '.testing.checks[0] = {kind:"test",label:"go",status:"passed",files:3,tests_passed:null,parsed:true}'
     [ "$status" -eq 0 ]
-    [[ "$output" == *': go 3 files passed; eslint and'* ]]
+    [[ "$output" == *': go 3 packages passed; eslint and'* ]] || return 1
+    _render_with '.testing.checks[0] = {kind:"test",label:"vitest",status:"passed",files:3,tests_passed:null,parsed:true}'
+    [ "$status" -eq 0 ]
+    [[ "$output" == *': vitest 3 files passed; eslint and'* ]]
 }
 
 @test "render: non-test checks list with Oxford-free and" {
