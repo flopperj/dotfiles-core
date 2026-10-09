@@ -31,8 +31,9 @@
 #   render         --input <file>
 #                    -> markdown on stdout (exit 0) | "REFUSE:<reason>" (exit 2)
 #
-# Exit codes: 0 ok/decision token; 1 usage or malformed input; 2 render refusal;
-# 3 git precondition.
+# Exit codes: 0 ok/decision token; 1 usage or malformed input (flag values,
+# missing files); 2 render refusal; 3 git precondition; 5 an input file that
+# is not valid JSON (jq's own parse-error status, passed through by set -e).
 #
 # Normalized thread shape (output of `threads`, input to everything after):
 #   {"thread_id","comment_id","review_id","path","line","original_line",

@@ -26,9 +26,10 @@
 #   render         --input <file>
 #                    -> markdown on stdout (exit 0) | "REFUSE:<reason>" (exit 2)
 #
-#   Exit codes: 0 ok/decision token; 1 usage or malformed input; 2 render refusal;
-#   3 git precondition. No subcommand calls gh or the network; only `commits`
-#   reads git, read-only.
+#   Exit codes: 0 ok/decision token; 1 usage or malformed input (flag values,
+#   missing files); 2 render refusal; 3 git precondition; 5 an input file that
+#   is not valid JSON (jq's own parse-error status). No subcommand calls gh or
+#   the network; only `commits` reads git, read-only.
 #
 # Fixtures are neutral: github.example.com, acme/widgets, alice (author),
 # bob/carol (reviewers). Pure subcommands get inline JSON; `commits` runs
@@ -180,6 +181,13 @@ _write() {
     run bash -c 'PATH="$NOJQ_PATH" bash "$RR" threads --graphql /dev/null'
     [ "$status" -eq 1 ]
     [[ "$output" == *"jq is required"* ]]
+}
+
+@test "an input file that is not JSON exits 5 with jq's parse error" {
+    printf 'not json\n' | _write bad.json
+    run "$RR" find-prior --comments "$TEST_HOME/bad.json" --review 900 --me alice
+    [ "$status" -eq 5 ]
+    [[ "$output" == *"parse error"* ]]
 }
 
 @test "every contract subcommand is dispatched (not reported as unknown)" {
