@@ -1479,6 +1479,32 @@ _render_with() {
     [[ "$output" == *'| Fixed in `651eb74`: line one line two \| three  hidden |'* ]]
 }
 
+@test "render: reviewer_name is sanitized (comment opener, pipe, newline)" {
+    # reviewer_name comes from users/<login> .name, which the reviewer controls;
+    # an unclosed <!-- there would hide the whole body up to the trailing marker.
+    _render_with '.review.reviewer_name = "Bob <!-- x | y\nz"'
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | sed -n '1p')" = '🤖 **Review round: Bob  x \| y z** ([review 900](https://github.example.com/acme/widgets/pull/79#pullrequestreview-900))' ]
+}
+
+@test "render: also_found text is sanitized" {
+    _render_with '.also_found[0].text = "hidden <!-- comment | here"'
+    [ "$status" -eq 0 ]
+    [[ "$output" == *'**Also found:** hidden  comment \| here (`4a4adea`). `request_id` is now forwarded (`19231d6`).'* ]]
+}
+
+@test "render: testing.cwd is sanitized" {
+    _render_with '.testing.cwd = "a|b <!-- c/"'
+    [ "$status" -eq 0 ]
+    [[ "$output" == *'**Testing at `4bfe659`** (from `a\|b  c/`): vitest 159 files'* ]]
+}
+
+@test "render: check labels are sanitized in the Testing line" {
+    _render_with '.testing.checks[1].label = "eslint <!-- x | y" | .testing.checks[0].label = "vitest\nrun"'
+    [ "$status" -eq 0 ]
+    [[ "$output" == *': vitest run 159 files / **2,753 tests passed**; eslint  x \| y and `tsc --noEmit --skipLibCheck` clean.'* ]]
+}
+
 @test "render: failed check refuses with REFUSE:checks-failed and exit 2" {
     _render_with '.testing.checks[1].status = "failed"'
     [ "$status" -eq 2 ]
