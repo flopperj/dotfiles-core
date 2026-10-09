@@ -888,6 +888,30 @@ _run_dismissed() {
     [ "$output" = "NEEDS_LOOK:bob,carol" ]
 }
 
+@test "dismissed: a manual dismissal (pullRequestCommit null) is not a push dismissal" {
+    _fx_reviews_dismissed | _write reviews.json
+    _fx_timeline bob:APPROVED | jq '.data.repository.pullRequest.timelineItems.nodes[0].pullRequestCommit = null' | _write timeline.json
+    _run_dismissed --timeline "$TEST_HOME/timeline.json"
+    [ "$status" -eq 0 ]
+    [ "$output" = "OK" ]
+}
+
+@test "dismissed: a push dismissal carries pullRequestCommit and gives NEEDS_LOOK" {
+    _fx_reviews_dismissed | _write reviews.json
+    _fx_timeline bob:APPROVED | jq --arg sha "$HEAD_SHA" '.data.repository.pullRequest.timelineItems.nodes[0].pullRequestCommit = {commit: {oid: $sha}}' | _write timeline.json
+    _run_dismissed --timeline "$TEST_HOME/timeline.json"
+    [ "$status" -eq 0 ]
+    [ "$output" = "NEEDS_LOOK:bob" ]
+}
+
+@test "dismissed: an event without the pullRequestCommit field still counts (older query)" {
+    _fx_reviews_dismissed | _write reviews.json
+    _fx_timeline bob:APPROVED | jq 'del(.data.repository.pullRequest.timelineItems.nodes[0].pullRequestCommit)' | _write timeline.json
+    _run_dismissed --timeline "$TEST_HOME/timeline.json"
+    [ "$status" -eq 0 ]
+    [ "$output" = "NEEDS_LOOK:bob" ]
+}
+
 @test "dismissed: timeline accepts slurped pages" {
     _fx_reviews_dismissed | _write reviews.json
     _fx_timeline bob:APPROVED | jq '[.]' | _write timeline.json

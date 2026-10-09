@@ -69,7 +69,7 @@ query($owner:String!,$repo:String!,$number:Int!,$endCursor:String){
 gh api graphql --hostname <host> -F owner=<o> -F repo=<r> -F number=<n> -f query='
 query($owner:String!,$repo:String!,$number:Int!){ repository(owner:$owner,name:$repo){ pullRequest(number:$number){
   timelineItems(last:100, itemTypes:[REVIEW_DISMISSED_EVENT]){ nodes{ ... on ReviewDismissedEvent{
-    createdAt previousReviewState review{ databaseId author{ login } } } } } } } }' \
+    createdAt previousReviewState pullRequestCommit{ commit{ oid } } review{ databaseId author{ login } } } } } } } }' \
   > <run_dir>/timeline.json
 
 gh api --hostname <host> repos/<o>/<r>/issues/<n>/comments --paginate --slurp > <run_dir>/issue-comments.json
@@ -128,7 +128,7 @@ For each thread in `classified.json`:
 review-respond.sh dismissed --reviews $RUN_DIR/reviews.json --head <headRefOid> [--timeline $RUN_DIR/timeline.json] [--review-decision <reviewDecision>]
 ```
 
-`NEEDS_LOOK:<logins>` sets `needs_look: true` for the head line; `NEEDS_LOOK:unknown` (no timeline) does the same and the user is told why.
+`NEEDS_LOOK:<logins>` sets `needs_look: true` for the head line; `NEEDS_LOOK:unknown` (no timeline) does the same and the user is told why. Only a dismissal caused by a push counts — GitHub sets `pullRequestCommit` on those events and leaves it null when someone dismissed the review by hand — so the rendered sentence "The push dismissed the approval" is never written for a manual dismissal.
 
 ### Step 8: Build the render input and render
 

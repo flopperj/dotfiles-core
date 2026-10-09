@@ -363,9 +363,13 @@ cmd_classify() {
 
 # REST shows a dismissed review only as state DISMISSED, without the state it
 # had before, so "the push dismissed an approval" needs the GraphQL timeline
-# (ReviewDismissedEvent.previousReviewState). Without a timeline — or with a
-# file holding null from a failed call — the answer degrades to
-# NEEDS_LOOK:unknown whenever any review is DISMISSED and the PR is not approved.
+# (ReviewDismissedEvent.previousReviewState). GitHub sets pullRequestCommit on
+# an event only when a push made the review stale; a manual dismissal has it
+# null and is not a push dismissal. An event without the field at all (a
+# timeline fetched by an older query) still counts, the conservative direction.
+# Without a timeline — or with a file holding null from a failed call — the
+# answer degrades to NEEDS_LOOK:unknown whenever any review is DISMISSED and the
+# PR is not approved.
 cmd_dismissed() {
     _parse_args "$@"
     _require_file --reviews "$FLAG_reviews"
@@ -383,6 +387,7 @@ cmd_dismissed() {
             | pages
             | map(.data.repository.pullRequest.timelineItems.nodes // []) | add // []
             | map(select(.previousReviewState == "APPROVED"))
+            | map(select((has("pullRequestCommit") | not) or .pullRequestCommit != null))
             | map(. as $e | ($e.review.author.login // "") as $login
                   | select($login != "")
                   | select(any($rs[]; (.user.login // "") == $login
