@@ -515,7 +515,7 @@ _dc_python() {
     local py="$dir/pyproject.toml"
     if [ -f "$py" ] || [ -f "$dir/pytest.ini" ] || [ -f "$dir/tox.ini" ] \
         || { [ -f "$dir/setup.cfg" ] && grep -qE '^\[tool:pytest\]' "$dir/setup.cfg"; }; then
-        jq -c -n '{kind: "test", label: "pytest", cmd: "python -m pytest -q", runner: "pytest"}'
+        jq -c -n '{kind: "test", label: "pytest", cmd: "python3 -m pytest", runner: "pytest"}'
     fi
     if { [ -f "$py" ] && grep -qE '^\[tool\.ruff' "$py"; } || [ -f "$dir/ruff.toml" ]; then
         jq -c -n '{kind: "lint", label: "ruff", cmd: "ruff check .", runner: null}'
@@ -574,9 +574,12 @@ _pt_jest() {
     P_FAILED="$(_num_before "$tl" failed)"
 }
 
+# The summary is "=== N passed, M failed in 1.2s ===" normally and a bare
+# "N passed, M failed in 1.2s" under -q; pytest always lists failed and passed
+# before any other count, so a bare line starts with one of them.
 _pt_pytest() {
     local line
-    line="$(grep -E '^=+ .*[0-9]+ (passed|failed)' "$1" | tail -1 || true)"
+    line="$(grep -E '^(=+ .*)?[0-9]+ (passed|failed)' "$1" | tail -1 || true)"
     P_FILES=""
     P_PASSED="$(_num_before "$line" passed)"
     P_FAILED="$(_num_before "$line" failed)"
