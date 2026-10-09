@@ -14,6 +14,7 @@ When the user's prompt starts with an agent name, invoke that agent's skill auto
 | **Retro, ...** | `/swarm-retro` | Analyze last swarm run, find misclassifications, propose heuristic updates |
 | **Auditor, ...** | `/code-auditor` | Complexity audit + auto-route to Scout or Ranger |
 | **Babysit, ...** | `/babysit-prs` | Watch PRs under /loop — CI-gated review / fix / approve / merge with a reversibility gate |
+| **Respond, ...** | `/review-respond` | Post a per-review-round summary to a PR — threads mapped to commits, checks at HEAD, approval-gated |
 | **Sitrep, ...** | `/briefing` | Situation report: sprint status, PRs, CI, stale reviews, suggested actions |
 | **Obligations, ...** | `/obligations` | Create, view, cancel, and evaluate cross-session obligations |
 | **Sync, ...** | `/dotfiles-sync` | Check for dotfiles updates, preview changes, pull and re-run install.sh |
