@@ -686,12 +686,13 @@ def cell:
   | if .outcome == "fixed" then "Fixed in `" + .sha + "`" + with_detail($d)
     elif .outcome == "wont_fix" then "Won't fix" + with_detail($d)
     else "Needs discussion" + with_detail($d) end;
+def check_label: (.label // "") | clean;
 def test_clause:
   if .parsed == true and .tests_passed != null then
-    .label + " " + (if .files != null then (.files | commas) + " files / " else "" end)
+    check_label + " " + (if .files != null then (.files | commas) + " files / " else "" end)
       + "**" + (.tests_passed | commas) + " tests passed**"
-  elif .parsed == true and .files != null then .label + " " + (.files | commas) + " files passed"
-  else .label + " passed (count not reported)" end;
+  elif .parsed == true and .files != null then check_label + " " + (.files | commas) + " files passed"
+  else check_label + " passed (count not reported)" end;
 
 . as $in
 | ($in.rows // []) as $rows
@@ -709,7 +710,7 @@ def test_clause:
   elif ($rows | length) == 0 then "REFUSE:empty-rows"
   elif $row_refusal != null then $row_refusal
   else
-    (["🤖 **Review round: " + ($in.review.reviewer_name // "" | tostring) + "** ([review " + $rid
+    (["🤖 **Review round: " + ($in.review.reviewer_name // "" | clean) + "** ([review " + $rid
       + "](" + $pr + "#pullrequestreview-" + $rid + "))"]) as $header
     | (["Head is now `" + $short + "`."
         + (if $in.needs_look == true then " The push dismissed the approval, so this needs another look." else "" end)]) as $head
@@ -717,13 +718,13 @@ def test_clause:
        + ($rows | map("| [" + (.title | clean_title) + "](" + $pr + "#discussion_r" + (.comment_id | tostring)
                       + ") | " + cell + " |"))) as $table
     | (($in.also_found // []) | if length == 0 then [] else
-         ["**Also found:** " + (map(.text + " (" + (.shas | map("`" + . + "`") | join(", ")) + ").") | join(" "))] end) as $also
+         ["**Also found:** " + (map(((.text // "") | clean) + " (" + (.shas | map("`" + . + "`") | join(", ")) + ").") | join(" "))] end) as $also
     | ("**Testing at `" + $short + "`**"
-       + (if (($in.testing.cwd // "") != "") and ($in.testing.cwd != ".") then " (from `" + $in.testing.cwd + "`)" else "" end)) as $prefix
+       + (if (($in.testing.cwd // "") != "") and ($in.testing.cwd != ".") then " (from `" + ($in.testing.cwd | clean) + "`)" else "" end)) as $prefix
     | (if ($checks | length) == 0 then [$prefix + ": no test, lint, or typecheck command detected."]
        else
          (([$checks[] | select(.kind == "test") | test_clause])
-          + ([$checks[] | select(.kind != "test") | .label] | if length == 0 then [] else [oxford + " clean"] end)) as $clauses
+          + ([$checks[] | select(.kind != "test") | check_label] | if length == 0 then [] else [oxford + " clean"] end)) as $clauses
          | [$prefix + ": " + ($clauses | join("; ")) + "."]
        end) as $testing
     | (["<!-- review-respond review=" + $rid + " -->"]) as $marker
