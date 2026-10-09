@@ -1119,7 +1119,15 @@ _run_detect() {
     printf '[project]\nname = "widgets"\n\n[tool.ruff]\nline-length = 100\n\n[tool.mypy]\nstrict = true\n' > "$PROJ/pyproject.toml"
     _run_detect
     [ "$status" -eq 0 ]
-    [ "$(echo "$output" | jq -c '.')" = '[{"kind":"test","label":"pytest","cmd":"python -m pytest -q","runner":"pytest"},{"kind":"lint","label":"ruff","cmd":"ruff check .","runner":null},{"kind":"typecheck","label":"mypy","cmd":"mypy .","runner":null}]' ]
+    [ "$(echo "$output" | jq -c '.')" = '[{"kind":"test","label":"pytest","cmd":"python3 -m pytest","runner":"pytest"},{"kind":"lint","label":"ruff","cmd":"ruff check .","runner":null},{"kind":"typecheck","label":"mypy","cmd":"mypy .","runner":null}]' ]
+}
+
+@test "detect-checks: the pytest command uses python3 and leaves the summary rule intact" {
+    _proj
+    printf '[pytest]\ntestpaths = tests\n' > "$PROJ/pytest.ini"
+    _run_detect
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -r '.[0].cmd')" = "python3 -m pytest" ]
 }
 
 @test "detect-checks: pytest.ini alone yields only the test command" {
@@ -1258,6 +1266,26 @@ LOG
 LOG
     [ "$status" -eq 0 ]
     [ "$(echo "$output" | jq -c '[.tests_passed, .tests_failed]')" = '[50,0]' ]
+}
+
+@test "parse-test-output pytest quiet mode: bare summary line without the = rule" {
+    _parse pytest <<'LOG'
+..                                                                       [100%]
+2 passed in 0.01s
+LOG
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '[.tests_passed, .tests_failed, .parsed]')" = '[2,0,true]' ]
+    _parse pytest <<'LOG'
+.F.                                                                      [100%]
+1 failed, 2 passed in 0.02s
+LOG
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '[.tests_passed, .tests_failed, .parsed]')" = '[2,1,true]' ]
+    _parse pytest <<'LOG'
+3 passed, 1 skipped, 2 warnings in 0.30s
+LOG
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '[.tests_passed, .tests_failed]')" = '[3,0]' ]
 }
 
 @test "parse-test-output bats pretty and TAP fallback" {
