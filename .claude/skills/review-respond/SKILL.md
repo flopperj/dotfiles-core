@@ -118,8 +118,8 @@ For each thread in `classified.json`:
 
 1. Pick `cwd`: the repo root when `review-respond.sh detect-checks --dir .` is non-empty; otherwise the top-level directory containing the most thread paths that has a manifest.
 2. If the project's `.claude/CLAUDE.md` names test / lint / typecheck commands, they replace the detected ones.
-3. Run each with `CI=true FORCE_COLOR=0 <cmd> > $RUN_DIR/check-<label>.log 2>&1` and record the exit code (`CI=true` keeps vitest and jest out of watch mode).
-4. Pipe each **test** log through `review-respond.sh parse-test-output --runner <runner> < $RUN_DIR/check-<label>.log` to get the real counts. A `parsed:false` result is reported as "count not reported", never guessed.
+3. Run each with `CI=true FORCE_COLOR=0 <cmd> > $RUN_DIR/check-<kind>.log 2>&1` and record the exit code (`CI=true` keeps vitest and jest out of watch mode). Logs are named by `kind` (`test`, `lint`, `typecheck` — one of each per run), not by label, which can hold backticks or spaces.
+4. Pipe the **test** log through `review-respond.sh parse-test-output --runner <runner> < $RUN_DIR/check-test.log` to get the real counts. A `parsed:false` result is reported as "count not reported", never guessed.
 5. **If any exit code is non-zero: show the last 40 lines of that log, say the summary will not be posted, and stop.** Re-running after a fix is the user's or Cyrus's job, not this skill's.
 
 ### Step 7: Dismissal
@@ -264,7 +264,7 @@ The user answers `ccc3333`; the row becomes ``Fixed in `ccc3333` ``. Had `render
 
 ### Example 3 — A failing lint run stops before the draft
 
-Step 6 runs `CI=true FORCE_COLOR=0 npm run lint`; it exits 1. The skill prints the last 40 lines of `$RUN_DIR/check-eslint.log`, says *the summary will not be posted while a check fails at HEAD*, and stops. Nothing is drafted; `render` would in any case refuse with `REFUSE:checks-failed:eslint`. Fixing the lint error is a job for the user or `/cyrus-tdd-engineer`; `/review-respond` is re-run afterwards.
+Step 6 runs `CI=true FORCE_COLOR=0 npm run lint`; it exits 1. The skill prints the last 40 lines of `$RUN_DIR/check-lint.log`, says *the summary will not be posted while a check fails at HEAD*, and stops. Nothing is drafted; `render` would in any case refuse with `REFUSE:checks-failed:eslint`. Fixing the lint error is a job for the user or `/cyrus-tdd-engineer`; `/review-respond` is re-run afterwards.
 
 ### Example 4 — A re-run updates the earlier comment
 
