@@ -230,6 +230,7 @@ Launch one `team-lead` subagent per domain cluster. Each receives:
 - The cluster of enriched tickets with their classifications
 - The domain tag
 - `swarm_mode: true`, `execution_mode: autonomous`
+- `unbounded: true` if the swarm was invoked with it
 - `parent_story_key` if this swarm originated from a Story decomposition
 
 Team leads handle dependency detection, domain context injection, and
@@ -347,6 +348,7 @@ Launch one `cyrus-tdd-engineer` subagent per ticket. Pass:
 - Repo root (absolute path — only when the ticket carries a `repo:<name>` label; omit otherwise)
 - `swarm_mode: true`
 - `execution_mode: autonomous`
+- `unbounded: true` if the swarm was invoked with it
 - `ticket_complexity: simple`
 
 **Medium tickets (Optimus -> Cyrus):**
@@ -357,6 +359,7 @@ Launch one `optimus-planner` subagent per ticket. Pass:
 - Repo root (absolute path — only when the ticket carries a `repo:<name>` label; omit otherwise)
 - `swarm_mode: true`
 - `execution_mode: autonomous`
+- `unbounded: true` if the swarm was invoked with it
 - `ticket_complexity: medium`
 
 The Optimus skill auto-approves the Cyrus handoff in autonomous mode.
@@ -371,6 +374,7 @@ Each attempt runs the full `aristotle-deconstructor` pipeline. Pass:
 - Repo root (absolute path — only when the ticket carries a `repo:<name>` label; omit otherwise)
 - `swarm_mode: true`
 - `execution_mode: autonomous`
+- `unbounded: true` if the swarm was invoked with it
 - `ticket_complexity: complex`
 
 The best attempt is selected based on:
@@ -668,8 +672,9 @@ If emit fails, log and continue.
   orchestrate ticket-pickup, which orchestrates the pipeline agents.
   Composition all the way down.
 - **Autonomous mode flows downstream.** Ticket Swarm passes
-  `execution_mode: autonomous` and `swarm_mode: true` to all downstream
-  skills, which pass them to their downstream agents.
+  `execution_mode: autonomous` and `swarm_mode: true` (plus `unbounded: true`
+  when the swarm was invoked with it) to all downstream skills, which pass
+  them to their downstream agents.
 - **NEVER create PRs manually.** Always delegate to
   `/pr-create-from-commits`. No raw `gh pr create`, no `gh api`, no
   manual PR body construction. The skill handles templates, Jira, and

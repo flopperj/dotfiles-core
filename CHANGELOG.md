@@ -1,6 +1,24 @@
 # Changelog
 
 > **How to update:** The pre-commit hook (`scripts/pre-commit.sh`) is auto-installed by `install.sh`. It runs a fast leakage check (`scripts/check-no-leakage.sh`) and re-renders the generated `CLAUDE.md.generated` and `AGENTS.md.generated` files on every commit. A pre-push gate (`scripts/pre-push.sh`, also auto-installed) scans every outgoing commit's tree and metadata before it leaves the machine. CI runs lint, consult-grammar, and the test suite (including synthetic-token leakage mechanism tests) on every PR; the company-token scan is a separate step that runs only when guard data is present on the runner. If you bypass the hooks or work in a context where hooks cannot run, keep this file current manually. Each release heading links to the diff on the public mirror.
+## v1.23.0 — 2026-10-16 (turn-cap continuation, `unbounded` opt-in, Aristotle turn cap)
+
+Long workflows kept stopping at agent turn caps, and the only recovery was to shrink the scope or raise `maxTurns` and restart the session. Both threw away the truncated agent's work. A headless probe on Claude Code 2.1.301 (an agent capped at 3 turns, given a 10-step task) showed that `maxTurns` applies per invocation: each `SendMessage` resume of the same agent got a fresh budget, kept its context, never redid a step, and finished after three resumes. The probe also showed that the harness now prefixes a capped agent's result with a note saying it stopped at its turn limit.
+
+### Added
+
+- **Continuation before halt.** `agent-turn-cap-warning.md` § *Continuation*: on truncation the orchestrator resumes the same agent with `SendMessage`, waits for the background task notification, and re-checks. The default budget is 2 continuations per invocation. The existing pipeline halt and swarm skip apply only once the budget is exhausted, and the halt message now offers "continue" as its first option.
+- **`unbounded` opt-in.** "no turn limit", "ignore turn limits", "unbounded turn limit" or `--unbounded` in a request lifts the continuation budget for that task. It is recorded as the flag `unbounded: true` and forwarded wherever `swarm_mode`/`execution_mode` are: aristotle-deconstructor, optimus-planner, forge, ticket-pickup, ticket-swarm, team-lead, and the `team-lead-waves` workflow (new optional `unbounded` arg, appended to each pipeline's flags).
+- **Stall guard.** In both modes, continuation stops after two consecutive resumes that report no new progress.
+- **Harness-note detection.** Claude Code's turn-limit note counts as confirmed truncation; a missing sentinel stays the fallback signal for hosts that add no note.
+- `agent_truncated` metric: `detection` gains `harness_turn_limit_note`, and the optional fields `continuations`, `resolution` (`completed_after_continuation` / `halted` / `skipped`) and `unbounded` are added. It is emitted once per capped invocation after resolution, including runs that a continuation completed. Legacy events stay valid.
+- Tests: the schema test for the new metric fields, and an export test that the continuation contract survives into every portable copy of the turn-cap doc.
+
+### Changed
+
+- **Aristotle `maxTurns` 20 → 40.** It was the tightest cap by far for an agent that reads widely before its five phases. Frontmatter changes load on the next Claude Code session.
+- The "never auto-retry" hard rule is narrowed to re-sending the original prompt. Resuming the same agent is the sanctioned path. A new hard rule says to check git state and artifacts before treating truncation as lost work, because an agent can finish its real work and run out of turns during wrap-up.
+
 ## v1.22.0 — 2026-10-08 (review-respond)
 
 The review loop had a reviewer half (Scout/Ranger leave comments) and a fixer half (`/babysit-prs --fix` hands blockers to Cyrus) but no author-side report: nothing told the reviewer, thread by thread, what happened to each comment after a round. `/review-respond` fills that gap and only summarizes.

@@ -100,7 +100,7 @@ If Section 12 of the plan says "Sequential execution recommended," note this to 
 
 Wait for user input. Do not proceed without explicit approval.
 
-**In autonomous mode:** Log the plan summary and auto-proceed to Step 3 (Cyrus). Use sequential execution (`i`) unless Section 12 explicitly provides a wave table with parallelizable steps, in which case use parallel (`ip`). Forward `swarm_mode`, `execution_mode` flags, and the plan file path (resolved from Step 0's `plan_base`) to Cyrus.
+**In autonomous mode:** Log the plan summary and auto-proceed to Step 3 (Cyrus). Use sequential execution (`i`) unless Section 12 explicitly provides a wave table with parallelizable steps, in which case use parallel (`ip`). Forward `swarm_mode`, `execution_mode`, `unbounded` flags, and the plan file path (resolved from Step 0's `plan_base`) to Cyrus.
 
 ### Step 3: Launch Cyrus (if approved)
 
@@ -166,7 +166,7 @@ This keeps a single plan file as the source of truth rather than producing disco
 - **Aristotle can be inserted upstream.** If the user picks "a" (gated mode), launch `aristotle-deconstructor` with the problem, then feed its output back to Optimus per the aristotle-deconstructor skill's handoff contract (the Aristotelian Move, irreducible truths, assumptions stripped, constraints, and the Implementation Handoff brief).
 - **Each agent runs as a subagent** to keep the main context clean.
 - **Enforce boundaries at the handoff.** You are the orchestrator — if Optimus strays into implementation, filter its output before passing to Cyrus.
-- **Forward swarm flags.** When `swarm_mode` and `execution_mode` are present, pass them through to the Cyrus skill invocation.
+- **Forward swarm flags.** When `swarm_mode`, `execution_mode`, or `unbounded` are present, pass them through to the Cyrus skill invocation.
 
 ## Checklist
 
@@ -377,7 +377,7 @@ In autonomous/swarm mode, after writing the plan file, report its path back to t
 
 ## Truncation handling
 
-When this skill invokes Optimus via the `Agent` tool, the orchestrator must verify the returned response contains the `<<task-complete>>` sentinel before consuming its output. See `~/.claude/_shared/agent-turn-cap-warning.md` for the detection rule, halt/skip behavior, and the `agent_truncated` metric to emit. A truncated Optimus plan is especially dangerous because Cyrus consumes it directly — partial section coverage means partial implementation.
+When this skill invokes Optimus via the `Agent` tool, the orchestrator must verify the returned response contains the `<<task-complete>>` sentinel before consuming its output. See `~/.claude/_shared/agent-turn-cap-warning.md` for the detection rule, continuation budget, halt/skip behavior, and the `agent_truncated` metric to emit. A truncated Optimus plan is especially dangerous because Cyrus consumes it directly — partial section coverage means partial implementation.
 
 ## Maintenance
 
