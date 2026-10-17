@@ -63,6 +63,8 @@ Cyrus may receive work from different sources:
 - Branch name (already checked out by the swarm orchestrator)
 - `swarm_mode: true` — changes completion behavior (see below)
 - `execution_mode: autonomous` — gates are pre-approved by the user
+- `unbounded: true` — the user opted out of the turn-cap continuation budget
+  (see `~/.claude/_shared/agent-turn-cap-warning.md`)
 - `ticket_complexity: simple | medium | complex` — determines which
   reviewer to auto-trigger: `simple` → Scout (direct); `medium` → **Code auditor** (analyzes the diff, then routes to Scout or Ranger); `complex` → Ranger (direct)
 

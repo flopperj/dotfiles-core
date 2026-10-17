@@ -7,10 +7,10 @@ The five reasoning agents have `maxTurns` set in their frontmatter — Aristotle
 The sentinel remains required for every `Agent`-tool call orchestrated from SKILL.md prose.
 
 <!-- BEGIN CORE-ONLY -->
-Stages executed by a saved workflow script are **exempt**: `agent()` with a `schema` returns a validated object or `null`, which is itself the completion signal — a sentinel adds nothing there. Workflow-owned stages also emit **no** `agent_truncated` metric: a `null` return is the workflow-native truncation/failure signal, handled by the workflow's own degradation rules and the invoking skill's invoke → validate → fall-back contract. The `agent_truncated` metric stays live for prose-orchestrated calls, where sentinel-absence is the detection rule below.
+Stages executed by a saved workflow script are **exempt**: `agent()` with a `schema` returns a validated object or `null`, which is itself the completion signal — a sentinel adds nothing there. Workflow-owned stages also emit **no** `agent_truncated` metric: a `null` return is the workflow-native truncation/failure signal, handled by the workflow's own degradation rules and the invoking skill's invoke → validate → fall-back contract. The `agent_truncated` metric stays live for prose-orchestrated calls, where the detection signals below apply.
 <!-- END CORE-ONLY -->
 <!-- PORTABLE-ONLY
-Stages executed by a saved workflow script are **exempt**: `agent()` with a `schema` returns a validated object or `null`, which is itself the completion signal — a sentinel adds nothing there. A `null` return is the workflow-native truncation/failure signal, handled by the workflow's own degradation rules and the invoking skill's invoke → validate → fall-back contract. For prose-orchestrated calls, sentinel-absence is the detection rule below.
+Stages executed by a saved workflow script are **exempt**: `agent()` with a `schema` returns a validated object or `null`, which is itself the completion signal — a sentinel adds nothing there. A `null` return is the workflow-native truncation/failure signal, handled by the workflow's own degradation rules and the invoking skill's invoke → validate → fall-back contract. For prose-orchestrated calls, the detection signals below apply.
 -->
 
 ## Detection
@@ -39,7 +39,7 @@ When a run is truncated, resume **the same agent** rather than re-running it:
 **Continuation budget:**
 
 - **Default: 2 continuations** per agent invocation. This absorbs the common case of an agent that needed a bit more room, and still bounds a looping agent.
-- **Unbounded: on explicit user request for this task.** When the user's request says "no turn limit", "ignore turn limits", "unbounded", or passes `--unbounded`, continue until the sentinel appears, the agent states a blocker, or the stall guard below fires. The opt-in covers that one task only. Record it as the flag `unbounded: true`; every skill that forwards `swarm_mode` and `execution_mode` to downstream skills forwards `unbounded` alongside them, so a chained or swarmed run honours it at every stage.
+- **Unbounded: on explicit user request for this task.** When the user's request says "no turn limit", "ignore turn limits", "unbounded turn limit", or passes `--unbounded`, continue until the sentinel appears, the agent states a blocker, or the stall guard below fires. The opt-in covers that one task only. Record it as the flag `unbounded: true`; every skill that forwards `swarm_mode` and `execution_mode` to downstream skills forwards `unbounded` alongside them, so a chained or swarmed run honours it at every stage.
 - **Stall guard (both modes).** If two consecutive continuations report no new progress — the same step, no new files, commits or findings — stop continuing. The agent is looping, and more turns will not fix it.
 
 Continuation is **not** a retry. A retry re-sends the original prompt and discards the work; a continuation resumes the same context from where it stopped. The rule against auto-retry below still holds.
