@@ -290,3 +290,39 @@ console.log('ok')"
     [ "$status" -eq 0 ]
     [[ "$output" == *"ok"* ]]
 }
+
+@test "team-lead-waves prompt carries unbounded only when plan.unbounded is boolean true" {
+    local wf="$CORE_DIR/.claude/workflows/team-lead-waves.js"
+    [ -f "$wf" ]
+
+    command -v node >/dev/null 2>&1 || skip "node not installed (not a core dependency)"
+
+    local code
+    code="$(awk '/^function planFromArgs/ {on=1} on {print} on && /^const pipelinePromptFor/ {seen=1} seen && /^}/ {exit}' "$wf")"
+    [ -n "$code" ]
+    printf '%s\n' "$code" | grep -q 'pipelinePromptFor' || return 1
+
+    printf '%s\n' "$code" > "$SCRATCH/prompt-logic.js"
+    run node -e "
+const fs = require('fs')
+const code = fs.readFileSync(process.argv[1], 'utf8')
+const promptFor = (args) => new Function('args', code + '; return pipelinePromptFor(\"PROJ-1\", 1, \"\")')(args)
+const base = { waves: [{ index: 1, tickets: ['PROJ-1'], parallel: false }] }
+const cases = [
+  [{ ...base, unbounded: true }, true],
+  [{ ...base, unbounded: false }, false],
+  [{ ...base, unbounded: 'true' }, false],
+  [base, false],
+  [JSON.stringify({ ...base, unbounded: true }), true]
+]
+for (const [input, want] of cases) {
+  const got = promptFor(input).includes('unbounded: true')
+  if (got !== want) {
+    console.error('unbounded in prompt for ' + JSON.stringify(input) + ' = ' + got + ', want ' + want)
+    process.exit(1)
+  }
+}
+console.log('ok')" "$SCRATCH/prompt-logic.js"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"ok"* ]]
+}

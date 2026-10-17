@@ -219,6 +219,7 @@ If the user picks `swarm` (or autonomous mode auto-selects it):
    - `parent_story_key`: the Story/Epic ticket key
    - `execution_mode`: forward from caller (or default `gated`)
    - `swarm_mode`: forward from caller if present
+   - `unbounded`: forward from caller if present
 2. ticket-swarm skips its JQL harvest (Step 1 Source A) and uses the
    provided child tickets directly.
 3. Transition the parent Story to "In Progress" if available.
@@ -427,9 +428,9 @@ blocker — stop this ticket and surface the failure. Otherwise auto-select
    delegate to swarm. Do NOT report success.
 4. **On success:** delegate exactly like Step 2.5's "Delegating to
    ticket-swarm" block — `child_tickets` = the created keys,
-   `parent_story_key` = the parent ticket key, `execution_mode` and
-   `swarm_mode` forwarded from the caller. Transition the parent to
-   "In Progress" and add a plain-language parent comment naming the split
+   `parent_story_key` = the parent ticket key, `execution_mode`,
+   `swarm_mode` and `unbounded` forwarded from the caller. Transition the
+   parent to "In Progress" and add a plain-language parent comment naming the split
    and merge order, e.g.:
    `🤖 This ticket spans two repositories, so I split it into one sub-task per repo: PROJ-1235 (other-repo), PROJ-1236 (my-repo). Merge order: other-repo first, then my-repo. Each sub-task will post its own updates.`
    All Jira operations are best-effort.
@@ -603,6 +604,7 @@ Launch the `cyrus-tdd-engineer` skill. Pass:
 - Jira ticket key for commit messages
 - Execution mode (from caller or default `gated`)
 - `swarm_mode` flag if invoked by ticket-swarm
+- `unbounded` flag (forward from caller if present)
 
 **Medium -> Optimus -> Cyrus:**
 Launch the `optimus-planner` skill. Pass:
@@ -610,6 +612,7 @@ Launch the `optimus-planner` skill. Pass:
 - Jira ticket key
 - Execution mode
 - `swarm_mode` flag if applicable
+- `unbounded` flag (forward from caller if present)
 
 The Optimus skill handles its own gate and Cyrus handoff.
 
@@ -619,6 +622,7 @@ Launch the `aristotle-deconstructor` skill. Pass:
 - Jira ticket key
 - Execution mode
 - `swarm_mode` flag if applicable
+- `unbounded` flag (forward from caller if present)
 
 The Aristotle skill handles its own gates and downstream handoffs.
 
