@@ -125,7 +125,7 @@
           }
         },
         {
-          "description": "agent_truncated — emitted by pipeline skills when a reasoning agent's response is missing the <<task-complete>> sentinel (suspected maxTurns truncation)",
+          "description": "agent_truncated — emitted by pipeline skills once per agent invocation that hit its maxTurns cap, after continuation resolves (completed, halted, or skipped)",
           "required": ["max_turns", "detection", "context"],
           "properties": {
             "max_turns": {
@@ -135,8 +135,8 @@
             },
             "detection": {
               "type": "string",
-              "enum": ["missing_completion_sentinel"],
-              "description": "How the truncation was detected"
+              "enum": ["missing_completion_sentinel", "harness_turn_limit_note"],
+              "description": "How the truncation was detected — harness_turn_limit_note when Claude Code's turn-limit note was present, missing_completion_sentinel otherwise"
             },
             "context": {
               "type": "string",
@@ -146,6 +146,20 @@
             "parent_skill": {
               "type": "string",
               "description": "Name of the skill that invoked the truncated agent. Optional."
+            },
+            "continuations": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "SendMessage continuations sent to the same agent before resolution. Optional for legacy events; treated as 0 when absent."
+            },
+            "resolution": {
+              "type": "string",
+              "enum": ["completed_after_continuation", "halted", "skipped"],
+              "description": "How the cap hit resolved — a continuation finished the work, the pipeline halted for the user, or swarm mode skipped the ticket. Optional for legacy events."
+            },
+            "unbounded": {
+              "type": "boolean",
+              "description": "True when the user lifted the continuation budget for this task. Optional; treated as false when absent."
             }
           }
         },
