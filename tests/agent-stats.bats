@@ -103,6 +103,28 @@ _seed_splits() {
     done
 }
 
+# Write a fixture metrics.jsonl for project $1 with $2 review_round_posted
+# events carrying action "post" and $3 carrying action "update".
+_seed_review_rounds() {
+    local project="$1" post_count="$2" update_count="$3"
+    local now i
+    now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    mkdir -p "$TASKS_DIR/$project"
+    : > "$TASKS_DIR/$project/metrics.jsonl"
+    i=0
+    while [ "$i" -lt "$post_count" ]; do
+        echo "{\"timestamp\":\"$now\",\"event_type\":\"review_round_posted\",\"agent\":\"review-respond\",\"project\":\"$project\",\"data\":{\"pr\":$((70 + i)),\"review_id\":$((900 + i)),\"action\":\"post\",\"rows\":3,\"fixed\":2,\"wont_fix\":0,\"needs_discussion\":1,\"ambiguous_asked\":1,\"also_found\":2}}" \
+            >> "$TASKS_DIR/$project/metrics.jsonl"
+        i=$((i + 1))
+    done
+    i=0
+    while [ "$i" -lt "$update_count" ]; do
+        echo "{\"timestamp\":\"$now\",\"event_type\":\"review_round_posted\",\"agent\":\"review-respond\",\"project\":\"$project\",\"data\":{\"pr\":$((70 + i)),\"review_id\":$((900 + i)),\"action\":\"update\",\"rows\":3,\"fixed\":3,\"wont_fix\":0,\"needs_discussion\":0,\"ambiguous_asked\":0,\"also_found\":1}}" \
+            >> "$TASKS_DIR/$project/metrics.jsonl"
+        i=$((i + 1))
+    done
+}
+
 # ---------------------------------------------------------------------------
 # Script exists
 # ---------------------------------------------------------------------------
@@ -338,6 +360,31 @@ EOF
     [ "$status" -eq 0 ] &&
         [[ "$output" == *"Notice-vs-gate ratio:   2/2 notice (100%)"* ]] &&
         [[ "$output" != *"By gate choice:"* ]]
+}
+
+# ---------------------------------------------------------------------------
+# Review rounds section
+# ---------------------------------------------------------------------------
+# agent-stats is the named consumer of the review_round_posted event (see
+# metrics-emit/SKILL.md): one summary per review round, counted by data.action
+# ("post" for a new comment, "update" for a PATCH of the earlier one).
+
+@test "no review_round_posted events: section renders its placeholder" {
+    _seed_project "proj"
+    run /bin/bash "$STATS"
+    [ "$status" -eq 0 ] &&
+        [[ "$output" == *"## Review Rounds"* ]] &&
+        [[ "$output" == *"No review_round_posted events yet."* ]]
+}
+
+@test "review_round_posted events: total and per-action counts render" {
+    _seed_review_rounds "proj" 3 1
+    run /bin/bash "$STATS"
+    [ "$status" -eq 0 ] &&
+        [[ "$output" == *"Total events: 4"* ]] &&
+        [[ "$output" == *"Summaries posted:       4"* ]] &&
+        [[ "$output" == *"New comments (post):    3"* ]] &&
+        [[ "$output" == *"Updated (update):       1"* ]]
 }
 
 # ---------------------------------------------------------------------------

@@ -313,6 +313,33 @@ else
 fi
 
 # ----------------------------------------------------------------------------
+# Review rounds — review-respond summaries, by action
+# ----------------------------------------------------------------------------
+echo "## Review Rounds"
+echo
+
+ROUND_STATS="$(jq -s '
+  map(select(.event_type == "review_round_posted"))
+  | {
+      total: length,
+      post: ([.[] | select(.data.action == "post")] | length),
+      update: ([.[] | select(.data.action == "update")] | length)
+    }
+' "$EVENTS_TMP")"
+
+ROUND_TOTAL="$(echo "$ROUND_STATS" | jq -r '.total')"
+
+if [ "$ROUND_TOTAL" = "0" ]; then
+  echo "No review_round_posted events yet."
+  echo
+else
+  echo "Summaries posted:       $ROUND_TOTAL"
+  echo "New comments (post):    $(echo "$ROUND_STATS" | jq -r '.post')"
+  echo "Updated (update):       $(echo "$ROUND_STATS" | jq -r '.update')"
+  echo
+fi
+
+# ----------------------------------------------------------------------------
 # Health flags — surface signals worth attention
 # ----------------------------------------------------------------------------
 echo "## Health Flags"

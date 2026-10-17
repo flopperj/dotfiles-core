@@ -6,9 +6,11 @@
 # and `description` fields, and the name must match the filename stem —
 # otherwise the workflow resolves under an unexpected command or not at all.
 #
-# Static text analysis only: CI has no model access and cannot execute
-# workflows. `node --check` runs only when node is installed (node is NOT
-# a core dependency); its absence emits a WARN, never a FAIL.
+# CI has no model access and cannot execute workflows, so these checks are
+# static text analysis plus one node-gated case that runs an extracted
+# helper. `node --check` and that case run only when node is installed
+# (node is NOT a core dependency); its absence emits a WARN or a skip,
+# never a FAIL.
 #
 # Run with: bats tests/workflows-meta.bats
 
@@ -192,6 +194,49 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
+# args descriptor shape
+# ---------------------------------------------------------------------------
+# `args` may arrive as a JSON object; a raw String() coercion hands the
+# scorers "[object Object]". The behavioral half needs node (optional
+# dependency) and skips without it.
+
+@test "code-auditor-score renders object and array args as text, never [object Object]" {
+    local wf="$CORE_DIR/.claude/workflows/code-auditor-score.js"
+    [ -f "$wf" ]
+
+    [ -z "$(grep -E 'String\(args' "$wf" || true)" ]
+    grep -qE '^const TARGET = describeTarget\(args\)' "$wf"
+
+    command -v node >/dev/null 2>&1 || skip "node not installed (not a core dependency)"
+
+    local fn
+    fn="$(sed -n '/^function describeTarget/,/^}/p' "$wf")"
+    [ -n "$fn" ]
+
+    run node -e "$fn
+const cases = [
+  [{ pr: 482, autonomous: true }, 'pr: 482; autonomous: true'],
+  [{ pr: 482, autonomous: false }, 'pr: 482'],
+  [['src/a.ts', 'src/b.ts'], 'src/a.ts src/b.ts'],
+  ['  PR #482 autonomous ', 'PR #482 autonomous'],
+  [482, '482'],
+  [null, ''],
+  [undefined, '']
+]
+for (const [input, want] of cases) {
+  const got = describeTarget(input)
+  if (got !== want) {
+    console.error('describeTarget(' + JSON.stringify(input) + ') = ' + JSON.stringify(got) + ', want ' + JSON.stringify(want))
+    process.exit(1)
+  }
+  if (got.includes('[object Object]')) { console.error('leaked [object Object]'); process.exit(1) }
+}
+console.log('ok')"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"ok"* ]]
+}
+
+# ---------------------------------------------------------------------------
 # Real repo state
 # ---------------------------------------------------------------------------
 
@@ -202,4 +247,46 @@ EOF
 @test "lint-agents.sh passes against the real repo" {
     run bash "$LINT"
     [ "$status" -eq 0 ]
+}
+
+# ---------------------------------------------------------------------------
+# team-lead-waves args shape
+# ---------------------------------------------------------------------------
+# team-lead/SKILL.md tells callers to pass the wave plan as a JSON object;
+# JSON.parse(String(object)) is "[object Object]" and yields a null plan.
+# The behavioral half needs node (optional dependency) and skips without it.
+
+@test "team-lead-waves accepts the wave plan as an object or a JSON string" {
+    local wf="$CORE_DIR/.claude/workflows/team-lead-waves.js"
+    [ -f "$wf" ]
+
+    [ -z "$(grep -E 'JSON\.parse\(String\(args' "$wf" || true)" ]
+    grep -qE '^const plan = planFromArgs\(args\)' "$wf"
+
+    command -v node >/dev/null 2>&1 || skip "node not installed (not a core dependency)"
+
+    local fn
+    fn="$(sed -n '/^function planFromArgs/,/^}/p' "$wf")"
+    [ -n "$fn" ]
+
+    run node -e "$fn
+const plan = { waves: [{ index: 1, tickets: ['PROJ-1'], parallel: false }], domain: 'backend' }
+const cases = [
+  [plan, plan],
+  [JSON.stringify(plan), plan],
+  ['not json', null],
+  ['', null],
+  [undefined, null],
+  [null, null]
+]
+for (const [input, want] of cases) {
+  const got = planFromArgs(input)
+  if (JSON.stringify(got) !== JSON.stringify(want)) {
+    console.error('planFromArgs(' + JSON.stringify(input) + ') = ' + JSON.stringify(got) + ', want ' + JSON.stringify(want))
+    process.exit(1)
+  }
+}
+console.log('ok')"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"ok"* ]]
 }

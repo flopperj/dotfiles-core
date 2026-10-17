@@ -71,10 +71,12 @@ invoke, validate, fall back.
 
 1. **Invoke.** Invoke the `code-auditor-score` workflow, passing the
    target descriptor from Step 1 (PR number, branch name, or file
-   paths) through the Workflow tool's `args`. In autonomous/swarm mode,
-   include the word `autonomous` in `args` — the workflow detects it
-   and applies the borderline-escalation rule (composite 65-74 →
-   `ranger`) inside its own aggregation.
+   paths) through the Workflow tool's `args` **as a plain string** —
+   e.g. `"PR #482"`, `"branch feature/x"`, `"src/a.ts src/b.ts"` — not
+   an object. In autonomous/swarm mode, append the word `autonomous` to
+   the string — the workflow detects it and applies the
+   borderline-escalation rule (composite 65-74 → `ranger`) inside its
+   own aggregation.
 2. **Validate.** Check the workflow's return against
    [`.claude/workflows/schemas/auditor-composite.json`](../../workflows/schemas/auditor-composite.json).
    The five required fields must be present and well-typed:
