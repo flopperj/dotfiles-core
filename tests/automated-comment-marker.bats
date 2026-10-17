@@ -88,6 +88,14 @@ ROBOT="🤖"
     grep -qE "Prefix (each|every) comment body with .$ROBOT" "$f"
 }
 
+# review-respond posts one PR-level summary comment per review round; its
+# single body is "the comment body", hence the extra article in the regex.
+@test "review-respond skill cites the rule and carries the prefix instruction" {
+    local f="$CORE_DIR/.claude/skills/review-respond/SKILL.md"
+    grep -qF "Automated Comment Marker" "$f"
+    grep -qE "Prefix (each|every|the) comment body with .$ROBOT" "$f"
+}
+
 # The Jira-ping surfaces (ticket-pickup/swarm) cite the rule and carry the
 # prefix inline on their example comment strings (asserted below).
 @test "ticket-pickup cites the rule" {

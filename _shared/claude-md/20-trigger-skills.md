@@ -18,6 +18,7 @@ These skills are invoked when the user's request matches a trigger phrase (not a
 | "briefing", "sitrep", "what needs my attention", "catch me up", "morning briefing", "show me my dashboard", "what should I work on", "what's my status" | `/briefing` | Session-start situation report — Jira sprint status, open PRs, CI, suggested actions |
 | "remind me", "watch this", "nudge me", "track this", "show my obligations", "cancel obligation" | `/obligations` | Create, view, cancel, and evaluate cross-session obligations |
 | "watch my PR", "babysit this PR", "watch these PRs and merge when green", "watch a channel for PRs" | `/babysit-prs` | Watch PRs under /loop — one tick per invocation: CI-gated review / fix / approve / merge behind a reversibility gate |
+| "respond to the review", "address review comments", "summarize this review round", "post a review round summary", "respond to PR feedback" | `/review-respond` | Summarize-only author reply to a review round: outcome per thread, also-found commits, test/lint/typecheck at HEAD; draft-first, 🤖-marked |
 | "create a ticket", "file a bug" | `/create-jira-ticket` | Create Jira tickets (Stories, Bugs, Tasks, Epics) via MCP |
 | "tech spec", "design doc", "design document", "implementation proposal" | `/create-tech-spec` | Generate tech spec with solution approach, estimates, and rollout plan |
 | "mermaid to PNG", "diagram image", "export diagram" | `/mermaid-diagrams` | Convert Mermaid syntax to PNG via mmdc |

@@ -36,7 +36,22 @@ const SENTINEL_DOCS_ONLY = 'DOCUMENTATION_ONLY'
 
 // args carries the diff/target descriptor (PR number, branch, or file
 // paths) and, optionally, the word "autonomous" to signal swarm mode.
-const TARGET = String(args ?? '').trim()
+// Callers may pass it as a JSON object rather than a string; String()
+// would give every scorer "[object Object]". Dropping false/null entries
+// is what keeps {autonomous: false} from matching the regex below.
+function describeTarget(value) {
+  if (value == null || value === false) return ''
+  if (typeof value === 'string') return value.trim()
+  if (Array.isArray(value)) return value.map(describeTarget).filter(Boolean).join(' ')
+  if (typeof value === 'object') {
+    return Object.entries(value)
+      .filter(([, v]) => v != null && v !== false)
+      .map(([k, v]) => `${k}: ${describeTarget(v)}`)
+      .join('; ')
+  }
+  return String(value).trim()
+}
+const TARGET = describeTarget(args)
 const AUTONOMOUS = /\bautonomous\b/i.test(TARGET)
 
 const COMMON_BRIEF = `You are one of three independent complexity scorers for a code audit.
