@@ -63,6 +63,8 @@ Cyrus may receive work from different sources:
 - Branch name (already checked out by the swarm orchestrator)
 - `swarm_mode: true` — changes completion behavior (see below)
 - `execution_mode: autonomous` — gates are pre-approved by the user
+- `unbounded: true` — the user opted out of the turn-cap continuation budget
+  (see `~/.claude/_shared/agent-turn-cap-warning.md`)
 - `ticket_complexity: simple | medium | complex` — determines which
   reviewer to auto-trigger: `simple` → Scout (direct); `medium` → **Code auditor** (analyzes the diff, then routes to Scout or Ranger); `complex` → Ranger (direct)
 
@@ -336,7 +338,7 @@ Implementation complete. What next?
 
 ## Truncation handling
 
-When this skill invokes Cyrus via the `Agent` tool, the orchestrator must verify the returned response contains the `<<task-complete>>` sentinel before consuming its output. See `~/.claude/_shared/agent-turn-cap-warning.md` for the detection rule, halt/skip behavior, and the `agent_truncated` metric to emit. Cyrus has the highest `maxTurns` (300) and the most realistic chance of hitting the cap on a complex ticket — sentinel verification is especially important here.
+When this skill invokes Cyrus via the `Agent` tool, the orchestrator must verify the returned response contains the `<<task-complete>>` sentinel before consuming its output. See `~/.claude/_shared/agent-turn-cap-warning.md` for the detection rule, continuation budget, halt/skip behavior, and the `agent_truncated` metric to emit. Cyrus has the highest `maxTurns` (300) and the most realistic chance of hitting the cap on a complex ticket — sentinel verification is especially important here.
 
 ## Maintenance
 

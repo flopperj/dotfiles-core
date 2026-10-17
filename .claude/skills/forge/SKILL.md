@@ -43,9 +43,10 @@ This skill supports two execution modes, determined by the caller:
   No user-driven autonomous call site exists today; this mode is wired for
   symmetry with other pipeline skills.
 
-When `swarm_mode: true` is also passed, forward it through to
-`/aristotle-deconstructor` so downstream skills know to report results
-back to the swarm orchestrator rather than presenting interactive menus.
+When `swarm_mode: true` is also passed, forward it, and `unbounded` if
+present, through to `/aristotle-deconstructor` so downstream skills know to
+report results back to the swarm orchestrator rather than presenting
+interactive menus.
 
 ---
 
@@ -197,8 +198,8 @@ embedded inline in the launch prompt. The launch prompt must:
    should deconstruct the framing, not ask the user to re-state it.
 2. Include the full PRD content verbatim (or, if the PRD is large, a
    summary plus the path so Aristotle can read it directly).
-3. Forward `execution_mode` (`gated` / `autonomous`) and `swarm_mode`
-   flags if present.
+3. Forward `execution_mode` (`gated` / `autonomous`), `swarm_mode`, and
+   `unbounded` flags if present.
 
 **Instruct `/aristotle-deconstructor` explicitly:** "This PRD is the
 authoritative brief. Do not ask the user to re-state the problem.
@@ -226,7 +227,7 @@ embedded inline. The launch prompt must:
 1. State that the input is a finalized PRD that the user judged
    sufficiently well-framed to skip Aristotle.
 2. Include the full PRD content verbatim.
-3. Forward `execution_mode` and `swarm_mode` flags if present.
+3. Forward `execution_mode`, `swarm_mode`, and `unbounded` flags if present.
 
 `/optimus-planner` then runs its own gate flow (plan -> Cyrus). `/forge`
 does not gate again. The Optimus -> Cyrus handoff on this path follows

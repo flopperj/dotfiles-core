@@ -46,7 +46,8 @@ The team lead receives from ticket-swarm:
   - Codebase references (file paths found during enrichment)
   - Jira linked issues (blockers, duplicates, related)
 - **Domain tag**: `backend`, `frontend`, `infra`, or `unknown`
-- **Execution flags**: `swarm_mode: true`, `execution_mode: autonomous`
+- **Execution flags**: `swarm_mode: true`, `execution_mode: autonomous`,
+  and `unbounded: true` when the swarm was invoked with it
 - **Parent story key** (optional): If these tickets are sub-tasks of a
   Story, the parent key for Jira comment context
 
@@ -237,6 +238,8 @@ validate, fall back.
      the branch name (and base branch for sequenced tickets), and
      `ticket_complexity`. The workflow passes each brief verbatim to
      that ticket's pipeline agent.
+   - `unbounded` — `true` when the swarm was invoked with it; omit
+     otherwise. The workflow adds it to each pipeline's flags.
 2. **Validate.** Check the workflow's return against
    [`.claude/workflows/schemas/swarm-context.json`](../../workflows/schemas/swarm-context.json).
    The four required fields must be present and well-typed:
@@ -316,7 +319,8 @@ Execute the sequencing plan from Step 1, wave by wave:
    - **Swarm context** from the accumulator (prior wave results)
    - Jira ticket key
    - Branch name (determined by ticket-swarm)
-   - `swarm_mode: true`, `execution_mode: autonomous`
+   - `swarm_mode: true`, `execution_mode: autonomous` (plus `unbounded: true`
+     if received)
    - `ticket_complexity` from the ticket's classification (determines
      whether Cyrus auto-triggers Scout, code auditor, or Ranger on completion)
    - For independent tickets: branch is created by ticket-swarm (via
