@@ -43,9 +43,10 @@ This skill supports two execution modes, determined by the caller:
   No user-driven autonomous call site exists today; this mode is wired for
   symmetry with other pipeline skills.
 
-When `swarm_mode: true` is also passed, forward it through to
-`/aristotle-deconstructor` so downstream skills know to report results
-back to the swarm orchestrator rather than presenting interactive menus.
+When `swarm_mode: true` is also passed, forward it, and `unbounded` if
+present, through to `/aristotle-deconstructor` so downstream skills know to
+report results back to the swarm orchestrator rather than presenting
+interactive menus.
 
 ---
 

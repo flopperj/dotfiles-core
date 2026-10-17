@@ -349,6 +349,37 @@ _scratch_core() {
     grep -q 'Aristotle 40' "$DOTFILES_DIR/.claude/_shared/agent-turn-cap-warning.md"
 }
 
+@test "every skill that forwards swarm_mode also names unbounded" {
+    for s in aristotle-deconstructor optimus-planner forge ticket-pickup ticket-swarm team-lead cyrus-tdd-engineer; do
+        f="$DOTFILES_DIR/.claude/skills/$s/SKILL.md"
+        grep -q 'swarm_mode' "$f" || { echo "no swarm_mode: $s"; return 1; }
+        grep -q 'unbounded' "$f" || { echo "swarm_mode without unbounded: $s"; return 1; }
+    done
+}
+
+@test "ticket-pickup forwards unbounded in every Step 6 launch list and the repo-split delegation" {
+    local f="$DOTFILES_DIR/.claude/skills/ticket-pickup/SKILL.md"
+    local step6 split
+    step6="$(sed -n '/^## Step 6: Launch pipeline/,/^\*\*CI fix loop/p' "$f")"
+    [ -n "$step6" ]
+    [ "$(printf '%s\n' "$step6" | grep -c '`unbounded`')" -ge 3 ] || { echo "Step 6 launch lists miss unbounded"; return 1; }
+    split="$(grep -A2 'the parent ticket key,' "$f" | tr '\n' ' ')"
+    [[ "$split" == *'`unbounded`'* ]] || { echo "repo-split delegation misses unbounded"; return 1; }
+}
+
+@test "turn-limit opt-in does not trigger on the bare word unbounded" {
+    local frag="$DOTFILES_DIR/_shared/claude-md/30-compound-intents.md"
+    local doc="$DOTFILES_DIR/.claude/_shared/agent-turn-cap-warning.md"
+    local line
+    line="$(grep 'Turn-limit opt-in' "$frag")"
+    [ -n "$line" ]
+    [[ "$line" == *'"no turn limit"'* ]]
+    [[ "$line" == *'`--unbounded`'* ]]
+    ! printf '%s\n' "$line" | grep -q '"unbounded"' || return 1
+    ! grep -q '"unbounded"' "$doc" || return 1
+    ! grep -q '"unbounded" or' "$DOTFILES_DIR/CHANGELOG.md" || return 1
+}
+
 @test "shared assets: turn-cap doc is duplicated (transformed) into every citing skill; links resolve" {
     _render_target
     for s in aristotle-deconstructor optimus-planner cyrus-tdd-engineer code-auditor scout-reviewer ranger-reviewer; do

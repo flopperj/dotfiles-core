@@ -39,9 +39,9 @@ In both modes Aristotle has two legal outcomes:
   explicitly; do not treat it as a truncated or failed run.
 
 When `swarm_mode: true` is also passed (typically from `ticket-swarm`),
-forward both flags to all downstream skills (Optimus, Cyrus) so they know
-to report results back to the swarm orchestrator rather than presenting
-interactive menus.
+forward `swarm_mode`, `execution_mode` and `unbounded` (if present) to all
+downstream skills (Optimus, Cyrus) so they know to report results back to
+the swarm orchestrator rather than presenting interactive menus.
 
 ---
 

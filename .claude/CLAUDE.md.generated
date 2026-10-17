@@ -92,7 +92,7 @@ When the user's request implies multiple skills in sequence, detect the compound
 - **Every stage transition requires user approval** in gated mode. Never auto-chain agents without the user confirming at each gate.
 - **Autonomous mode relaxes gates** — used by ticket-swarm and ticket-pickup when processing batches. Pipeline transitions auto-approve; only triage selection and PR creation require user approval.
 - **Each agent runs as a subagent** via the Agent tool to keep the main context clean.
-- **Turn-limit opt-in.** "no turn limit", "ignore turn limits", "unbounded", or `--unbounded` anywhere in a request sets `unbounded: true` for that task. Pass it to the invoked skill, which forwards it downstream. It lifts the continuation budget in `~/.claude/_shared/agent-turn-cap-warning.md` (resume a capped agent until it finishes, blocks, or stalls); it does not change any agent's `maxTurns`.
+- **Turn-limit opt-in.** "no turn limit", "ignore turn limits", "unbounded turn limit", or `--unbounded` anywhere in a request sets `unbounded: true` for that task. Pass it to the invoked skill, which forwards it downstream. It lifts the continuation budget in `~/.claude/_shared/agent-turn-cap-warning.md` (resume a capped agent until it finishes, blocks, or stalls); it does not change any agent's `maxTurns`.
 - **Name matching is case-insensitive and flexible.** "Aristotle," / "aristotle:" / "ARISTOTLE" all match. The name must appear at the start of the prompt.
 - **Slash commands work too.** Each of the following invokes the corresponding skill directly:
   - `/aristotle-deconstructor`, `/optimus-planner`, `/cyrus-tdd-engineer`
