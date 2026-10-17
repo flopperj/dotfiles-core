@@ -130,7 +130,7 @@ that lack the field, but new emitters must not rely on that fallback.
 
 ### `agent_truncated`
 
-Emitted by **pipeline skills** (aristotle-deconstructor, optimus-planner, cyrus-tdd-engineer, scout-reviewer, ranger-reviewer) when a reasoning subagent's final response is missing the `<<task-complete>>` sentinel — i.e. suspected `maxTurns` truncation. See `~/.claude/_shared/agent-turn-cap-warning.md` for the detection rule and halt/skip behavior.
+Emitted by **pipeline skills** (aristotle-deconstructor, optimus-planner, cyrus-tdd-engineer, scout-reviewer, ranger-reviewer) once per reasoning-agent invocation that hit its `maxTurns` cap, after the continuation loop resolves. A run that finished after continuation is still emitted, with `resolution: completed_after_continuation`; the cap-hit rate is what tunes `maxTurns`. See `~/.claude/_shared/agent-turn-cap-warning.md` for the detection rule, continuation budget and halt/skip behavior.
 
 ```json
 {
@@ -140,15 +140,18 @@ Emitted by **pipeline skills** (aristotle-deconstructor, optimus-planner, cyrus-
   "project": "my-repo",
   "ticket": "PROJ-1234",
   "data": {
-    "max_turns": 100,
-    "detection": "missing_completion_sentinel",
+    "max_turns": 300,
+    "detection": "harness_turn_limit_note",
     "context": "swarm",
-    "parent_skill": "ticket-swarm"
+    "parent_skill": "ticket-swarm",
+    "continuations": 1,
+    "resolution": "completed_after_continuation",
+    "unbounded": false
   }
 }
 ```
 
-`context` values: `swarm` (called from ticket-swarm), `pipeline` (called from a non-swarm skill chain), `standalone` (called directly without a parent skill). `parent_skill` is optional.
+`context` values: `swarm` (called from ticket-swarm), `pipeline` (called from a non-swarm skill chain), `standalone` (called directly without a parent skill). `detection` values: `harness_turn_limit_note` (Claude Code's turn-limit note was present), `missing_completion_sentinel` (sentinel absent, no note). `resolution` values: `completed_after_continuation`, `halted` (pipeline mode, waiting on the user), `skipped` (swarm mode, ticket blocked). `parent_skill`, `continuations`, `resolution` and `unbounded` are optional; events written before continuation existed carry none of them.
 
 ---
 

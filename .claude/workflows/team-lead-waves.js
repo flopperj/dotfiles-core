@@ -22,6 +22,9 @@ export const meta = {
 //                       + branch/base-branch + ticket_complexity) prepared
 //                       by the SKILL.md, passed verbatim to that ticket's
 //                       pipeline agent
+//   unbounded           optional — true lifts the turn-cap continuation
+//                       budget for every pipeline (see
+//                       _shared/agent-turn-cap-warning.md)
 
 // One pipeline result per ticket. A pipeline that dies or returns anything
 // else yields null from agent(); the wave loop attributes that null to its
@@ -93,7 +96,7 @@ const pipelinePromptFor = (key, waveIndex, priorContext) => {
   const brief = briefFor(key)
   return `You are one ticket pipeline inside a team-lead swarm wave (wave ${waveIndex}).
 Ticket: ${key}
-Run the ticket-pickup pipeline for this ticket with swarm_mode: true and execution_mode: autonomous.
+Run the ticket-pickup pipeline for this ticket with swarm_mode: true${planValid && plan.unbounded === true ? ', execution_mode: autonomous, and unbounded: true' : ' and execution_mode: autonomous'}.
 
 ${brief
     ? `Pipeline brief (enriched ticket + domain context, prepared by the team lead):

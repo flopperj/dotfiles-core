@@ -338,6 +338,17 @@ _scratch_core() {
     grep -q 'Cyrus 300' "$TARGET/skills/cyrus-tdd-engineer/references/agent-turn-cap-warning.md"
 }
 
+@test "turn-cap doc defines continuation before halt, in core and in every portable copy" {
+    _render_target > /dev/null
+    for f in "$DOTFILES_DIR/.claude/_shared/agent-turn-cap-warning.md" "$TARGET"/skills/*/references/agent-turn-cap-warning.md; do
+        grep -q '^## Continuation — before any halt or skip$' "$f" || { echo "no continuation section: $f"; return 1; }
+        grep -q 'Default: 2 continuations' "$f" || { echo "no default budget: $f"; return 1; }
+        grep -q '`unbounded: true`' "$f" || { echo "no unbounded flag: $f"; return 1; }
+        grep -q 'Stall guard' "$f" || { echo "no stall guard: $f"; return 1; }
+    done
+    grep -q 'Aristotle 40' "$DOTFILES_DIR/.claude/_shared/agent-turn-cap-warning.md"
+}
+
 @test "shared assets: turn-cap doc is duplicated (transformed) into every citing skill; links resolve" {
     _render_target
     for s in aristotle-deconstructor optimus-planner cyrus-tdd-engineer code-auditor scout-reviewer ranger-reviewer; do

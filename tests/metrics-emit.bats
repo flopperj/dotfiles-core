@@ -215,6 +215,19 @@ teardown() {
     [ "$status" -eq 0 ] || return 1
 }
 
+@test "schema agent_truncated declares optional continuation fields and the harness-note detection" {
+    local schema="$DOTFILES_DIR/.claude/evals/schemas/metrics-event.schema.json"
+    run jq -e '
+        [.properties.data.oneOf[] | select(.description | startswith("agent_truncated"))][0]
+        | (.properties.detection.enum == ["missing_completion_sentinel","harness_turn_limit_note"])
+          and (.properties.continuations.type == "integer")
+          and (.properties.resolution.enum == ["completed_after_continuation","halted","skipped"])
+          and (.properties.unbounded.type == "boolean")
+          and (.required == ["max_turns","detection","context"])
+    ' "$schema"
+    [ "$status" -eq 0 ] || return 1
+}
+
 @test "emit-metric.sh runs under /bin/bash (3.2-safe)" {
     echo "$VALID_EVENT" | /bin/bash "$EMIT"
     [ -s "$METRICS_FILE" ]

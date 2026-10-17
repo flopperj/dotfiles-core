@@ -219,6 +219,7 @@ If the user picks `swarm` (or autonomous mode auto-selects it):
    - `parent_story_key`: the Story/Epic ticket key
    - `execution_mode`: forward from caller (or default `gated`)
    - `swarm_mode`: forward from caller if present
+   - `unbounded`: forward from caller if present
 2. ticket-swarm skips its JQL harvest (Step 1 Source A) and uses the
    provided child tickets directly.
 3. Transition the parent Story to "In Progress" if available.

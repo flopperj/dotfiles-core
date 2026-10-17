@@ -303,12 +303,13 @@ waves, and aggregate final results.
 - **If the user says "drill deeper" or "stress-test"** (gated mode only),
   send follow-up prompts to the Aristotle agent (or launch a new one with
   that context).
-- **Forward swarm flags.** When `swarm_mode` and `execution_mode` are
-  present, pass them through to every downstream skill invocation.
+- **Forward swarm flags.** When `swarm_mode`, `execution_mode`, or
+  `unbounded` are present, pass them through to every downstream skill
+  invocation.
 
 ## Truncation handling
 
-When this skill invokes Aristotle, Optimus, or Cyrus via the `Agent` tool, the orchestrator must verify the returned response contains the `<<task-complete>>` sentinel before consuming its output. See `~/.claude/_shared/agent-turn-cap-warning.md` for the detection rule, halt/skip behavior, and the `agent_truncated` metric to emit. Aristotle-truncation is especially load-bearing here — a truncated Implementation Handoff section silently corrupts Optimus's brief. A missing handoff is not by itself the truncation signature: a Phase 0 stop legitimately has no handoff and no Phases 1-5. The sentinel is the test — a Phase 0 stop that ends with `<<task-complete>>` is complete; a five-phase analysis that stops mid-handoff without the sentinel is truncated.
+When this skill invokes Aristotle, Optimus, or Cyrus via the `Agent` tool, the orchestrator must verify the returned response contains the `<<task-complete>>` sentinel before consuming its output. See `~/.claude/_shared/agent-turn-cap-warning.md` for the detection rule, continuation budget, halt/skip behavior, and the `agent_truncated` metric to emit. Aristotle-truncation is especially load-bearing here — a truncated Implementation Handoff section silently corrupts Optimus's brief. A missing handoff is not by itself the truncation signature: a Phase 0 stop legitimately has no handoff and no Phases 1-5. The sentinel is the test — a Phase 0 stop that ends with `<<task-complete>>` is complete; a five-phase analysis that stops mid-handoff without the sentinel is truncated.
 
 ## Maintenance
 
