@@ -5,7 +5,7 @@ on:
     branches: [main, master]
 jobs:
   check:
-    runs-on: ubuntu-latest
+    runs-on: ibp-linux-amd64
     steps:
       - uses: actions/checkout@v4
       # jq is ambient on ubuntu-latest, but the eval runner and several tests
