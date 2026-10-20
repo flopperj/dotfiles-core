@@ -441,12 +441,26 @@ _scratch_core() {
     ! grep -q 'agent-turn-cap-warning' "$f" || { echo "forge must not cite the unshipped turn-cap doc"; return 1; }
 }
 
-@test "code-auditor fast scorers end with the sentinel and skip only after the continuation budget" {
-    local f="$DOTFILES_DIR/.claude/skills/code-auditor/SKILL.md"
-    [ "$(grep -c '^- End your report with `<<task-complete>>`$' "$f")" = "3" ] || { echo "each of the 3 scorer briefs needs the sentinel line"; return 1; }
-    grep -q "document's continuation" "$f" || return 1
-    grep -q 'only once the budget is' "$f" || return 1
-    grep -q '^- The `unbounded` flag, if the caller passed it' "$f" || return 1
+@test "code-auditor fast scorers end with the sentinel and a sentinel-less scorer counts as failed without resuming" {
+    local core="$DOTFILES_DIR/.claude/skills/code-auditor/SKILL.md"
+    _render_target
+    local copy="$TARGET/skills/code-auditor/SKILL.md"
+    local f flat
+    for f in "$core" "$copy"; do
+        [ "$(grep -c '^- End your report with `<<task-complete>>`$' "$f")" = "3" ] || { echo "each of the 3 scorer briefs needs the sentinel line: $f"; return 1; }
+        grep -q '^- The `unbounded` flag, if the caller passed it' "$f" || return 1
+        flat="$(sed -n '/^\*\*Subagent failure handling:\*\*/,/^- If 2 or more of the 3 agents fail/p' "$f" | tr '\n' ' ' | tr -s ' ')"
+        [ -n "$flat" ] || { echo "no failure-handling block: $f"; return 1; }
+        [[ "$flat" == *'without the `<<task-complete>>` sentinel also counts as failed immediately'* ]] || { echo "sentinel-less scorer not failed immediately: $f"; return 1; }
+        [[ "$flat" == *'Do not resume the scorer'* ]] || { echo "missing no-resume rule: $f"; return 1; }
+        [[ "$flat" == *'nly if the harness turn-limit note is present'* ]] || { echo "continuation not gated on the harness note: $f"; return 1; }
+        [[ "$flat" == *"replace that document's halt banner for these scorers"* ]] || { echo "degradation rules not tied to the halt banner: $f"; return 1; }
+        [[ "$flat" != *'continuation budget first'* ]] || { echo "stale continue-first wording: $f"; return 1; }
+        [[ "$flat" != *'only once the budget is'* ]] || { echo "stale skip-after-budget wording: $f"; return 1; }
+    done
+    tr "\n" " " < "$core" | tr -s " " | grep -q "detection = missing sentinel" || { echo "core lost the metric pointer"; return 1; }
+    flat="$(sed -n '/^\*\*Subagent failure handling:\*\*/,/^- If 2 or more of the 3 agents fail/p' "$copy" | tr '\n' ' ')"
+    [[ "$flat" != *'agent_truncated'* ]] || { echo "portable failure block must not cite the metric"; return 1; }
 }
 
 @test "cyrus skill forwards unbounded to every swarm-mode reviewer launch" {
