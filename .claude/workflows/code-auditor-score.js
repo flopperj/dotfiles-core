@@ -35,10 +35,10 @@ const SENTINEL_TRIVIAL = 'TRIVIAL_DIFF'
 const SENTINEL_DOCS_ONLY = 'DOCUMENTATION_ONLY'
 
 // args carries the diff/target descriptor (PR number, branch, or file
-// paths) and, optionally, the word "autonomous" to signal swarm mode.
-// Callers may pass it as a JSON object rather than a string; String()
-// would give every scorer "[object Object]". Dropping false/null entries
-// is what keeps {autonomous: false} from matching the regex below.
+// paths) and, optionally, the swarm-mode signal. Callers may pass it as a
+// JSON object rather than a string; String() would give every scorer
+// "[object Object]", so describeTarget renders objects and arrays as text and
+// drops false/null entries.
 function describeTarget(value) {
   if (value == null || value === false) return ''
   if (typeof value === 'string') return value.trim()
@@ -51,8 +51,46 @@ function describeTarget(value) {
   }
   return String(value).trim()
 }
-const TARGET = describeTarget(args)
-const AUTONOMOUS = /\bautonomous\b/i.test(TARGET)
+
+// The flag is read from the raw args, never from the rendered text above: an
+// object must carry autonomous === true, and a string must end with the
+// standalone word ("PR #482 autonomous"). Matching anywhere in the text would
+// flip escalation for a branch like feature/autonomous-login.
+function isAutonomous(value) {
+  if (typeof value === 'string') return /(^|\s)autonomous\s*$/i.test(value)
+  if (Array.isArray(value)) return isAutonomous(value[value.length - 1])
+  if (value != null && typeof value === 'object') return value.autonomous === true
+  return false
+}
+
+// The flag is not a target: "autonomous" alone, or {autonomous: true}, would
+// otherwise render as a non-empty string and slip past assertTarget with no
+// PR, branch or files for the scorers to resolve. Mirrors isAutonomous: a
+// string loses its trailing standalone word, an object its autonomous key,
+// an array the flag on its last element.
+function withoutAutonomousFlag(value) {
+  if (typeof value === 'string') return value.replace(/(^|\s)autonomous\s*$/i, '')
+  if (Array.isArray(value)) {
+    return value.length === 0
+      ? value
+      : [...value.slice(0, -1), withoutAutonomousFlag(value[value.length - 1])]
+  }
+  if (value != null && typeof value === 'object') {
+    const { autonomous, ...rest } = value
+    return rest
+  }
+  return value
+}
+
+function assertTarget(text) {
+  if (!text) {
+    throw new Error('code-auditor-score: no review target in args (expected a PR number, branch, or file paths)')
+  }
+}
+
+const TARGET = describeTarget(withoutAutonomousFlag(args))
+assertTarget(TARGET)
+const AUTONOMOUS = isAutonomous(args)
 
 const COMMON_BRIEF = `You are one of three independent complexity scorers for a code audit.
 Review target: ${TARGET}

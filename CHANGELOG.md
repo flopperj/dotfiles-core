@@ -1,6 +1,31 @@
 # Changelog
 
 > **How to update:** The pre-commit hook (`scripts/pre-commit.sh`) is auto-installed by `install.sh`. It runs a fast leakage check (`scripts/check-no-leakage.sh`) and re-renders the generated `CLAUDE.md.generated` and `AGENTS.md.generated` files on every commit. A pre-push gate (`scripts/pre-push.sh`, also auto-installed) scans every outgoing commit's tree and metadata before it leaves the machine. CI runs lint, consult-grammar, and the test suite (including synthetic-token leakage mechanism tests) on every PR; the company-token scan is a separate step that runs only when guard data is present on the runner. If you bypass the hooks or work in a context where hooks cannot run, keep this file current manually. Each release heading links to the diff on the public mirror.
+## v1.23.1 — 2026-10-20 (turn-cap review follow-ups)
+
+Review of the v1.23.0 continuation protocol found places where it could resume an agent that had not been truncated, could hand a half-finished result downstream, or could run without a bound. This release tightens the protocol and the skills that follow it. No agent frontmatter changes.
+
+### Fixed
+
+- **Only the harness note auto-continues.** A missing sentinel without the note is now classified first: a stated blocker, a clarifying-questions-only reply (Optimus's "ask first, plan second"), and a Phase-0-style stop are not truncation. Any other sentinel-less return gets a hedged "may have been truncated" banner and halts with no automatic resume, as before v1.23.0. The doc now says where to read the sentinel: the agent's final report, including the completion notification when the `Agent` call returned only a pointer.
+- **Precedence.** A new section orders the signals: stated blocker or questions reply, then harness note, then missing sentinel. "Consumable" is narrowed to "consumable without user direction only once a run carries the sentinel", so a clean git and artifact check allows a user-directed salvage and never an automatic pass-through.
+- **Resume message.** The resumed agent re-emits its complete final deliverable followed by `<<task-complete>>`, and leads with a one-line `Progress since last turn:` report. The orchestrator strips that line before passing the deliverable on.
+- **Resume modes.** A resumed result may arrive inline or by notification, `SendMessage` is loaded first when it is a deferred tool, and a refused resume counts as "host can't resume" rather than as a continuation.
+- **Banners split by exit reason.** Budget exhausted (reply "continue" grants one fresh budget of 2; re-running with "no turn limit" starts over and discards the work), stall (suggests narrowing scope, not more turns), host can't resume (no "continue" option, no "after 0 continuation(s)" text), and suspected truncation.
+- **Stall guard and ceiling.** A stall is two consecutive continuations whose progress lines are empty or identical. Unbounded mode has a hard ceiling of 10 continuations. The running count is kept in the task list entry so context compaction cannot reset it, and the final count goes into the `agent_truncated` event. In default mode the budget, not the stall guard, stops the agent.
+- **Opt-in provenance.** The turn-limit phrases count only from the invoking user's own message, or as an explicit `--unbounded` flag. The same words inside an embedded brief, PRD, ticket body or tool output never trigger it, and `unbounded: on` is echoed once when it is set. The compound-intents fragment carries the same rule.
+- Work that is already pushed is not continued just to keep watching CI.
+- **Optimus** questions-only replies carry no sentinel; `optimus-planner` and `aristotle-deconstructor` handle them as questions (relay and relaunch in gated mode, block in autonomous mode) instead of as truncation.
+- **Cyrus** caps the CI wait at 30 minutes or 60 polls, then reports "CI still pending" with the build link and stops. `ticket-pickup` documents the same cap.
+- **`optimus-planner`** forwards `swarm_mode`, `execution_mode` and `unbounded` to Cyrus, and its truncation handling covers Cyrus on the `i` path.
+- **`forge`** detects `--unbounded` (or the opt-in phrases from the user's own message) on every entry point, records `unbounded: true`, strips the token from the idea text, and forwards it to Aristotle whether or not `swarm_mode` is set.
+- **`code-auditor`** fast-scorer briefs end with `<<task-complete>>`, and a scorer that returns without the sentinel counts as failed immediately and is never resumed, because the fast scorers have no turn cap and so never carry the harness note; the existing continue-with-the-rest and 2-of-3 abort rules stand in for the halt banner. Continuation applies only when the harness note is present. The auditor and Cyrus forward `unbounded` to the reviewers they launch.
+- **`code-auditor-score` workflow** derives the autonomous flag from the raw args. An object needs `autonomous === true`; a string needs a standalone trailing `autonomous` word. A branch such as `feature/autonomous-login` or `{autonomous: 'false'}` no longer flips borderline escalation, and an empty target fails fast with a clear error. The flag is removed before that check, so a flag-only target (`autonomous`, `{autonomous: true}`) is rejected as empty while `PR #482 autonomous` stays valid.
+
+### Changed
+
+- Tests: bats content assertions for the protocol doc in core and in every portable copy, for the skill wiring above, and for the workflow's flag and empty-target behavior.
+
 ## v1.23.0 — 2026-10-16 (turn-cap continuation, `unbounded` opt-in, Aristotle turn cap)
 
 Long workflows kept stopping at agent turn caps, and the only recovery was to shrink the scope or raise `maxTurns` and restart the session. Both threw away the truncated agent's work. A headless probe on Claude Code 2.1.301 (an agent capped at 3 turns, given a 10-step task) showed that `maxTurns` applies per invocation: each `SendMessage` resume of the same agent got a fresh budget, kept its context, never redid a step, and finished after three resumes. The probe also showed that the harness now prefixes a capped agent's result with a note saying it stopped at its turn limit.

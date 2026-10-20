@@ -205,7 +205,7 @@ EOF
     [ -f "$wf" ]
 
     [ -z "$(grep -E 'String\(args' "$wf" || true)" ]
-    grep -qE '^const TARGET = describeTarget\(args\)' "$wf"
+    grep -qE '^const TARGET = describeTarget\(withoutAutonomousFlag\(args\)\)' "$wf"
 
     command -v node >/dev/null 2>&1 || skip "node not installed (not a core dependency)"
 
@@ -231,6 +231,97 @@ for (const [input, want] of cases) {
   }
   if (got.includes('[object Object]')) { console.error('leaked [object Object]'); process.exit(1) }
 }
+console.log('ok')"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"ok"* ]]
+}
+
+# ---------------------------------------------------------------------------
+# autonomous flag detection
+# ---------------------------------------------------------------------------
+# The autonomous flag is derived from the raw args, not from the rendered
+# descriptor text: a branch such as feature/autonomous-login must not flip
+# swarm-mode escalation, and {autonomous: 'false'} must not read as true.
+
+@test "code-auditor-score derives the autonomous flag from raw args, not rendered text" {
+    local wf="$CORE_DIR/.claude/workflows/code-auditor-score.js"
+    [ -f "$wf" ]
+
+    grep -qE '^const AUTONOMOUS = isAutonomous\(args\)' "$wf"
+    [ -z "$(grep -F '\bautonomous\b' "$wf" || true)" ]
+
+    command -v node >/dev/null 2>&1 || skip "node not installed (not a core dependency)"
+
+    local fns
+    fns="$(sed -n '/^function describeTarget/,/^}/p;/^function isAutonomous/,/^}/p;/^function assertTarget/,/^}/p' "$wf")"
+    [ -n "$fns" ]
+
+    run node -e "$fns
+const flagCases = [
+  [{ autonomous: true }, true],
+  [{ pr: 482, autonomous: true }, true],
+  [{ autonomous: 'false' }, false],
+  [{ autonomous: 'true' }, false],
+  [{ autonomous: 0 }, false],
+  [{ autonomous: false }, false],
+  [{ enabled: false }, false],
+  [{ branch: 'feature/autonomous-login' }, false],
+  ['feature/autonomous-login', false],
+  ['branch feature/autonomous-login', false],
+  ['branch feature/autonomous', false],
+  ['PR #482 autonomous', true],
+  ['branch feature/x AUTONOMOUS  ', true],
+  ['src/a.ts src/b.ts autonomous', true],
+  ['autonomous PR #482', false],
+  ['PR #482', false],
+  [0, false],
+  ['', false],
+  [[], false],
+  [{}, false],
+  [null, false],
+  [undefined, false]
+]
+for (const [input, want] of flagCases) {
+  const got = isAutonomous(input)
+  if (got !== want) {
+    console.error('isAutonomous(' + JSON.stringify(input) + ') = ' + got + ', want ' + want)
+    process.exit(1)
+  }
+}
+console.log('ok')"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"ok"* ]]
+}
+
+@test "code-auditor-score fails fast on an empty or flag-only target and accepts a populated one" {
+    local wf="$CORE_DIR/.claude/workflows/code-auditor-score.js"
+    [ -f "$wf" ]
+
+    grep -qE '^assertTarget\(TARGET\)' "$wf"
+    grep -qE '^const TARGET = describeTarget\(withoutAutonomousFlag\(args\)\)' "$wf"
+
+    command -v node >/dev/null 2>&1 || skip "node not installed (not a core dependency)"
+
+    local fns
+    fns="$(sed -n '/^function describeTarget/,/^}/p;/^function isAutonomous/,/^}/p;/^function withoutAutonomousFlag/,/^}/p;/^function assertTarget/,/^}/p' "$wf")"
+    [ -n "$fns" ]
+
+    run node -e "$fns
+const render = (v) => describeTarget(withoutAutonomousFlag(v))
+const empties = [{}, '', [], null, undefined, {enabled: false}, '   ',
+  'autonomous', '  Autonomous  ', {autonomous: true}, {autonomous: true, other: null}]
+for (const empty of empties) {
+  let threw = false
+  try { assertTarget(render(empty)) } catch (e) { threw = /no review target/i.test(e.message) }
+  if (!threw) { console.error('empty target not rejected: ' + JSON.stringify(empty)); process.exit(1) }
+}
+for (const ok of ['PR #482', { pr: 482 }, ['src/a.ts'], 'PR #482 autonomous', { pr: 482, autonomous: true }]) {
+  assertTarget(render(ok))
+}
+if (render('PR #482 autonomous') !== 'PR #482') { console.error('flag not stripped from string: ' + render('PR #482 autonomous')); process.exit(1) }
+if (render({ pr: 482, autonomous: true }) !== 'pr: 482') { console.error('flag not dropped from object'); process.exit(1) }
+if (render('feature/autonomous-login') !== 'feature/autonomous-login') { console.error('branch name mangled'); process.exit(1) }
+if (render(['PR #482', 'autonomous']) !== 'PR #482') { console.error('array flag not stripped'); process.exit(1) }
 console.log('ok')"
     [ "$status" -eq 0 ]
     [[ "$output" == *"ok"* ]]

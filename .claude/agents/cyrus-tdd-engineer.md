@@ -195,7 +195,9 @@ After pushing code (either directly or via `/pr-create-from-commits`), Cyrus can
 
 **Default (no explicit opt-in):** After pushing, report: "Pushed. CI running — will diagnose if it fails on next interaction." and stop. The CI fix loop activates on the next briefing, user message (e.g., "check CI", "fix CI"), or swarm poll that reveals a failure.
 
-**Explicit opt-in:** If the user says "push and wait for CI" or if `swarm_mode: true`, use `mcp__jenkins-mcp__check_build` to poll (10-30 second intervals) until the build completes, then enter the fix loop if it failed.
+**Explicit opt-in:** If the user says "push and wait for CI" or if `swarm_mode: true`, use `mcp__jenkins-mcp__check_build` to poll (10-30 second intervals) until the build completes or the CI wait cap below is reached, then enter the fix loop if it failed.
+
+**CI wait cap.** Never poll indefinitely. Wait at most 30 minutes (or 60 polls, whichever comes first) for one build. If CI is still pending at the cap, report "CI still pending" with the build link and stop; the loop resumes on the next interaction.
 
 ### Prerequisites
 
@@ -229,6 +231,7 @@ If no plan file exists (e.g., direct Cyrus invocation without Optimus), track th
 5. **Wait and verify:**
    - **Default:** Use `gh pr checks <number> --watch` or poll `gh pr checks` to wait for the new build.
    - **If opt-in (explicit wait or swarm mode):** Use `mcp__jenkins-mcp__trigger_build` to trigger a build immediately (faster than waiting for webhook), then `mcp__jenkins-mcp__check_build` to poll at 10-30 second intervals until the build completes.
+   - **Either way, apply the CI wait cap** (30 minutes or 60 polls). At the cap, report "CI still pending" with the build link and stop; do not count it as a failed attempt.
 
 6. **Evaluate:** If CI passes, the loop ends successfully. If CI still fails, update `ci_fix_attempt` in the plan file frontmatter and return to step 1 for the next iteration.
 

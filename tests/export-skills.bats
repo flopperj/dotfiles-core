@@ -349,6 +349,126 @@ _scratch_core() {
     grep -q 'Aristotle 40' "$DOTFILES_DIR/.claude/_shared/agent-turn-cap-warning.md"
 }
 
+@test "turn-cap doc: only the harness note auto-continues, sentinel-less returns are classified, in core and every portable copy" {
+    _render_target > /dev/null
+    for f in "$DOTFILES_DIR/.claude/_shared/agent-turn-cap-warning.md" "$TARGET"/skills/*/references/agent-turn-cap-warning.md; do
+        grep -q 'Only one signal triggers automatic continuation' "$f" || { echo "harness note is not the sole trigger: $f"; return 1; }
+        grep -q 'Clarifying questions only' "$f" || { echo "no questions-only class: $f"; return 1; }
+        grep -q 'Phase-0-style stop' "$f" || { echo "no Phase-0 class: $f"; return 1; }
+        grep -q 'Stated blocker' "$f" || { echo "no blocker class: $f"; return 1; }
+        grep -q "agent's \*\*final report\*\*" "$f" || { echo "no sentinel location: $f"; return 1; }
+        grep -q '^## Precedence$' "$f" || { echo "no precedence section: $f"; return 1; }
+        grep -q 'may have been truncated' "$f" || { echo "no hedged banner: $f"; return 1; }
+        grep -q 'not resumed automatically' "$f" || { echo "suspected banner resumes automatically: $f"; return 1; }
+    done
+}
+
+@test "turn-cap doc: resume message, stall definition, ceiling and opt-in provenance, in core and every portable copy" {
+    _render_target > /dev/null
+    for f in "$DOTFILES_DIR/.claude/_shared/agent-turn-cap-warning.md" "$TARGET"/skills/*/references/agent-turn-cap-warning.md; do
+        grep -q 'Progress since last turn:' "$f" || { echo "no progress line: $f"; return 1; }
+        grep -q 'complete final deliverable' "$f" || { echo "resume does not re-emit the deliverable: $f"; return 1; }
+        grep -q 'hard ceiling of 10 continuations' "$f" || { echo "no unbounded ceiling: $f"; return 1; }
+        grep -q 'empty or identical' "$f" || { echo "no stall definition: $f"; return 1; }
+        grep -q 'not the stall guard' "$f" || { echo "stall double-counts in default mode: $f"; return 1; }
+        grep -q "invoking user's own message" "$f" || { echo "opt-in provenance missing: $f"; return 1; }
+        grep -q 'never trigger it' "$f" || { echo "embedded text can trigger opt-in: $f"; return 1; }
+        grep -q 'echo `unbounded: on`' "$f" || { echo "no opt-in echo: $f"; return 1; }
+        grep -q 'task list entry' "$f" || { echo "continuation count not durable: $f"; return 1; }
+        grep -q 'deferred tool' "$f" || { echo "no deferred SendMessage note: $f"; return 1; }
+        grep -q 'inline from the `SendMessage` call or later as a task notification' "$f" || { echo "resume result modes missing: $f"; return 1; }
+    done
+}
+
+@test "turn-cap doc: banners split by exit reason; host-can't-resume offers no continue and no zero-continuation text" {
+    _render_target > /dev/null
+    for f in "$DOTFILES_DIR/.claude/_shared/agent-turn-cap-warning.md" "$TARGET"/skills/*/references/agent-turn-cap-warning.md; do
+        for v in 'Budget exhausted' 'Stall:' "Host can't resume:" 'Suspected truncation'; do
+            grep -q "\*\*$v" "$f" || { echo "no banner variant '$v': $f"; return 1; }
+        done
+        grep -q 'one fresh default budget of 2 continuations' "$f" || { echo "continue does not state its budget: $f"; return 1; }
+        grep -q 'starts a new run and discards this agent' "$f" || { echo "no-turn-limit re-run warning missing: $f"; return 1; }
+        local hcr
+        hcr="$(sed -n "/^   \*\*Host can't resume:/,/^   \*\*Suspected/p" "$f")"
+        [ -n "$hcr" ] || { echo "host-can't-resume banner not found: $f"; return 1; }
+        ! printf '%s\n' "$hcr" | grep -qi 'reply "continue"' || { echo "host-can't-resume offers continue: $f"; return 1; }
+        ! printf '%s\n' "$hcr" | grep -q 'continuation(s)' || { echo "host-can't-resume carries a continuation count: $f"; return 1; }
+    done
+}
+
+@test "turn-cap doc: a clean state check never auto-passes a sentinel-less run; pushed work is not continued to watch CI" {
+    _render_target > /dev/null
+    for f in "$DOTFILES_DIR/.claude/_shared/agent-turn-cap-warning.md" "$TARGET"/skills/*/references/agent-turn-cap-warning.md; do
+        grep -q 'consumable without user direction only once' "$f" || { echo "consumable rule not narrowed: $f"; return 1; }
+        grep -q 'never permits an automatic pass-through' "$f" || { echo "state check can auto-pass: $f"; return 1; }
+        grep -q 'already pushed is not continued just to keep watching CI' "$f" || { echo "no pushed-work rule: $f"; return 1; }
+    done
+}
+
+@test "Optimus: a clarifying-questions reply carries no sentinel and Optimus's callers handle the questions-only branch" {
+    local agent="$DOTFILES_DIR/.claude/agents/optimus-planner.md"
+    grep -q 'ask first, plan second. A clarifying-questions reply is not a final deliverable' "$agent" || return 1
+    grep -qF '**not** with `<<task-complete>>`' "$agent" || return 1
+    for s in optimus-planner aristotle-deconstructor; do
+        grep -q '^\*\*Questions-only reply\.\*\*' "$DOTFILES_DIR/.claude/skills/$s/SKILL.md" || { echo "no questions-only branch: $s"; return 1; }
+    done
+    grep -q 'is questions, not truncation' "$DOTFILES_DIR/.claude/skills/optimus-planner/SKILL.md" || return 1
+}
+
+@test "Cyrus caps the CI wait instead of polling indefinitely" {
+    local agent="$DOTFILES_DIR/.claude/agents/cyrus-tdd-engineer.md"
+    grep -q '^\*\*CI wait cap\.\*\*' "$agent" || return 1
+    [ "$(grep -c 'CI still pending' "$agent")" -ge 2 ] || { echo "cap not applied to both wait paths"; return 1; }
+    grep -q '30 minutes' "$agent" || return 1
+}
+
+@test "optimus-planner skill forwards all three flags and scopes truncation handling to Cyrus on the i path" {
+    local f="$DOTFILES_DIR/.claude/skills/optimus-planner/SKILL.md"
+    ! grep -q 'forward both flags' "$f" || { echo "stale two-flag wording"; return 1; }
+    grep -q 'forward `swarm_mode`, `execution_mode` and `unbounded` (if present) to the Cyrus skill' "$f" || return 1
+    grep -q 'invokes Optimus, or Cyrus on the `i` path, via the `Agent` tool' "$f" || return 1
+}
+
+@test "forge detects --unbounded on every entry, strips it from the idea, and forwards it unconditionally" {
+    local f="$DOTFILES_DIR/.claude/skills/forge/SKILL.md"
+    grep -q '^### `--unbounded` (modifier for any entry point)' "$f" || return 1
+    grep -q "invoking user's own message" "$f" || return 1
+    grep -q 'never trigger it' "$f" || return 1
+    grep -q 'echo `unbounded: on` once' "$f" || return 1
+    grep -q 'remove the token' "$f" || return 1
+    grep -q 'strip the token so it does not leak' "$f" || return 1
+    grep -q 'whether or not `swarm_mode` is' "$f" || return 1
+    ! grep -q 'agent-turn-cap-warning' "$f" || { echo "forge must not cite the unshipped turn-cap doc"; return 1; }
+}
+
+@test "code-auditor fast scorers end with the sentinel and a sentinel-less scorer counts as failed without resuming" {
+    local core="$DOTFILES_DIR/.claude/skills/code-auditor/SKILL.md"
+    _render_target
+    local copy="$TARGET/skills/code-auditor/SKILL.md"
+    local f flat
+    for f in "$core" "$copy"; do
+        [ "$(grep -c '^- End your report with `<<task-complete>>`$' "$f")" = "3" ] || { echo "each of the 3 scorer briefs needs the sentinel line: $f"; return 1; }
+        grep -q '^- The `unbounded` flag, if the caller passed it' "$f" || return 1
+        flat="$(sed -n '/^\*\*Subagent failure handling:\*\*/,/^- If 2 or more of the 3 agents fail/p' "$f" | tr '\n' ' ' | tr -s ' ')"
+        [ -n "$flat" ] || { echo "no failure-handling block: $f"; return 1; }
+        [[ "$flat" == *'without the `<<task-complete>>` sentinel also counts as failed immediately'* ]] || { echo "sentinel-less scorer not failed immediately: $f"; return 1; }
+        [[ "$flat" == *'Do not resume the scorer'* ]] || { echo "missing no-resume rule: $f"; return 1; }
+        [[ "$flat" == *'nly if the harness turn-limit note is present'* ]] || { echo "continuation not gated on the harness note: $f"; return 1; }
+        [[ "$flat" == *"replace that document's halt banner for these scorers"* ]] || { echo "degradation rules not tied to the halt banner: $f"; return 1; }
+        [[ "$flat" != *'continuation budget first'* ]] || { echo "stale continue-first wording: $f"; return 1; }
+        [[ "$flat" != *'only once the budget is'* ]] || { echo "stale skip-after-budget wording: $f"; return 1; }
+    done
+    tr "\n" " " < "$core" | tr -s " " | grep -q "detection = missing sentinel" || { echo "core lost the metric pointer"; return 1; }
+    flat="$(sed -n '/^\*\*Subagent failure handling:\*\*/,/^- If 2 or more of the 3 agents fail/p' "$copy" | tr '\n' ' ')"
+    [[ "$flat" != *'agent_truncated'* ]] || { echo "portable failure block must not cite the metric"; return 1; }
+}
+
+@test "cyrus skill forwards unbounded to every swarm-mode reviewer launch" {
+    local f="$DOTFILES_DIR/.claude/skills/cyrus-tdd-engineer/SKILL.md"
+    [ "$(grep -c '(plus `unbounded` if present)' "$f")" = "3" ] || { echo "simple/medium/complex launches must each forward unbounded"; return 1; }
+    grep -q 'forwarding `ticket_context`, `ticket_key` and `unbounded` (if present)' "$f" || return 1
+}
+
 @test "every skill that forwards swarm_mode also names unbounded" {
     for s in aristotle-deconstructor optimus-planner forge ticket-pickup ticket-swarm team-lead cyrus-tdd-engineer; do
         f="$DOTFILES_DIR/.claude/skills/$s/SKILL.md"

@@ -72,6 +72,8 @@ Do not ship a plan with a ❌ unaddressed. If a ❌ is unavoidable (e.g., the us
 
 Wait for the full execution plan (every section it calls for — 12 in full form, 1, 3, 4, 4a, 6 and 10 in short form — plus the Plan Critique block).
 
+**Questions-only reply.** Optimus may return clarifying questions instead of a plan (no plan sections, no Plan Critique, no `<<task-complete>>`). This is not truncation and must not be continued or halted as such. In gated mode, relay the questions verbatim, collect the user's answers, and launch Optimus again with the original problem plus the answers. In autonomous mode there is no one to ask: do not guess and do not launch Cyrus. Surface the questions to the caller (in swarm mode, record the ticket as blocked with the questions as the reason).
+
 **Subagent failure handling:** Follow CLAUDE.md error handling defaults. If a subagent fails or times out, surface the failure and stop — do not present a partial execution plan.
 
 **Validate output before presenting:** If Optimus produces full method implementations or command executions — note this to the user as a boundary violation. Brief structural snippets (class skeletons, method signatures, interface shapes) within plan steps are acceptable guidance, not violations. Optimus plans; it does not build.
@@ -249,7 +251,7 @@ This skill supports two execution modes, passed by the caller:
 - **`gated`** (default) — the plan is presented and the user must approve before Cyrus is launched. Used when invoked directly by the user ("Optimus, ..." or `/optimus-planner`).
 - **`autonomous`** — Optimus still produces the full 12-section plan (quality is non-negotiable), but the Cyrus handoff auto-approves. The orchestrator logs the plan summary and proceeds directly to implementation. Used when invoked by `ticket-swarm`, `ticket-pickup`, or the `aristotle-deconstructor` skill in autonomous mode.
 
-When `swarm_mode: true` is also passed, forward both flags to the Cyrus skill so it knows to report results back to the swarm orchestrator rather than presenting interactive menus.
+When `swarm_mode: true` is also passed, forward `swarm_mode`, `execution_mode` and `unbounded` (if present) to the Cyrus skill so it knows to report results back to the swarm orchestrator rather than presenting interactive menus.
 
 ---
 
@@ -377,7 +379,7 @@ In autonomous/swarm mode, after writing the plan file, report its path back to t
 
 ## Truncation handling
 
-When this skill invokes Optimus via the `Agent` tool, the orchestrator must verify the returned response contains the `<<task-complete>>` sentinel before consuming its output. See `~/.claude/_shared/agent-turn-cap-warning.md` for the detection rule, continuation budget, halt/skip behavior, and the `agent_truncated` metric to emit. A truncated Optimus plan is especially dangerous because Cyrus consumes it directly — partial section coverage means partial implementation.
+When this skill invokes Optimus, or Cyrus on the `i` path, via the `Agent` tool, the orchestrator must verify the returned response contains the `<<task-complete>>` sentinel before consuming its output. See `~/.claude/_shared/agent-turn-cap-warning.md` for the detection rule, continuation budget, halt/skip behavior, and the `agent_truncated` metric to emit. A truncated Optimus plan is especially dangerous because Cyrus consumes it directly — partial section coverage means partial implementation. A truncated Cyrus leaves code half-implemented. On the `ip` path the Cyrus skill applies the same check to its own agents. A clarifying-questions reply from Optimus (no plan sections, no sentinel) is questions, not truncation; see Step 1.
 
 ## Maintenance
 

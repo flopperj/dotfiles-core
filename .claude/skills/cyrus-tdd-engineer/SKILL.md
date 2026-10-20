@@ -98,12 +98,15 @@ When `swarm_mode: true` is set, Cyrus adjusts its completion behavior:
   acceptance criteria (Requirements Coverage analysis):
   - `simple` → Launch the `scout-reviewer` skill (Sonnet, fast review)
     with `ticket_context` = the enriched ticket brief and `ticket_key`
+    (plus `unbounded` if present)
   - `medium` → Launch the `/code-auditor` skill (analyzes the diff,
     routes to Scout or Ranger based on code complexity)
     with `ticket_context` = the enriched ticket brief and `ticket_key`
+    (plus `unbounded` if present)
   - `complex` → Launch the `ranger-reviewer` skill (Opus, staff-level
     deep analysis)
     with `ticket_context` = the enriched ticket brief and `ticket_key`
+    (plus `unbounded` if present)
   - If `ticket_complexity` is absent, default to the code auditor.
   If the reviewer passes with no blocking issues, report success to the
   swarm orchestrator. If it finds issues, report them as blockers.
@@ -303,7 +306,8 @@ Implementation complete. What next?
 **In swarm mode (swarm_mode is true):** do not present the menu. Instead:
 
 1. Auto-launch the appropriate reviewer based on `ticket_complexity`
-   (Scout for simple, code auditor for medium, Ranger for complex; default code auditor).
+   (Scout for simple, code auditor for medium, Ranger for complex; default code auditor),
+   forwarding `ticket_context`, `ticket_key` and `unbounded` (if present).
 2. Return a structured result to the swarm orchestrator:
    ```
    ticket: PROJ-1234
