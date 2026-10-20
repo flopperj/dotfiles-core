@@ -78,8 +78,9 @@ invoke, validate, fall back.
    only that standalone trailing word, so a branch such as
    `feature/autonomous-login` does not trigger it, and applies the
    borderline-escalation rule (composite 65-74 → `ranger`) inside its
-   own aggregation. An empty target makes the workflow fail fast, which
-   the validate and fall-back steps below handle.
+   own aggregation. An empty target, or one that is only the
+   `autonomous` flag, makes the workflow fail fast, which the validate
+   and fall-back steps below handle.
 2. **Validate.** Check the workflow's return against
    [`.claude/workflows/schemas/auditor-composite.json`](../../workflows/schemas/auditor-composite.json).
    The five required fields must be present and well-typed:
