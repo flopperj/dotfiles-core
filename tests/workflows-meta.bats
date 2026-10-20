@@ -237,6 +237,89 @@ console.log('ok')"
 }
 
 # ---------------------------------------------------------------------------
+# autonomous flag detection
+# ---------------------------------------------------------------------------
+# The autonomous flag is derived from the raw args, not from the rendered
+# descriptor text: a branch such as feature/autonomous-login must not flip
+# swarm-mode escalation, and {autonomous: 'false'} must not read as true.
+
+@test "code-auditor-score derives the autonomous flag from raw args, not rendered text" {
+    local wf="$CORE_DIR/.claude/workflows/code-auditor-score.js"
+    [ -f "$wf" ]
+
+    grep -qE '^const AUTONOMOUS = isAutonomous\(args\)' "$wf"
+    [ -z "$(grep -F '\bautonomous\b' "$wf" || true)" ]
+
+    command -v node >/dev/null 2>&1 || skip "node not installed (not a core dependency)"
+
+    local fns
+    fns="$(sed -n '/^function describeTarget/,/^}/p;/^function isAutonomous/,/^}/p;/^function assertTarget/,/^}/p' "$wf")"
+    [ -n "$fns" ]
+
+    run node -e "$fns
+const flagCases = [
+  [{ autonomous: true }, true],
+  [{ pr: 482, autonomous: true }, true],
+  [{ autonomous: 'false' }, false],
+  [{ autonomous: 'true' }, false],
+  [{ autonomous: 0 }, false],
+  [{ autonomous: false }, false],
+  [{ enabled: false }, false],
+  [{ branch: 'feature/autonomous-login' }, false],
+  ['feature/autonomous-login', false],
+  ['branch feature/autonomous-login', false],
+  ['branch feature/autonomous', false],
+  ['PR #482 autonomous', true],
+  ['branch feature/x AUTONOMOUS  ', true],
+  ['src/a.ts src/b.ts autonomous', true],
+  ['autonomous PR #482', false],
+  ['PR #482', false],
+  [0, false],
+  ['', false],
+  [[], false],
+  [{}, false],
+  [null, false],
+  [undefined, false]
+]
+for (const [input, want] of flagCases) {
+  const got = isAutonomous(input)
+  if (got !== want) {
+    console.error('isAutonomous(' + JSON.stringify(input) + ') = ' + got + ', want ' + want)
+    process.exit(1)
+  }
+}
+console.log('ok')"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"ok"* ]]
+}
+
+@test "code-auditor-score fails fast on an empty target and accepts a populated one" {
+    local wf="$CORE_DIR/.claude/workflows/code-auditor-score.js"
+    [ -f "$wf" ]
+
+    grep -qE '^assertTarget\(TARGET\)' "$wf"
+
+    command -v node >/dev/null 2>&1 || skip "node not installed (not a core dependency)"
+
+    local fns
+    fns="$(sed -n '/^function describeTarget/,/^}/p;/^function assertTarget/,/^}/p' "$wf")"
+    [ -n "$fns" ]
+
+    run node -e "$fns
+for (const empty of [{}, '', [], null, undefined, {enabled: false}, '   ']) {
+  let threw = false
+  try { assertTarget(describeTarget(empty)) } catch (e) { threw = /no review target/i.test(e.message) }
+  if (!threw) { console.error('empty target not rejected: ' + JSON.stringify(empty)); process.exit(1) }
+}
+for (const ok of ['PR #482', { pr: 482 }, ['src/a.ts']]) {
+  assertTarget(describeTarget(ok))
+}
+console.log('ok')"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"ok"* ]]
+}
+
+# ---------------------------------------------------------------------------
 # Real repo state
 # ---------------------------------------------------------------------------
 
