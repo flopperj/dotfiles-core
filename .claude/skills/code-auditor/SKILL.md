@@ -194,19 +194,28 @@ Diff-level metrics:
 
 **Subagent failure handling:**
 <!-- BEGIN CORE-ONLY -->
-If a subagent errors, times out, or returns empty, treat it as failed. If
-it returns without the `<<task-complete>>` sentinel (suspected turn-cap
-truncation — see `~/.claude/_shared/agent-turn-cap-warning.md`, including
-the `agent_truncated` metric to emit), follow that document's continuation
-budget first and treat the subagent as failed only once the budget is
-exhausted:
+If a subagent errors, times out, or returns empty, treat it as failed. A
+return without the `<<task-complete>>` sentinel also counts as failed
+immediately: these fast scorers have no turn cap, so no harness
+turn-limit note ever appears, and per
+`~/.claude/_shared/agent-turn-cap-warning.md` a bare missing sentinel is
+suspected truncation that is never auto-resumed (emit the
+`agent_truncated` metric it describes, with detection = missing
+sentinel). Do not resume the scorer. Only if the harness turn-limit note
+is present, follow that document's continuation budget before counting
+the scorer as failed. The rules below replace that document's halt
+banner for these scorers:
 <!-- END CORE-ONLY -->
 <!-- PORTABLE-ONLY
-If a subagent errors, times out, or returns empty, treat it as failed. If
-it returns without the `<<task-complete>>` sentinel (suspected turn-cap
-truncation — see `~/.claude/_shared/agent-turn-cap-warning.md`), follow
-that document's continuation budget first and treat the subagent as failed
-only once the budget is exhausted:
+If a subagent errors, times out, or returns empty, treat it as failed. A
+return without the `<<task-complete>>` sentinel also counts as failed
+immediately: these fast scorers have no turn cap, so no harness
+turn-limit note ever appears, and per
+`~/.claude/_shared/agent-turn-cap-warning.md` a bare missing sentinel is
+suspected truncation that is never auto-resumed. Do not resume the
+scorer. Only if the harness turn-limit note is present, follow that
+document's continuation budget before counting the scorer as failed. The
+rules below replace that document's halt banner for these scorers:
 -->
 - Log the failure and which agent it was
 - Continue with results from the remaining agents
