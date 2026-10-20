@@ -219,6 +219,8 @@ your job is to make it executable."
 
 Wait for the full execution plan.
 
+**Questions-only reply.** Optimus may return clarifying questions instead of a plan (no plan sections, no sentinel). Like a Phase 0 stop, this is a legal outcome, not a truncated or failed run. In gated mode, relay the questions verbatim, collect the user's answers, and launch Optimus again with the same handoff plus the answers. In autonomous mode, do not guess and do not launch Cyrus; surface the questions to the caller (in swarm mode, record the ticket as blocked with the questions as the reason).
+
 **Validate output before presenting:** If Optimus's response contains code
 implementations (beyond illustrative pseudocode in plan steps), note this
 to the user as a boundary violation.
@@ -309,7 +311,7 @@ waves, and aggregate final results.
 
 ## Truncation handling
 
-When this skill invokes Aristotle, Optimus, or Cyrus via the `Agent` tool, the orchestrator must verify the returned response contains the `<<task-complete>>` sentinel before consuming its output. See `~/.claude/_shared/agent-turn-cap-warning.md` for the detection rule, continuation budget, halt/skip behavior, and the `agent_truncated` metric to emit. Aristotle-truncation is especially load-bearing here — a truncated Implementation Handoff section silently corrupts Optimus's brief. A missing handoff is not by itself the truncation signature: a Phase 0 stop legitimately has no handoff and no Phases 1-5. The sentinel is the test — a Phase 0 stop that ends with `<<task-complete>>` is complete; a five-phase analysis that stops mid-handoff without the sentinel is truncated.
+When this skill invokes Aristotle, Optimus, or Cyrus via the `Agent` tool, the orchestrator must verify the returned response contains the `<<task-complete>>` sentinel before consuming its output. See `~/.claude/_shared/agent-turn-cap-warning.md` for the detection rule, continuation budget, halt/skip behavior, and the `agent_truncated` metric to emit. Aristotle-truncation is especially load-bearing here — a truncated Implementation Handoff section silently corrupts Optimus's brief. A missing handoff is not by itself the truncation signature: a Phase 0 stop legitimately has no handoff and no Phases 1-5. The sentinel is the test — a Phase 0 stop that ends with `<<task-complete>>` is complete; a five-phase analysis that stops mid-handoff without the sentinel is truncated. A clarifying-questions reply from Optimus is neither: see Step 3.
 
 ## Maintenance
 

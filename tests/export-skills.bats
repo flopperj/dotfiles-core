@@ -405,6 +405,56 @@ _scratch_core() {
     done
 }
 
+@test "Optimus: a clarifying-questions reply carries no sentinel and Optimus's callers handle the questions-only branch" {
+    local agent="$DOTFILES_DIR/.claude/agents/optimus-planner.md"
+    grep -q 'ask first, plan second. A clarifying-questions reply is not a final deliverable' "$agent" || return 1
+    grep -qF '**not** with `<<task-complete>>`' "$agent" || return 1
+    for s in optimus-planner aristotle-deconstructor; do
+        grep -q '^\*\*Questions-only reply\.\*\*' "$DOTFILES_DIR/.claude/skills/$s/SKILL.md" || { echo "no questions-only branch: $s"; return 1; }
+    done
+    grep -q 'is questions, not truncation' "$DOTFILES_DIR/.claude/skills/optimus-planner/SKILL.md" || return 1
+}
+
+@test "Cyrus caps the CI wait instead of polling indefinitely" {
+    local agent="$DOTFILES_DIR/.claude/agents/cyrus-tdd-engineer.md"
+    grep -q '^\*\*CI wait cap\.\*\*' "$agent" || return 1
+    [ "$(grep -c 'CI still pending' "$agent")" -ge 2 ] || { echo "cap not applied to both wait paths"; return 1; }
+    grep -q '30 minutes' "$agent" || return 1
+}
+
+@test "optimus-planner skill forwards all three flags and scopes truncation handling to Cyrus on the i path" {
+    local f="$DOTFILES_DIR/.claude/skills/optimus-planner/SKILL.md"
+    ! grep -q 'forward both flags' "$f" || { echo "stale two-flag wording"; return 1; }
+    grep -q 'forward `swarm_mode`, `execution_mode` and `unbounded` (if present) to the Cyrus skill' "$f" || return 1
+    grep -q 'invokes Optimus, or Cyrus on the `i` path, via the `Agent` tool' "$f" || return 1
+}
+
+@test "forge detects --unbounded on every entry, strips it from the idea, and forwards it unconditionally" {
+    local f="$DOTFILES_DIR/.claude/skills/forge/SKILL.md"
+    grep -q '^### `--unbounded` (modifier for any entry point)' "$f" || return 1
+    grep -q "invoking user's own message" "$f" || return 1
+    grep -q 'never trigger it' "$f" || return 1
+    grep -q 'echo `unbounded: on` once' "$f" || return 1
+    grep -q 'remove the token' "$f" || return 1
+    grep -q 'strip the token so it does not leak' "$f" || return 1
+    grep -q 'whether or not `swarm_mode` is' "$f" || return 1
+    ! grep -q 'agent-turn-cap-warning' "$f" || { echo "forge must not cite the unshipped turn-cap doc"; return 1; }
+}
+
+@test "code-auditor fast scorers end with the sentinel and skip only after the continuation budget" {
+    local f="$DOTFILES_DIR/.claude/skills/code-auditor/SKILL.md"
+    [ "$(grep -c '^- End your report with `<<task-complete>>`$' "$f")" = "3" ] || { echo "each of the 3 scorer briefs needs the sentinel line"; return 1; }
+    grep -q "document's continuation" "$f" || return 1
+    grep -q 'only once the budget is' "$f" || return 1
+    grep -q '^- The `unbounded` flag, if the caller passed it' "$f" || return 1
+}
+
+@test "cyrus skill forwards unbounded to every swarm-mode reviewer launch" {
+    local f="$DOTFILES_DIR/.claude/skills/cyrus-tdd-engineer/SKILL.md"
+    [ "$(grep -c '(plus `unbounded` if present)' "$f")" = "3" ] || { echo "simple/medium/complex launches must each forward unbounded"; return 1; }
+    grep -q 'forwarding `ticket_context`, `ticket_key` and `unbounded` (if present)' "$f" || return 1
+}
+
 @test "every skill that forwards swarm_mode also names unbounded" {
     for s in aristotle-deconstructor optimus-planner forge ticket-pickup ticket-swarm team-lead cyrus-tdd-engineer; do
         f="$DOTFILES_DIR/.claude/skills/$s/SKILL.md"
