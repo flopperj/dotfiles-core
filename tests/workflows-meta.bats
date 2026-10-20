@@ -205,7 +205,7 @@ EOF
     [ -f "$wf" ]
 
     [ -z "$(grep -E 'String\(args' "$wf" || true)" ]
-    grep -qE '^const TARGET = describeTarget\(args\)' "$wf"
+    grep -qE '^const TARGET = describeTarget\(withoutAutonomousFlag\(args\)\)' "$wf"
 
     command -v node >/dev/null 2>&1 || skip "node not installed (not a core dependency)"
 
@@ -293,27 +293,35 @@ console.log('ok')"
     [[ "$output" == *"ok"* ]]
 }
 
-@test "code-auditor-score fails fast on an empty target and accepts a populated one" {
+@test "code-auditor-score fails fast on an empty or flag-only target and accepts a populated one" {
     local wf="$CORE_DIR/.claude/workflows/code-auditor-score.js"
     [ -f "$wf" ]
 
     grep -qE '^assertTarget\(TARGET\)' "$wf"
+    grep -qE '^const TARGET = describeTarget\(withoutAutonomousFlag\(args\)\)' "$wf"
 
     command -v node >/dev/null 2>&1 || skip "node not installed (not a core dependency)"
 
     local fns
-    fns="$(sed -n '/^function describeTarget/,/^}/p;/^function assertTarget/,/^}/p' "$wf")"
+    fns="$(sed -n '/^function describeTarget/,/^}/p;/^function isAutonomous/,/^}/p;/^function withoutAutonomousFlag/,/^}/p;/^function assertTarget/,/^}/p' "$wf")"
     [ -n "$fns" ]
 
     run node -e "$fns
-for (const empty of [{}, '', [], null, undefined, {enabled: false}, '   ']) {
+const render = (v) => describeTarget(withoutAutonomousFlag(v))
+const empties = [{}, '', [], null, undefined, {enabled: false}, '   ',
+  'autonomous', '  Autonomous  ', {autonomous: true}, {autonomous: true, other: null}]
+for (const empty of empties) {
   let threw = false
-  try { assertTarget(describeTarget(empty)) } catch (e) { threw = /no review target/i.test(e.message) }
+  try { assertTarget(render(empty)) } catch (e) { threw = /no review target/i.test(e.message) }
   if (!threw) { console.error('empty target not rejected: ' + JSON.stringify(empty)); process.exit(1) }
 }
-for (const ok of ['PR #482', { pr: 482 }, ['src/a.ts']]) {
-  assertTarget(describeTarget(ok))
+for (const ok of ['PR #482', { pr: 482 }, ['src/a.ts'], 'PR #482 autonomous', { pr: 482, autonomous: true }]) {
+  assertTarget(render(ok))
 }
+if (render('PR #482 autonomous') !== 'PR #482') { console.error('flag not stripped from string: ' + render('PR #482 autonomous')); process.exit(1) }
+if (render({ pr: 482, autonomous: true }) !== 'pr: 482') { console.error('flag not dropped from object'); process.exit(1) }
+if (render('feature/autonomous-login') !== 'feature/autonomous-login') { console.error('branch name mangled'); process.exit(1) }
+if (render(['PR #482', 'autonomous']) !== 'PR #482') { console.error('array flag not stripped'); process.exit(1) }
 console.log('ok')"
     [ "$status" -eq 0 ]
     [[ "$output" == *"ok"* ]]

@@ -63,13 +63,32 @@ function isAutonomous(value) {
   return false
 }
 
+// The flag is not a target: "autonomous" alone, or {autonomous: true}, would
+// otherwise render as a non-empty string and slip past assertTarget with no
+// PR, branch or files for the scorers to resolve. Mirrors isAutonomous: a
+// string loses its trailing standalone word, an object its autonomous key,
+// an array the flag on its last element.
+function withoutAutonomousFlag(value) {
+  if (typeof value === 'string') return value.replace(/(^|\s)autonomous\s*$/i, '')
+  if (Array.isArray(value)) {
+    return value.length === 0
+      ? value
+      : [...value.slice(0, -1), withoutAutonomousFlag(value[value.length - 1])]
+  }
+  if (value != null && typeof value === 'object') {
+    const { autonomous, ...rest } = value
+    return rest
+  }
+  return value
+}
+
 function assertTarget(text) {
   if (!text) {
     throw new Error('code-auditor-score: no review target in args (expected a PR number, branch, or file paths)')
   }
 }
 
-const TARGET = describeTarget(args)
+const TARGET = describeTarget(withoutAutonomousFlag(args))
 assertTarget(TARGET)
 const AUTONOMOUS = isAutonomous(args)
 
