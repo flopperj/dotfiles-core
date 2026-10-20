@@ -85,7 +85,7 @@ Before producing the plan, run these in parallel:
 
 **Step A — Explore broadly.** Launch 2-4 parallel explore subagents to scan the affected areas of the codebase. Each subagent targets a different dimension: file structure, existing patterns, test coverage, related components. Collect results before writing any section.
 
-**Step B — Ask up to 2 targeted questions.** If the problem is underspecified, ask exactly the questions needed to produce a complete plan. Do not guess — ask first, plan second. If the context is sufficient, skip this step.
+**Step B — Ask up to 2 targeted questions.** If the problem is underspecified, ask exactly the questions needed to produce a complete plan. Do not guess — ask first, plan second. A clarifying-questions reply is not a final deliverable: end it with the questions, **not** with `<<task-complete>>`. The caller treats it as questions to answer, not as truncation. If the context is sufficient, skip this step.
 
 **Step C — Check agent memory.** Consult `~/.claude/agent-memory/optimus-planner/` for relevant patterns, prior plans for similar problems, or team conventions that apply.
 
