@@ -73,10 +73,13 @@ invoke, validate, fall back.
    target descriptor from Step 1 (PR number, branch name, or file
    paths) through the Workflow tool's `args` **as a plain string** —
    e.g. `"PR #482"`, `"branch feature/x"`, `"src/a.ts src/b.ts"` — not
-   an object. In autonomous/swarm mode, append the word `autonomous` to
-   the string — the workflow detects it and applies the
+   an object. In autonomous/swarm mode, make `autonomous` the final word
+   of the string (e.g. `"PR #482 autonomous"`) — the workflow detects
+   only that standalone trailing word, so a branch such as
+   `feature/autonomous-login` does not trigger it, and applies the
    borderline-escalation rule (composite 65-74 → `ranger`) inside its
-   own aggregation.
+   own aggregation. An empty target makes the workflow fail fast, which
+   the validate and fall-back steps below handle.
 2. **Validate.** Check the workflow's return against
    [`.claude/workflows/schemas/auditor-composite.json`](../../workflows/schemas/auditor-composite.json).
    The five required fields must be present and well-typed:
@@ -166,6 +169,7 @@ For each changed function/method in the diff:
 - Measure function length (lines)
 - Measure file length
 - Score: weighted sum normalized to 0-100
+- End your report with `<<task-complete>>`
 
 #### Agent 2: Fan-out / impact
 
@@ -175,6 +179,7 @@ For each changed file:
 - Flag if security-sensitive paths are touched (`app/views/`,
   `data/schemas/`, `app/lib-grpc/`)
 - Score: 0-100 based on consumer count and sensitivity
+- End your report with `<<task-complete>>`
 
 #### Agent 3: Scope
 
@@ -185,18 +190,23 @@ Diff-level metrics:
 - Whether new abstractions (classes, interfaces, types) are introduced
 - Whether database migrations are included
 - Score: 0-100
+- End your report with `<<task-complete>>`
 
 **Subagent failure handling:**
 <!-- BEGIN CORE-ONLY -->
-If a subagent fails, times out, returns empty, or returns without the
-`<<task-complete>>` sentinel (suspected turn-cap truncation — see
-`~/.claude/_shared/agent-turn-cap-warning.md`, including the
-`agent_truncated` metric to emit):
+If a subagent errors, times out, or returns empty, treat it as failed. If
+it returns without the `<<task-complete>>` sentinel (suspected turn-cap
+truncation — see `~/.claude/_shared/agent-turn-cap-warning.md`, including
+the `agent_truncated` metric to emit), follow that document's continuation
+budget first and treat the subagent as failed only once the budget is
+exhausted:
 <!-- END CORE-ONLY -->
 <!-- PORTABLE-ONLY
-If a subagent fails, times out, returns empty, or returns without the
-`<<task-complete>>` sentinel (suspected turn-cap truncation — see
-`~/.claude/_shared/agent-turn-cap-warning.md`):
+If a subagent errors, times out, or returns empty, treat it as failed. If
+it returns without the `<<task-complete>>` sentinel (suspected turn-cap
+truncation — see `~/.claude/_shared/agent-turn-cap-warning.md`), follow
+that document's continuation budget first and treat the subagent as failed
+only once the budget is exhausted:
 -->
 - Log the failure and which agent it was
 - Continue with results from the remaining agents
@@ -270,6 +280,8 @@ Launch the selected reviewer skill (`/scout-reviewer` or
 - Ticket context (if provided by the caller — forward `ticket_context`
   and `ticket_key` as-is to the reviewer so it can run Requirements
   Coverage analysis against the ticket's acceptance criteria)
+- The `unbounded` flag, if the caller passed it, so the reviewer's
+  continuation budget matches the rest of the run
 
 **Standalone mode**: If invoked on files/directories without a PR
 context, skip Step 4. Just produce the audit report (Step 3 with option

@@ -626,7 +626,7 @@ Launch the `aristotle-deconstructor` skill. Pass:
 
 The Aristotle skill handles its own gates and downstream handoffs.
 
-**CI fix loop:** When Jenkins MCP is configured, Cyrus includes an autonomous CI failure diagnosis and fix loop after pushing code. Default behavior: Cyrus reports "Pushed. CI running" and stops; the fix loop triggers on the next interaction that reveals a failure. In swarm mode (`swarm_mode: true`), Cyrus polls Jenkins via `mcp__jenkins-mcp__check_build` and enters the fix loop automatically if the build fails (up to 3 iterations). See the Cyrus agent definition for details and guardrails.
+**CI fix loop:** When Jenkins MCP is configured, Cyrus includes an autonomous CI failure diagnosis and fix loop after pushing code. Default behavior: Cyrus reports "Pushed. CI running" and stops; the fix loop triggers on the next interaction that reveals a failure. In swarm mode (`swarm_mode: true`), Cyrus polls Jenkins via `mcp__jenkins-mcp__check_build` and enters the fix loop automatically if the build fails (up to 3 iterations). The wait for any one build is capped at about 30 minutes; if CI is still pending then, Cyrus reports "CI still pending" with the build link and stops. See the Cyrus agent definition for details and guardrails.
 
 ### Metrics emit (after pipeline completes)
 
