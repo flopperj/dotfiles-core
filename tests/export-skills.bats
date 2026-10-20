@@ -349,6 +349,62 @@ _scratch_core() {
     grep -q 'Aristotle 40' "$DOTFILES_DIR/.claude/_shared/agent-turn-cap-warning.md"
 }
 
+@test "turn-cap doc: only the harness note auto-continues, sentinel-less returns are classified, in core and every portable copy" {
+    _render_target > /dev/null
+    for f in "$DOTFILES_DIR/.claude/_shared/agent-turn-cap-warning.md" "$TARGET"/skills/*/references/agent-turn-cap-warning.md; do
+        grep -q 'Only one signal triggers automatic continuation' "$f" || { echo "harness note is not the sole trigger: $f"; return 1; }
+        grep -q 'Clarifying questions only' "$f" || { echo "no questions-only class: $f"; return 1; }
+        grep -q 'Phase-0-style stop' "$f" || { echo "no Phase-0 class: $f"; return 1; }
+        grep -q 'Stated blocker' "$f" || { echo "no blocker class: $f"; return 1; }
+        grep -q "agent's \*\*final report\*\*" "$f" || { echo "no sentinel location: $f"; return 1; }
+        grep -q '^## Precedence$' "$f" || { echo "no precedence section: $f"; return 1; }
+        grep -q 'may have been truncated' "$f" || { echo "no hedged banner: $f"; return 1; }
+        grep -q 'not resumed automatically' "$f" || { echo "suspected banner resumes automatically: $f"; return 1; }
+    done
+}
+
+@test "turn-cap doc: resume message, stall definition, ceiling and opt-in provenance, in core and every portable copy" {
+    _render_target > /dev/null
+    for f in "$DOTFILES_DIR/.claude/_shared/agent-turn-cap-warning.md" "$TARGET"/skills/*/references/agent-turn-cap-warning.md; do
+        grep -q 'Progress since last turn:' "$f" || { echo "no progress line: $f"; return 1; }
+        grep -q 'complete final deliverable' "$f" || { echo "resume does not re-emit the deliverable: $f"; return 1; }
+        grep -q 'hard ceiling of 10 continuations' "$f" || { echo "no unbounded ceiling: $f"; return 1; }
+        grep -q 'empty or identical' "$f" || { echo "no stall definition: $f"; return 1; }
+        grep -q 'not the stall guard' "$f" || { echo "stall double-counts in default mode: $f"; return 1; }
+        grep -q "invoking user's own message" "$f" || { echo "opt-in provenance missing: $f"; return 1; }
+        grep -q 'never trigger it' "$f" || { echo "embedded text can trigger opt-in: $f"; return 1; }
+        grep -q 'echo `unbounded: on`' "$f" || { echo "no opt-in echo: $f"; return 1; }
+        grep -q 'task list entry' "$f" || { echo "continuation count not durable: $f"; return 1; }
+        grep -q 'deferred tool' "$f" || { echo "no deferred SendMessage note: $f"; return 1; }
+        grep -q 'inline from the `SendMessage` call or later as a task notification' "$f" || { echo "resume result modes missing: $f"; return 1; }
+    done
+}
+
+@test "turn-cap doc: banners split by exit reason; host-can't-resume offers no continue and no zero-continuation text" {
+    _render_target > /dev/null
+    for f in "$DOTFILES_DIR/.claude/_shared/agent-turn-cap-warning.md" "$TARGET"/skills/*/references/agent-turn-cap-warning.md; do
+        for v in 'Budget exhausted' 'Stall:' "Host can't resume:" 'Suspected truncation'; do
+            grep -q "\*\*$v" "$f" || { echo "no banner variant '$v': $f"; return 1; }
+        done
+        grep -q 'one fresh default budget of 2 continuations' "$f" || { echo "continue does not state its budget: $f"; return 1; }
+        grep -q 'starts a new run and discards this agent' "$f" || { echo "no-turn-limit re-run warning missing: $f"; return 1; }
+        local hcr
+        hcr="$(sed -n "/^   \*\*Host can't resume:/,/^   \*\*Suspected/p" "$f")"
+        [ -n "$hcr" ] || { echo "host-can't-resume banner not found: $f"; return 1; }
+        ! printf '%s\n' "$hcr" | grep -qi 'reply "continue"' || { echo "host-can't-resume offers continue: $f"; return 1; }
+        ! printf '%s\n' "$hcr" | grep -q 'continuation(s)' || { echo "host-can't-resume carries a continuation count: $f"; return 1; }
+    done
+}
+
+@test "turn-cap doc: a clean state check never auto-passes a sentinel-less run; pushed work is not continued to watch CI" {
+    _render_target > /dev/null
+    for f in "$DOTFILES_DIR/.claude/_shared/agent-turn-cap-warning.md" "$TARGET"/skills/*/references/agent-turn-cap-warning.md; do
+        grep -q 'consumable without user direction only once' "$f" || { echo "consumable rule not narrowed: $f"; return 1; }
+        grep -q 'never permits an automatic pass-through' "$f" || { echo "state check can auto-pass: $f"; return 1; }
+        grep -q 'already pushed is not continued just to keep watching CI' "$f" || { echo "no pushed-work rule: $f"; return 1; }
+    done
+}
+
 @test "every skill that forwards swarm_mode also names unbounded" {
     for s in aristotle-deconstructor optimus-planner forge ticket-pickup ticket-swarm team-lead cyrus-tdd-engineer; do
         f="$DOTFILES_DIR/.claude/skills/$s/SKILL.md"
