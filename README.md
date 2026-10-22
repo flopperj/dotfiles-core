@@ -253,7 +253,7 @@ The submodule SHA pin is intentional — your overlay records exactly which vers
 | `/optimus-planner` | Detailed execution plan before implementation begins |
 | `/overlay-init` | Scaffold a new overlay or extend an existing one (add skill / fragment / context section) |
 | `/performance-review` | Draft an evidence-backed self-review from Jira, GitHub, and tooling contributions into the company template |
-| `/pr-create-from-commits` | Create a PR from recent commits with template auto-detection; Merge order section for repo-split PRs |
+| `/pr-create-from-commits` | Create a PR from recent commits, with the title and body written and checked to the repo's template and conventions (contributor docs, commitlint and CI title checks, recent merged PRs); Merge order section for repo-split PRs |
 | `/ranger-reviewer` | Staff-level PR review with confidence scoring (Opus-tier) |
 | `/record-demo` | Record a background browser demo (choreographed cursor, captions, auto-trim) or a before/after pair, and embed it in the PR description |
 | `/review-context` | Generate a per-project llms.txt for reviewer context |

@@ -1,12 +1,12 @@
 ---
 name: pr-create-from-commits
-description: "Create a PR from recent commits. Use when the user says 'create a PR', 'open a pull request', 'make a PR from my commits', or similar. Detects the repo's PR template automatically, handles Jira ticket status via MCP, asks for missing context upfront, and populates the PR body based on whatever template structure the repo uses."
+description: "Create a PR from recent commits. Use when the user says 'create a PR', 'open a pull request', 'make a PR from my commits', or similar. Detects the repo's PR template and its title and body conventions (agent and contributor docs, commitlint and CI title checks, recent merged PRs), handles Jira ticket status via MCP, asks for missing context upfront, and writes and validates the title and body to those conventions."
 user-invocable: true
 ---
 
 # Pull Request Create
 
-Create a PR from recent commits. Detects the repo's PR template automatically, asks for any missing context upfront, handles Jira ticket status, and populates the PR body based on whatever template structure the repo uses.
+Create a PR from recent commits. Detects the repo's PR template and its conventions for titles and bodies, asks for any missing context upfront, handles Jira ticket status, and writes the title and body the way the repo expects.
 
 ## Steps
 
@@ -16,13 +16,15 @@ Create a PR from recent commits. Detects the repo's PR template automatically, a
 - Run `git log origin/{default_branch}..HEAD --oneline` to see commits on this branch
 - Run `git diff origin/{default_branch}` for a full diff overview
 - Understand the purpose and scope of the changes
-- Extract the Jira ticket number from the branch name (format: `ABC-1234`). If not found in the branch name, ask the user. If no ticket exists yet, offer to create one via `/create-jira-ticket`.
+- Extract the Jira ticket number from the branch name (format: `ABC-1234`). If not found in the branch name and the repo's conventions (Step 2) put a ticket in the title or body, ask the user; if no ticket exists yet, offer to create one via `/create-jira-ticket`. If the conventions never reference a ticket, don't ask.
 - **Check for flag-only changes:** if the only changed file is `config/flags.ini`, suggest using `/mc-pr-flag` instead for a specialized flag PR template with proper rollout metadata.
 - **Check for mixed changes:** if commits contain clearly unrelated concerns, WARN the user and suggest splitting into multiple PRs. Only proceed if the user confirms.
 
-### 2. Detect PR template
+### 2. Detect the repo's PR template and conventions
 
-Search for a PR template in the following locations (in order):
+Always run this step, in every repo: the title and body follow the repo's own rules, never a format this skill brings with it.
+
+**Template.** Search for a PR template in the following locations (in order):
 
 1. `.github/pull_request_template.md`
 2. `.github/PULL_REQUEST_TEMPLATE.md`
@@ -30,13 +32,25 @@ Search for a PR template in the following locations (in order):
 4. `docs/pull_request_template.md`
 5. `pull_request_template.md` (repo root)
 
-If a template is found, read it in full — it defines the exact sections to populate. If no template is found, use a sensible default structure: Description, Changes, Testing, Notes.
+If a template is found, read it in full — it defines the exact sections to populate.
+
+**Written conventions.** Read whichever of these exist, and pull out every rule about PR titles, PR bodies and commit messages:
+
+- Agent and contributor docs: `AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING.md`, `.github/CONTRIBUTING.md`, `docs/CONTRIBUTING.md`, and any doc they link for "shipping" or "PRs"
+- Commit-message tooling: `commitlint.config.*`, `.commitlintrc*`, a `commitlint` key in `package.json`, `.husky/commit-msg`, `.gitmessage`, `.czrc` / `config.commitizen` (allowed types, scopes, case, length)
+- CI that checks PR titles or bodies: `.github/workflows/*` steps such as `action-semantic-pull-request`, a `pr-title` / `pr-lint` job, or a `Dangerfile`
+
+**Observed conventions.** List the last 10 merged PRs (`gh pr list --state merged --limit 10 --json number,title,body`, with the host as a literal) and note the title shape (type prefix, scope, ticket placement and case, capitalization, a trailing version or ticket), the body's section headings and order, and any recurring footer (ticket link, attribution line).
+
+**Precedence:** a written rule beats the template for the title. The template beats observed PRs for the body. Observed PRs fill anything the first two leave open. Only when all three are silent, fall back to `[{TICKET}] {Title}` for the title and to Description, Changes, Testing, Notes for the body.
+
+Record the result as a short **conventions summary**: the title pattern (with an example), length limit, allowed types, ticket placement (or "no ticket"), the body sections in order, required footer lines, and the file or PR each rule came from. If two sources conflict, say which one won and why. Show this summary to the user alongside the draft title and body in Step 6.
 
 ### 3. Ask for missing context upfront
 
-Before doing any git operations, identify what information is required by the template but cannot be inferred from the code. Always ask for:
+Before doing any git operations, identify what information the template or conventions require that cannot be inferred from the code, for example:
 
-- **Slack team channel** — almost never determinable from code; always ask if not explicitly mentioned in the diff or commit messages
+- **Slack team channel** — when the template or conventions ask for it; almost never determinable from code, so ask unless the diff or commit messages name it
 - Any other template fields that are blank placeholders and cannot be reasonably inferred
 
 Ask all missing questions in a single message — don't interrupt later steps with follow-up questions.
@@ -65,7 +79,7 @@ All Jira operations are best-effort — never block PR creation on a Jira failur
 
 ### 6. Create the PR
 
-1. Populate every section of the detected template based on code analysis. Let the template structure drive the write-up — do not impose a fixed format. Be specific and accurate; ask rather than guess. Only use "N/A" when information genuinely cannot be determined.
+1. Write the title to the conventions summary from Step 2: its pattern, types, scope, ticket placement, case and length limit. Populate every section of the detected template (or, with no template, the body sections the conventions name) based on code analysis. Let the template and conventions drive the write-up — do not impose a fixed format. Be specific and accurate; ask rather than guess. Only use "N/A" when information genuinely cannot be determined.
 2. For each placeholder or table row in the template, fill it in using:
    - Code diff analysis for technical content (what changed, how to test, risk areas)
    - User-provided answers from Step 3 for anything that required asking (e.g. Slack channel)
@@ -98,9 +112,11 @@ Built against the unmerged changes in the PR above — merge that one first.
      - Body too short: "PR body is N bytes; minimum is 100. Add a Summary or Why section explaining the change."
      - Missing summary heading: "PR body has no Summary/Why/Motivation/Context/Overview section. Add one before I create the PR."
    - Wait for the user to provide an expanded body (or confirm `skip_body_validation`). Re-check after the expansion. Only proceed when the body passes both checks.
-4. Create the PR as a **draft by default**:
+
+   **3b. Validate the title and body against the conventions** (always; `skip_body_validation` does not skip it). Check the title against every rule in the conventions summary — pattern, allowed type, scope, ticket placement and case, length limit — and check that the body has the required sections in order and the required footer lines. If a rule is a regex or a commitlint config, test the title against it; when the repo ships a checker (e.g. `npx commitlint` over the title, the same rule CI runs), run it. On a mismatch, fix the title or body and re-check; never create a PR that the repo's own hooks or CI would reject for its title.
+4. Create the PR as a **draft by default**, with the title and body that passed 3b:
    ```
-   gh pr create --draft --title "[{TICKET}] {Title}" --body "{populated_template}"
+   gh pr create --draft --title "{title}" --body-file "{body_file}"
    ```
 5. If the user explicitly requests a non-draft PR (e.g., "open a PR for review", "create a ready PR"): use `gh pr create --title "..." --body "..."` without `--draft`. Non-draft PRs require the code auditor to run first (see CLAUDE.md PR Creation Workflow).
 
