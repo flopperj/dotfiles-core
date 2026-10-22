@@ -259,6 +259,27 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
+# Test 15b: pr-create-from-commits follows the repo's own title/body conventions
+# ---------------------------------------------------------------------------
+# The title and body come from the repo's rules (contributor docs, commitlint,
+# CI title checks, recent merged PRs), are validated before `gh pr create`, and
+# the old fixed `[{TICKET}] {Title}` shape is only the last-resort fallback.
+@test "pr-create-from-commits detects and validates the repo's PR conventions" {
+    local skill_file="$SKILLS_DIR/pr-create-from-commits/SKILL.md"
+    grep -q '^### 2\. Detect the repo.s PR template and conventions' "$skill_file"
+    grep -qF 'AGENTS.md' "$skill_file"
+    grep -qF 'CONTRIBUTING.md' "$skill_file"
+    grep -qF 'commitlint' "$skill_file"
+    grep -qF 'gh pr list --state merged' "$skill_file"
+    grep -qF 'conventions summary' "$skill_file"
+    grep -qF 'Validate the title and body against the conventions' "$skill_file"
+    grep -qF -- '--title "{title}"' "$skill_file"
+    # The fixed shape survives only as the fallback, never in the create command.
+    grep -qF 'Only when all three are silent, fall back to `[{TICKET}] {Title}`' "$skill_file"
+    ! grep -qF -- '--title "[{TICKET}] {Title}"' "$skill_file"
+}
+
+# ---------------------------------------------------------------------------
 # Test 16: optimus-planner adopts YYYY-MM-DD-<slug>.md plan filename convention
 # ---------------------------------------------------------------------------
 # Phase 2: new plans use a date prefix for chronological sort. Legacy plans

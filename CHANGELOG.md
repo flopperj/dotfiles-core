@@ -3,7 +3,7 @@
 > **How to update:** The pre-commit hook (`scripts/pre-commit.sh`) is auto-installed by `install.sh`. It runs a fast leakage check (`scripts/check-no-leakage.sh`) and re-renders the generated `CLAUDE.md.generated` and `AGENTS.md.generated` files on every commit. A pre-push gate (`scripts/pre-push.sh`, also auto-installed) scans every outgoing commit's tree and metadata before it leaves the machine. CI runs lint, consult-grammar, and the test suite (including synthetic-token leakage mechanism tests) on every PR; the company-token scan is a separate step that runs only when guard data is present on the runner. If you bypass the hooks or work in a context where hooks cannot run, keep this file current manually. Each release heading links to the diff on the public mirror.
 ## v1.24.0 — 2026-10-22 (record-demo)
 
-PRs had no repeatable way to show reviewers a change working in the browser. `/record-demo` records one in the background, while the user keeps working, and embeds it in the PR description.
+PRs had no repeatable way to show reviewers a change working in the browser. `/record-demo` records one in the background, while the user keeps working, and embeds it in the PR description. `/pr-create-from-commits` now writes PR titles and bodies to each repo's own conventions instead of a fixed `[TICKET] Title` shape.
 
 ### Added
 
@@ -20,6 +20,10 @@ PRs had no repeatable way to show reviewers a change working in the browser. `/r
 - `tests/install-brew.bats` (7) runs `lib-brew.sh` against a stubbed `brew`. `tests/install.bats`, `install-yadm-layout.bats` and `install-plugins.bats` set `DOTFILES_SKIP_BREW=1`, so no test starts a real Homebrew install.
 - `tests/record-demo.bats` (6): frontmatter, MIT notice, routing wiring, the single port knob, and preflight's report-and-exit contract.
 - Routing: trigger phrases "record a demo", "make a demo video for the PR", "add a demo to the PR", "record a before and after" and "screen-record this", and the `/record-demo` slash entry, regenerated into `.claude/CLAUDE.md.generated`. README `## Skills` row.
+
+### Changed
+
+- `/pr-create-from-commits` now always works out the repo's PR conventions before writing the title or body. It reads the template, the agent and contributor docs (`AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING.md`), commit-message tooling (commitlint, husky `commit-msg`, commitizen), CI title checks, and the last 10 merged PRs. A written rule beats the template for the title, and the template beats observed PRs for the body. It records a conventions summary with the source of each rule and shows it with the draft. Before `gh pr create`, it validates the title and body against that summary, running the repo's own checker when one exists. The fixed `[{TICKET}] {Title}` shape is now only the fallback when every source is silent. It asks for a ticket only when the conventions use one, and for a Slack channel only when the template or conventions ask for it. The body is passed with `--body-file`. A new test in `tests/agents.bats` pins this behavior.
 
 ## v1.23.1 — 2026-10-20 (turn-cap review follow-ups)
 
