@@ -21,6 +21,7 @@ These skills are invoked when the user's request matches a trigger phrase (not a
 | "respond to the review", "address review comments", "summarize this review round", "post a review round summary", "respond to PR feedback" | `/review-respond` | Summarize-only author reply to a review round: outcome per thread, also-found commits, test/lint/typecheck at HEAD; draft-first, 🤖-marked |
 | "create a ticket", "file a bug" | `/create-jira-ticket` | Create Jira tickets (Stories, Bugs, Tasks, Epics) via MCP |
 | "tech spec", "design doc", "design document", "implementation proposal" | `/create-tech-spec` | Generate tech spec with solution approach, estimates, and rollout plan |
+| "record a demo", "make a demo video for the PR", "add a demo to the PR", "record a before and after", "screen-record this" | `/record-demo` | Record a background browser demo with a choreographed cursor and auto-trim, then embed it in the PR |
 | "mermaid to PNG", "diagram image", "export diagram" | `/mermaid-diagrams` | Convert Mermaid syntax to PNG via mmdc |
 | "Google Doc", "save to Docs" | `/google-docs` | Create, read, and edit Google Docs with markdown conversion |
 | "Google Drive", "upload to Drive" | `/google-drive` | Search, upload, download, and share Google Drive files |
