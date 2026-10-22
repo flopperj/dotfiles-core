@@ -62,6 +62,8 @@ The installer also installs two universal Claude Code plugins from the official 
 
 Plugin install is idempotent and gracefully skips if the `claude` CLI is unavailable. Overlays may layer additional plugins via their own `.claude/plugins.txt`; the two lists are union-installed.
 
+On macOS it also installs the Homebrew formulae core skills need, declared in `brew.txt` (today `ffmpeg`, for `/record-demo`). Formulae already installed are skipped. Without `brew` it prints the formulae to install yourself, a failed install only warns, and `install.sh --skip-brew` (or `DOTFILES_SKIP_BREW=1`) skips the step.
+
 The installer is **idempotent** — re-run it any time. It leaves symlinks that already point into core alone, replaces a real file or directory whose content is byte-identical to core's silently, moves any other collision to `~/.claude/.backups/<timestamp>/<path>` before linking (it never prompts), and reports what changed.
 
 ## Verify the install
