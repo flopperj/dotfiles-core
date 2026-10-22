@@ -28,8 +28,8 @@ bash $S/preflight.sh [url-fragment]
 ```
 
 - The dotfiles installer installs `ffmpeg` with Homebrew (`brew.txt`). If it's still missing, start `brew install ffmpeg` at once, in the background (it can take many minutes), and keep planning while it runs.
-- Python needs numpy and Pillow. Put them in a virtualenv rather than the system Python, and point the scripts at it with `DEMO_PYTHON` (preflight prints the commands).
-- `npm i` in `$S` installs the pinned `playwright-core` once.
+- Python needs numpy and Pillow. Put them in a virtualenv at `~/.cache/record-demo-venv` rather than the system Python; the scripts use it automatically when it exists (preflight prints the commands). `DEMO_PYTHON` overrides it. For the manual commands below, `PY=${DEMO_PYTHON:-$HOME/.cache/record-demo-venv/bin/python}`.
+- `npm i` in `$S` installs the pinned `playwright-core` once. It writes no lockfile (`$S/.npmrc`).
 
 ### Which browser
 
@@ -97,11 +97,11 @@ How the edit works (`autotrim.py`, reading the raw frames plus `events.json`):
 - **Kept at 1×:** glides, clicks and their rings, typing, scrolls, holds, caption reading time, and visible page changes.
 - **Sped up to play in about 1.2s (max 8×):** `d.pending()` spans, plus unmarked page activity over 1.5s with no action (spinners, streaming), after its first 0.5s.
 - **Cut:** static stretches longer than 0.4s.
-- Cuts never land inside a glide or a ring. On pages that animate constantly, everything quiet would get sped up: rerun the plan with `"${DEMO_PYTHON:-python3}" $S/autotrim.py $D/frames $D/events.json --no-auto-pending` and pass its output to `choreo.sh --segments`.
+- Cuts never land inside a glide or a ring. On pages that animate constantly, everything quiet would get sped up: rerun the plan with `"$PY" $S/autotrim.py $D/frames $D/events.json --no-auto-pending` and pass its output to `choreo.sh --segments`.
 
 Crisp video: on a 1x display the DevTools screencast is capped at the window's physical pixel size. Start your own browser with `DEMO_SCALE=2` for true 2560×1600 frames, and keep the resolution at encode time with `MAX_W=2560 CRFS="20 23 26 30" bash $S/choreo.sh …`. `MAX_W` (default 1280) is the final width and `CRFS` (default `26 30 34 38`) the CRF ladder, tried in order until the file fits under 10 MB. A 51s take was 3.3 MB at crf 20.
 
-**Cursor or ring looks offset:** compare the `S=` that `composite.py` printed with `frame_width / CSS viewport width` (1920 / 1280 = 1.5 at 100% zoom). If they differ, check `viewport`/`viewports` in `events.json`, then re-composite from the kept frames without re-recording: `"${DEMO_PYTHON:-python3}" $S/composite.py $D/frames $D/events.json $D/comp`, then `assemble.sh`.
+**Cursor or ring looks offset:** compare the `S=` that `composite.py` printed with `frame_width / CSS viewport width` (1920 / 1280 = 1.5 at 100% zoom). If they differ, check `viewport`/`viewports` in `events.json`, then re-composite from the kept frames without re-recording: `"$PY" $S/composite.py $D/frames $D/events.json $D/comp`, then `assemble.sh`.
 
 ## A. Background, step by step
 

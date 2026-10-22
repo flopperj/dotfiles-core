@@ -29,7 +29,7 @@ done
 [ "${#pos[@]}" -ge 3 ] || usage
 frag=${pos[0]} choreo=${pos[1]} D=${pos[2]} out=${pos[3]:-}
 mkdir -p "$D"
-py=${DEMO_PYTHON:-python3}
+py=${DEMO_PYTHON:-$([ -x "$HOME/.cache/record-demo-venv/bin/python" ] && echo "$HOME/.cache/record-demo-venv/bin/python" || echo python3)}
 
 if [ "$dry" = 1 ]; then
   DEMO_LOCK_WIDTH=${size%x*} exec node "$here/run.mjs" "$frag" "$choreo" "$D/events-dry.json" --preview
