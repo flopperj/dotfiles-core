@@ -1,6 +1,26 @@
 # Changelog
 
 > **How to update:** The pre-commit hook (`scripts/pre-commit.sh`) is auto-installed by `install.sh`. It runs a fast leakage check (`scripts/check-no-leakage.sh`) and re-renders the generated `CLAUDE.md.generated` and `AGENTS.md.generated` files on every commit. A pre-push gate (`scripts/pre-push.sh`, also auto-installed) scans every outgoing commit's tree and metadata before it leaves the machine. CI runs lint, consult-grammar, and the test suite (including synthetic-token leakage mechanism tests) on every PR; the company-token scan is a separate step that runs only when guard data is present on the runner. If you bypass the hooks or work in a context where hooks cannot run, keep this file current manually. Each release heading links to the diff on the public mirror.
+## v1.24.0 — 2026-10-22 (record-demo)
+
+PRs had no repeatable way to show reviewers a change working in the browser. `/record-demo` records one in the background, while the user keeps working, and embeds it in the PR description.
+
+### Added
+
+- `/record-demo` skill (`.claude/skills/record-demo/`), adapted from San'Quan Prioleau's MIT-licensed `record-demo` (notice kept in the skill's `LICENSE`). Three paths: a Playwright choreography recorded over the DevTools screencast with the cursor, click rings and captions composited afterwards and dead time cut automatically (default); step-by-step background driving with manual trims; and `screencapture` of the user's window as a fallback. Then upload through GitHub's comment uploader and a draft-first `gh pr edit` of the `🎥 Demo` section. macOS only.
+- Changes from upstream:
+  - `DEMO_CDP_PORT` (default 9333) on every script, so a take can attach to a signed-in automation browser a project already launches instead of signing in to a separate profile.
+  - `DEMO_PYTHON` for a virtualenv's interpreter, and `DEMO_OUT_DIR` for the output folder.
+  - `scripts/preflight.sh` checks node, `playwright-core`, numpy/Pillow, ffmpeg, swiftc, the DevTools port, an optional tab and a second driver. It prints the fix for each gap and changes nothing.
+  - `drive.mjs aria [selector] [frame]` prints the accessibility tree for picking locators.
+  - Before/after pairs, which must show the problem in the "before" on a dry run before either take is recorded. A demo of two identical takes is reported instead of recorded.
+  - Locator traps: inexact role names, hidden text matches, and block editors that need a double-click.
+  - `playwright-core` is pinned exactly with no lockfile. Company-specific targets moved behind a new `## Demo recording targets` consult section. Upstream's throwaway `*.tmp.mjs` drivers are dropped.
+- `install.sh` installs the Homebrew formulae core skills need, listed in a new root `brew.txt` (`ffmpeg` for `/record-demo`), through `scripts/lib-brew.sh`, which follows the `plugins.txt` / `lib-plugins.sh` pattern. Installed formulae are skipped. A missing `brew` (Linux, cloud workspaces) prints the formulae to install by hand, a failed install warns without aborting, and `--skip-brew` / `DOTFILES_SKIP_BREW=1` opts out. An overlay can pass its own `.claude/brew.txt` to the same function. `/doctor` lists `ffmpeg` among the skill prerequisites.
+- `tests/install-brew.bats` (7) runs `lib-brew.sh` against a stubbed `brew`. `tests/install.bats`, `install-yadm-layout.bats` and `install-plugins.bats` set `DOTFILES_SKIP_BREW=1`, so no test starts a real Homebrew install.
+- `tests/record-demo.bats` (6): frontmatter, MIT notice, routing wiring, the single port knob, and preflight's report-and-exit contract.
+- Routing: trigger phrases "record a demo", "make a demo video for the PR", "add a demo to the PR", "record a before and after" and "screen-record this", and the `/record-demo` slash entry, regenerated into `.claude/CLAUDE.md.generated`. README `## Skills` row.
+
 ## v1.23.1 — 2026-10-20 (turn-cap review follow-ups)
 
 Review of the v1.23.0 continuation protocol found places where it could resume an agent that had not been truncated, could hand a half-finished result downstream, or could run without a bound. This release tightens the protocol and the skills that follow it. No agent frontmatter changes.
