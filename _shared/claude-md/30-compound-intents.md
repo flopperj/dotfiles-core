@@ -29,7 +29,7 @@ When the user's request implies multiple skills in sequence, detect the compound
   - `/dotfiles-sync`, `/doctor`
   - `/briefing`, `/sitrep`, `/pr-create-from-commits`
   - `/smart-compact`, `/smart-statusline`
-  - `/create-jira-ticket`, `/create-tech-spec`, `/mermaid-diagrams`
+  - `/create-jira-ticket`, `/create-tech-spec`, `/mermaid-diagrams`, `/record-demo`
   - `/obligations`, `/google-docs`, `/google-drive`
   - `/agent-stats`, `/lessons-review`
   - `/grill-me`, `/to-prd`, `/forge`
