@@ -74,3 +74,16 @@ teardown() {
     [ "$status" -eq 1 ]
     [[ "$output" == *"MISS  numpy + Pillow for /nonexistent/python"* ]]
 }
+
+@test "npm i in the skill writes no lockfile" {
+    grep -qx "package-lock=false" "$SKILL_DIR/scripts/.npmrc"
+    grep -qE '"playwright-core": "[0-9]+\.[0-9]+\.[0-9]+"' "$SKILL_DIR/scripts/package.json"
+}
+
+@test "preflight defaults to the record-demo venv when it exists" {
+    mkdir -p "$HOME/.cache/record-demo-venv/bin"
+    printf '#!/bin/sh\nexit 1\n' > "$HOME/.cache/record-demo-venv/bin/python"
+    chmod +x "$HOME/.cache/record-demo-venv/bin/python"
+    DEMO_CDP_PORT=9 run bash "$SKILL_DIR/scripts/preflight.sh"
+    [[ "$output" == *"numpy + Pillow for $HOME/.cache/record-demo-venv/bin/python"* ]]
+}

@@ -4,13 +4,14 @@
 #
 # Usage: preflight.sh [url-fragment]
 #   url-fragment  also confirm a tab whose URL contains it is open in the browser
-# Environment: DEMO_CDP_PORT (default 9333), DEMO_PYTHON (default python3).
+# Environment: DEMO_CDP_PORT (default 9333), DEMO_PYTHON (default: the
+#   ~/.cache/record-demo-venv interpreter when it exists, else python3).
 # Exit status: 0 ready, 1 at least one gap.
 set -uo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
 port=${DEMO_CDP_PORT:-9333}
-py=${DEMO_PYTHON:-python3}
+py=${DEMO_PYTHON:-$([ -x "$HOME/.cache/record-demo-venv/bin/python" ] && echo "$HOME/.cache/record-demo-venv/bin/python" || echo python3)}
 frag=${1:-}
 gaps=0
 ok() { echo "ok    $1"; }
@@ -19,7 +20,7 @@ gap() { echo "MISS  $1"; echo "      fix: $2"; gaps=$((gaps + 1)); }
 command -v node >/dev/null && ok "node $(node -v)" || gap "node" "install Node 18+"
 [ -d "$here/node_modules/playwright-core" ] && ok "playwright-core" || gap "playwright-core" "(cd $here && npm i)"
 "$py" -c "import numpy, PIL" 2>/dev/null && ok "numpy + Pillow ($py)" \
-  || gap "numpy + Pillow for $py" "python3 -m venv ~/.cache/record-demo-venv && ~/.cache/record-demo-venv/bin/pip install numpy Pillow, then export DEMO_PYTHON=~/.cache/record-demo-venv/bin/python"
+  || gap "numpy + Pillow for $py" "python3 -m venv ~/.cache/record-demo-venv && ~/.cache/record-demo-venv/bin/pip install numpy Pillow, (picked up automatically)"
 command -v ffmpeg >/dev/null && ok "ffmpeg" || gap "ffmpeg" "rerun the dotfiles install.sh, or brew install ffmpeg (slow; start it in the background)"
 command -v swiftc >/dev/null && ok "swiftc (URL caption bar)" || gap "swiftc" "xcode-select --install, or pass --no-url-bar to choreo.sh"
 
