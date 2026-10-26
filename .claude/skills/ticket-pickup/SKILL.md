@@ -92,6 +92,9 @@ applies it.
 - **No change** ("don't assign it", "leave the assignee"): skip
   assignment entirely.
 
+A caller-passed `assignee` (ticket-swarm hands one down) replaces parsing the
+request.
+
 ---
 
 ## Step 2: Fetch ticket context
@@ -237,6 +240,8 @@ If the user picks `swarm` (or autonomous mode auto-selects it):
    - `execution_mode`: forward from caller (or default `gated`)
    - `swarm_mode`: forward from caller if present
    - `unbounded`: forward from caller if present
+   - `assignee`: the assignee target from Step 1 (the user, a named person,
+     or no change)
 2. ticket-swarm skips its JQL harvest (Step 1 Source A) and uses the
    provided child tickets directly.
 3. Transition the parent Story to "In Progress" if available.
@@ -446,7 +451,7 @@ blocker — stop this ticket and surface the failure. Otherwise auto-select
 4. **On success:** delegate exactly like Step 2.5's "Delegating to
    ticket-swarm" block — `child_tickets` = the created keys,
    `parent_story_key` = the parent ticket key, `execution_mode`,
-   `swarm_mode` and `unbounded` forwarded from the caller. Transition the
+   `swarm_mode`, `unbounded` and `assignee` forwarded from the caller. Transition the
    parent to "In Progress" and add a plain-language parent comment naming the split
    and merge order, e.g.:
    `🤖 This ticket spans two repositories, so I split it into one sub-task per repo: PROJ-1235 (other-repo), PROJ-1236 (my-repo). Merge order: other-repo first, then my-repo. Each sub-task will post its own updates.`
@@ -716,7 +721,7 @@ blocked. It is a success. Handle it as:
 2. Add a Jira comment: `🤖 Looked into this one and the answer isn't a code
    change. {verdict}. Full reasoning is in the pipeline output — leaving the
    ticket as-is for a human to decide what to do with it.`
-3. Leave the ticket status unchanged (it is already In Progress from Step 7).
+3. Leave the ticket status unchanged (it is already In Progress from Step 7, or from ticket-swarm Step 4.5 in swarm mode).
    Do not transition to In Review; there is no PR to review.
 4. In swarm mode, return `outcome: advisory` and the verdict to the caller
    instead of a PR URL, so ticket-swarm counts it under Advisory rather
@@ -725,12 +730,16 @@ blocked. It is a success. Handle it as:
 Do not treat an advisory outcome as a failure, retry it, or escalate it
 through smart failure analysis.
 
-**IMPORTANT:** Immediately after launching the pipeline, proceed to
-Step 7 (Jira transition). Do not skip it.
+**IMPORTANT:** Outside swarm mode, immediately after launching the pipeline,
+proceed to Step 7 (Jira transition). Do not skip it.
 
 ---
 
 ## Step 7: Jira status transition (MANDATORY)
+
+**In swarm mode:** Skip this step — ticket-swarm Step 4.5 assigns, sets story
+points, transitions and comments, so a story-points change made at its triage
+gate is not overwritten.
 
 You **MUST** transition the ticket to "In Progress" **IMMEDIATELY** after
 launching the pipeline. Do not defer this. Do not skip it.
@@ -779,7 +788,7 @@ pipeline activity in real time.
 - **Autonomous mode still gates on ambiguous classification.** When in doubt,
   escalate complexity one level.
 - **Each downstream pipeline runs as a subagent** to keep context clean.
-- **NEVER skip Jira transitions.** They happen at pipeline launch, not later.
+- **NEVER skip Jira transitions.** They happen at pipeline launch (Step 7, or ticket-swarm Step 4.5 in swarm mode), not later.
   The user expects real-time status updates.
 - **A picked-up ticket is assigned to the user** unless they named someone
   else or asked for no change. Take a ticket from a teammate only when the

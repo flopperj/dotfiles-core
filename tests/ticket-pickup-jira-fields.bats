@@ -13,6 +13,8 @@ SKILLS="$DOTFILES_DIR/.claude/skills"
 PICKUP="$SKILLS/ticket-pickup/SKILL.md"
 SWARM="$SKILLS/ticket-swarm/SKILL.md"
 
+squash() { tr '\n' ' ' | tr -s ' '; }
+
 step7() {
     sed -n '/^## Step 7: Jira status transition/,/^## Gate rules/p' "$PICKUP"
 }
@@ -74,4 +76,33 @@ step7() {
     grep -q 'Looks up the story points field and, if the ticket has none, estimates' "$SWARM" || return 1
     grep -q 'Complexity  Points  Summary' "$SWARM" || return 1
     grep -q -- '-> p N M  = Use M story points for ticket N' "$SWARM" || return 1
+}
+
+@test "ticket-pickup skips Step 7 in swarm mode because ticket-swarm owns the Jira writes" {
+    step7 | squash | grep -qF '**In swarm mode:** Skip this step — ticket-swarm Step 4.5 assigns, sets story points, transitions and comments'
+}
+
+@test "ticket-pickup wording that assumed Step 7 always runs is scoped to outside swarm mode" {
+    local flat
+    flat=$(squash < "$PICKUP")
+    grep -qF 'IMPORTANT:** Outside swarm mode, immediately after launching the pipeline, proceed to Step 7' <<<"$flat" || return 1
+    grep -qF 'NEVER skip Jira transitions.** They happen at pipeline launch (Step 7, or ticket-swarm Step 4.5 in swarm mode)' <<<"$flat" || return 1
+    grep -qF 'already In Progress from Step 7, or from ticket-swarm Step 4.5 in swarm mode' <<<"$flat"
+}
+
+@test "ticket-pickup forwards the assignee target in both ticket-swarm delegations" {
+    local flat
+    flat=$(squash < "$PICKUP")
+    grep -qF '`assignee`: the assignee target from Step 1' <<<"$flat" || return 1
+    grep -qF '`swarm_mode`, `unbounded` and `assignee` forwarded' <<<"$flat" || return 1
+    grep -qF 'A caller-passed `assignee`' <<<"$flat"
+}
+
+@test "ticket-swarm takes an assignee input, from the caller or the user's request, and Step 4.5 uses it" {
+    local s
+    s=$(sed -n '/^## Step 4.5: Transition Jira tickets/,/^## Step 5/p' "$SWARM" | squash)
+    grep -qF 'default the user, a named person, or no change' <(squash < "$SWARM") || return 1
+    grep -qF 'Assign it to the `assignee` target' <<<"$s" || return 1
+    grep -qF 'reassigned only when an assignee was named' <<<"$s" || return 1
+    grep -qF 'In swarm mode ticket-pickup skips its Step 7' <<<"$s"
 }
