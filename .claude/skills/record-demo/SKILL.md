@@ -19,7 +19,7 @@ For company-specific demo targets, consult `## Demo recording targets` in `~/.cl
 
 ## Setup
 
-`S=~/.claude/skills/record-demo/scripts` (run `.sh` with `bash`, `.mjs` with `node`). Work dir: `D=<scratchpad>/demo-<slug>`. Output dir: `OUT=${DEMO_OUT_DIR:-$HOME/Desktop/🎥 Demos}`. Final file: `$OUT/demo_<slug>.mp4` (lowercase `demo_`, hyphenated slug, e.g. `demo_edit-agent-streaming-reply.mp4`; a pair adds `-before` / `-after`). Default size **1280×800**.
+`S=~/.claude/skills/record-demo/scripts` (run `.sh` with `bash`, `.mjs` with `node`). Work dir: `D=<scratchpad>/demo-<slug>`. Output dir: `OUT=${DEMO_OUT_DIR:-$HOME/Desktop/🎥 Demos}` (`mkdir -p "$OUT"`). Final file: `$OUT/demo_<slug>.mp4` (lowercase `demo_`, hyphenated slug, e.g. `demo_edit-agent-streaming-reply.mp4`; a pair adds `-before` / `-after`). Default size **1280×800**.
 
 Run the preflight first. It changes nothing and prints the fix for each gap:
 
@@ -121,7 +121,8 @@ Record:
 
 ```bash
 mkdir -p $D && (nohup node $S/screencast.mjs <frag> $D/frames 1280 800 > $D/screencast.log 2>&1 & echo $! > $D/pid)
-until grep -q recording $D/screencast.log; do sleep 0.5; done
+for _ in $(seq 1 60); do grep -q recording $D/screencast.log && break; kill -0 $(cat $D/pid) 2>/dev/null || break; sleep 0.5; done
+grep -q recording $D/screencast.log || { cat $D/screencast.log; exit 1; }
 # … stage the "before" view, then drive the steps; mark each one:
 python3 -c "import time,sys; print(f'{time.time():.2f}\t'+sys.argv[1])" "<step>" >> $D/marks.tsv
 # … hold the final state ~3s, then:
@@ -135,8 +136,8 @@ bash $S/assemble.sh $D/frames $D/raw.mp4 "$(head -1 $D/frames/urls.tsv | cut -f2
 
 ## B. Screen capture (fallback)
 
-- `bash $S/record.sh check`. If it's denied, the user must enable **System Settings → Privacy & Security → Screen Recording** for the process running Claude Code (the CLI binary, not a desktop UI app); the grant may need redoing after updates. `open "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"` opens the pane.
-- `stage-window.sh` and `chrome-js.sh` also need **Automation → Google Chrome** for that process (`-1743` means it's missing). `chrome-js.sh` also needs Chrome → **View → Developer → Allow JavaScript from Apple Events**. To type with it, use the React-safe value setter plus an `input` event, one character every ~45ms.
+- `bash $S/record.sh check`. If it's denied, the user must enable **System Settings → Privacy & Security → Screen Recording** for the app Claude Code runs in (your terminal app, e.g. Terminal or iTerm, or the Claude desktop app) and restart that app; the grant may need redoing after updates. `open "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"` opens the pane.
+- `stage-window.sh` and `chrome-js.sh` also need **Automation → Google Chrome** for that same app (`-1743` means it's missing). `chrome-js.sh` also needs Chrome → **View → Developer → Allow JavaScript from Apple Events**. To type with it, use the React-safe value setter plus an `input` event, one character every ~45ms.
 
 ```bash
 bash $S/record.sh start $(bash $S/stage-window.sh "<url-fragment>") $D   # zsh: inline $(…), don't store the rect in $VAR
@@ -166,7 +167,7 @@ bash $S/finish.sh $D/raw.mp4 "$OUT/demo_<slug>.mp4" "0.5-4,5-13.8@1.5,13.8-43.5@
 
 ## Check the video
 
-Spot-check the start, the key moment and the last frame (`-sseof -0.2`): tile them with `hstack`/`vstack` and Read the result. Watch the *after* frame for regressions the change introduced (e.g. removing a highlight once left dark text on a dark background) and report them. Then send the mp4 to the user.
+Spot-check the start, the key moment and the last frame (`-sseof -0.2`): tile them with `hstack`/`vstack` and Read the result. Watch the *after* frame for regressions the change introduced (e.g. removing a highlight once left dark text on a dark background) and report them. Then send the mp4 to the user and wait for the user to approve the video before any upload.
 
 ## Upload and embed in the PR
 
@@ -176,7 +177,7 @@ The `gh` CLI can't upload attachments, so use GitHub's web uploader from a brows
 2. Copy the mp4 into `$D/` and upload that copy; browser upload tools refuse paths outside the session's folders. Never click the attach button: it opens a native picker.
 3. After ~5s, take the asset URL (`https://<github-host>/user-attachments/assets/<uuid>`) out of the comment field. Clear the field (`value=''` plus an `input` event) and leave the comment **unsubmitted**.
 4. `gh pr view <url> --json body -q .body > $D/body.md`, with the host as a literal (`GH_HOST=<host>` or a full PR URL). In the `🎥 Demo` section (any heading level), replace the placeholder or the previous asset URL with the new bare URL on its own line; for a pair, label the lines **Before** and **After**. With no Demo section, add `### 🎥 Demo` above "Steps to test" (or at the end).
-5. Show the user the diff. Unless they already asked you to update the description, wait for a yes. Then `gh pr edit <url> --body-file $D/body.md`.
+5. Show the user the diff and wait for a yes, even if they asked you to add the demo to the PR. Then `gh pr edit <url> --body-file $D/body.md`.
 6. Reload the page and confirm the description's `video` element exists and its `currentSrc` contains the new asset id.
 
 If the upload fails, give the user the file path and the exact body edit to make by drag-and-drop.

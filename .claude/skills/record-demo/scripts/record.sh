@@ -22,7 +22,7 @@ case "$cmd" in
       echo "ok"
     else
       rm -f "$tmp"
-      echo "denied: grant Screen Recording to the Claude app in System Settings → Privacy & Security → Screen Recording, then restart Claude" >&2
+      echo "denied: grant Screen Recording to the app Claude Code runs in (your terminal app, e.g. Terminal or iTerm, or the Claude desktop app) in System Settings → Privacy & Security → Screen Recording, then restart that app" >&2
       exit 1
     fi
     ;;
