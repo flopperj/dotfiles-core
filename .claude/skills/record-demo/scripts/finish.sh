@@ -39,10 +39,10 @@ filter+="${labels}concat=n=${i}:v=1:a=0,fps=30,scale='min(${max_w},iw)':-2,forma
 for crf in $crfs; do
   ffmpeg -hide_banner -loglevel error -y -i "$in" -filter_complex "$filter" -map "[out]" \
     -c:v libx264 -preset slow -crf "$crf" -movflags +faststart -an "$out"
-  size=$(stat -f%z "$out")
+  size=$(wc -c < "$out" | tr -d ' ')
   if [ "$size" -lt "$limit" ]; then
     dur=$(ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 "$out")
-    printf '%s  %.1fs  %.1f MB  (crf %s)\n' "$out" "$dur" "$(echo "$size / 1048576" | bc -l)" "$crf"
+    printf '%s  %.1fs  %.1f MB  (crf %s)\n' "$out" "$dur" "$(awk -v s="$size" 'BEGIN { print s / 1048576 }')" "$crf"
     exit 0
   fi
 done

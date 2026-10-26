@@ -88,7 +88,7 @@ teardown() {
     [[ "$output" == *"numpy + Pillow for $HOME/.cache/record-demo-venv/bin/python"* ]]
 }
 
-@test "finish.sh creates a missing output directory before encoding" {
+@test "finish.sh creates a missing output directory and sizes the file without stat or bc" {
     mkdir -p "$TEST_HOME/bin"
     cat > "$TEST_HOME/bin/ffmpeg" <<'STUB'
 #!/usr/bin/env bash
@@ -96,11 +96,14 @@ for last; do :; done
 printf 'mp4' > "$last"
 STUB
     printf '#!/usr/bin/env bash\necho 1.0\n' > "$TEST_HOME/bin/ffprobe"
-    chmod +x "$TEST_HOME/bin/ffmpeg" "$TEST_HOME/bin/ffprobe"
+    # Fails like GNU stat does on `stat -f%z`, so the test holds on any OS.
+    printf '#!/usr/bin/env bash\necho "stat: cannot read file system information" >&2\nexit 1\n' > "$TEST_HOME/bin/stat"
+    chmod +x "$TEST_HOME/bin/ffmpeg" "$TEST_HOME/bin/ffprobe" "$TEST_HOME/bin/stat"
     PATH="$TEST_HOME/bin:$PATH" run bash "$SKILL_DIR/scripts/finish.sh" \
         "$TEST_HOME/raw.mp4" "$TEST_HOME/fresh/🎥 Demos/demo_x.mp4" "0-1"
     [ "$status" -eq 0 ]
     [ -f "$TEST_HOME/fresh/🎥 Demos/demo_x.mp4" ]
+    ! grep -qE '(^|[^[:alnum:]_])(stat|bc)( |$)' "$SKILL_DIR/scripts/finish.sh"
 }
 
 @test "the step-by-step recording wait is bounded and checks the screencast is alive" {
