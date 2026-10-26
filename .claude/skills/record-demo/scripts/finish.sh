@@ -21,6 +21,8 @@ if [ "$segs" = "all" ]; then
   segs="0-$dur"
 fi
 
+mkdir -p "$(dirname "$out")"
+
 filter="" labels="" i=0
 IFS=',' read -ra parts <<<"$segs"
 for p in "${parts[@]}"; do

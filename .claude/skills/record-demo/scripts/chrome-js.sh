@@ -6,7 +6,8 @@
 # Usage: chrome-js.sh <url-fragment> <file.js>
 #
 # Needs Chrome → View → Developer → Allow JavaScript from Apple Events, plus
-# Automation permission claude.app → Google Chrome. The JS must be a single
+# Automation permission: the app Claude Code runs in (your terminal app or the
+# Claude desktop app) → Google Chrome. The JS must be a single
 # expression (wrap in an IIFE); return strings/JSON, not objects.
 set -euo pipefail
 

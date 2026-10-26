@@ -87,3 +87,51 @@ teardown() {
     DEMO_CDP_PORT=9 run bash "$SKILL_DIR/scripts/preflight.sh"
     [[ "$output" == *"numpy + Pillow for $HOME/.cache/record-demo-venv/bin/python"* ]]
 }
+
+@test "finish.sh creates a missing output directory before encoding" {
+    mkdir -p "$TEST_HOME/bin"
+    cat > "$TEST_HOME/bin/ffmpeg" <<'STUB'
+#!/usr/bin/env bash
+for last; do :; done
+printf 'mp4' > "$last"
+STUB
+    printf '#!/usr/bin/env bash\necho 1.0\n' > "$TEST_HOME/bin/ffprobe"
+    chmod +x "$TEST_HOME/bin/ffmpeg" "$TEST_HOME/bin/ffprobe"
+    PATH="$TEST_HOME/bin:$PATH" run bash "$SKILL_DIR/scripts/finish.sh" \
+        "$TEST_HOME/raw.mp4" "$TEST_HOME/fresh/🎥 Demos/demo_x.mp4" "0-1"
+    [ "$status" -eq 0 ]
+    [ -f "$TEST_HOME/fresh/🎥 Demos/demo_x.mp4" ]
+}
+
+@test "the step-by-step recording wait is bounded and checks the screencast is alive" {
+    ! grep -q 'until grep -q recording' "$SKILL_DIR/SKILL.md" || return 1
+    local line
+    line=$(grep -n 'grep -q recording \$D/screencast.log' "$SKILL_DIR/SKILL.md" | head -1)
+    [[ "$line" == *"seq 1 "* ]] || return 1
+    [[ "$line" == *'kill -0 $(cat $D/pid)'* ]] || return 1
+    grep -q 'cat \$D/screencast.log' "$SKILL_DIR/SKILL.md"
+}
+
+@test "setup creates the output directory" {
+    grep -qF 'mkdir -p "$OUT"' "$SKILL_DIR/SKILL.md"
+}
+
+@test "nothing is uploaded before the user approves the video" {
+    local s
+    s=$(sed -n '/^## Check the video/,/^## Upload and embed/p' "$SKILL_DIR/SKILL.md")
+    grep -qi 'wait for the user to approve the video' <<<"$s" || return 1
+    grep -qi 'before any upload' <<<"$s" || return 1
+}
+
+@test "the description edit always waits for a yes" {
+    ! grep -q 'Unless they already asked' "$SKILL_DIR/SKILL.md" || return 1
+    grep -qF 'Show the user the diff and wait for a yes' "$SKILL_DIR/SKILL.md"
+}
+
+@test "Screen Recording and Automation grants name the app Claude Code runs in, in every script and the skill" {
+    local f
+    for f in SKILL.md scripts/record.sh scripts/chrome-js.sh scripts/stage-window.sh; do
+        grep -qF 'the app Claude Code runs in' "$SKILL_DIR/$f" || { echo "missing in $f"; return 1; }
+        ! grep -qE 'claude\.app|CLI binary|to the Claude app' "$SKILL_DIR/$f" || { echo "stale wording in $f"; return 1; }
+    done
+}

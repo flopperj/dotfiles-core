@@ -5,7 +5,8 @@
 #
 # Usage: stage-window.sh <url-fragment> [x y w h]   (default 64 80 1280 800)
 #
-# Needs Automation permission: claude.app → Google Chrome. window.screenX in the
+# Needs Automation permission: the app Claude Code runs in (your terminal app or
+# the Claude desktop app) → Google Chrome. window.screenX in the
 # page is unreliable here: the Claude in Chrome tab group often lives in its own,
 # minimized window, which reports 0×0 or dock-sized bounds.
 set -euo pipefail
