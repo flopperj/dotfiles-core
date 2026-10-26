@@ -24,6 +24,8 @@ _hook_state() {
 }
 
 setup() {
+    # Never start a real Homebrew install from a test; tests/install-brew.bats covers it.
+    export DOTFILES_SKIP_BREW=1
     # Call parent setup for CORE_DIR and SCRATCH
     CORE_DIR="$(realpath "$BATS_TEST_DIRNAME/..")"
     export CORE_DIR

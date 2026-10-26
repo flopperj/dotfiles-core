@@ -126,6 +126,13 @@ If no tickets are found, inform the user and suggest broadening the query.
 If Jira is unavailable, show `⚠️ Jira unavailable — provide ticket keys
 manually (comma-separated)` and wait for input.
 
+### Assignee target
+
+Step 4.5 assigns each launched ticket to the `assignee` target: the `assignee`
+input when the caller passes one (ticket-pickup does, from its own Step 1),
+otherwise parsed from the user's swarm request the way ticket-pickup Step 1
+does: default the user, a named person, or no change.
+
 ---
 
 ## Step 2: Parallel triage
@@ -137,6 +144,8 @@ Launch one explore subagent per ticket (up to 5 concurrent). Each subagent:
 1. Fetches full ticket context via `getJiraIssue`
 2. Searches the codebase for references (stack traces, error messages, classes)
 3. Classifies complexity (Simple / Medium / Complex)
+4. Looks up the story points field and, if the ticket has none, estimates
+   them (ticket-pickup Step 2.2 and Step 4's story point estimate)
 
 **Subagent failure handling:** If a triage subagent fails or returns
 empty, log the failure and continue with remaining tickets. If >50% of
@@ -154,19 +163,22 @@ Present the batch to the user:
 ```
 Ticket Swarm: N tickets ready
 
-#  Ticket      Priority  Complexity  Summary                        Pipeline
-1  PROJ-1001   P1        Simple      NPE in RefundProcessor         Cyrus direct
-2  PROJ-998    P2        Medium      Campaign preview 404s          Optimus -> Cyrus
-3  PROJ-1015   P1        Complex     Auth token race condition      Aristotle -> Optimus -> Cyrus
-4  PROJ-1020   P3        Simple      Typo in error message          Cyrus direct
-5  PROJ-1003   P2        Medium      Flag check missing             Optimus -> Cyrus
+#  Ticket      Priority  Complexity  Points  Summary                        Pipeline
+1  PROJ-1001   P1        Simple      1*      NPE in RefundProcessor         Cyrus direct
+2  PROJ-998    P2        Medium      3       Campaign preview 404s          Optimus -> Cyrus
+3  PROJ-1015   P1        Complex     8*      Auth token race condition      Aristotle -> Optimus -> Cyrus
+4  PROJ-1020   P3        Simple      -       Typo in error message          Cyrus direct
+5  PROJ-1003   P2        Medium      3*      Flag check missing             Optimus -> Cyrus
 
-  -> all  = Launch all pipelines
-  -> 1,3  = Launch specific tickets (comma-separated)
-  -> r    = Re-triage with additional context
-  -> e N  = Escalate ticket N (bump complexity one level)
-  -> s N  = Simplify ticket N (drop complexity one level)
-  -> x    = Cancel
+  * = estimated, will be set on launch    - = no points field
+
+  -> all    = Launch all pipelines
+  -> 1,3    = Launch specific tickets (comma-separated)
+  -> r      = Re-triage with additional context
+  -> e N    = Escalate ticket N (bump complexity one level)
+  -> s N    = Simplify ticket N (drop complexity one level)
+  -> p N M  = Use M story points for ticket N (1, 2, 3, 5, or 8)
+  -> x      = Cancel
 ```
 
 **This is Gate 1** — the user must approve which tickets to swarm. Wait for
@@ -406,10 +418,21 @@ respect these as targets and adjust based on observed performance.
 You **MUST** transition each launched ticket to "In Progress" **IMMEDIATELY**
 after pipeline launch. Do not defer this to later steps. Do not skip it.
 
+In swarm mode ticket-pickup skips its Step 7, so this step is the only writer
+of assignment, story points, the transition and the comment.
+
 For each ticket:
-1. Call `getTransitionsForJiraIssue` to find the "In Progress" transition ID
-2. Call `transitionJiraIssue` with the transition ID
-3. Add a comment: `🤖 Picked this one up. {action_phrase}` — use the same `{action_phrase}` mapping as ticket-pickup Step 7.3 (Simple → going straight to implementing, Medium → planning then implementing, Complex → strategic analysis then planning then implementing). Branch detail is omitted here; it appears on the PR link when work is submitted.
+1. Assign it to the `assignee` target, following ticket-pickup Step 7.1's autonomous
+   rules; with no change, skip assignment. Unassigned tickets
+   (common for Story sub-tickets) are assigned to the target. A teammate's
+   ticket is reassigned only when an assignee was named; otherwise it is left
+   in place and listed in the final summary.
+2. Set story points if the ticket has none and its issue type has a points
+   field, following ticket-pickup Step 7.2. Use the estimate approved at
+   Gate 1, including any `p N M` change.
+3. Call `getTransitionsForJiraIssue` to find the "In Progress" transition ID
+4. Call `transitionJiraIssue` with the transition ID
+5. Add a comment: `🤖 Picked this one up. {action_phrase}` — use the same `{action_phrase}` mapping as ticket-pickup Step 7.5 (Simple → going straight to implementing, Medium → planning then implementing, Complex → strategic analysis then planning then implementing). Branch detail is omitted here; it appears on the PR link when work is submitted.
 
 **Verify:** After all transitions, confirm each ticket's status changed by
 checking the response. If a transition fails (no valid transition, Jira
@@ -588,8 +611,14 @@ Ticket Swarm Complete
     - PROJ-998:  PR #483 (approved)
     - PROJ-1020: PR #484 (approved)
 
+  Left with their assignee:
+    - PROJ-1004: assigned to Alex Kim, not reassigned
+
   Time: ~12 minutes | Agents spawned: 9
 ```
+
+Include the "Left with their assignee" block only when Step 4.5 skipped
+reassigning a teammate's ticket.
 
 ---
 

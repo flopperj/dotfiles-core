@@ -9,3 +9,4 @@
 ## Jira fallback
 ## Jenkins MCP clone URL
 ## Repo registry
+## Demo recording targets

@@ -10,6 +10,8 @@
 load 'test_helper'
 
 setup() {
+    # Never start a real Homebrew install from a test; tests/install-brew.bats covers it.
+    export DOTFILES_SKIP_BREW=1
     CORE_DIR="$(realpath "$BATS_TEST_DIRNAME/..")"
     export CORE_DIR
     SCRATCH="$(mktemp -d)"
