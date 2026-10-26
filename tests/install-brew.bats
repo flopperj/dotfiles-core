@@ -60,7 +60,7 @@ _manifest() { printf '%s\n' "$@" > "$SCRATCH/core/brew.txt"; }
     _plant_brew_stub
     _manifest "ffmpeg" "jq"
     echo ffmpeg > "$SCRATCH/broken"
-    PATH="$SCRATCH/bin:$PATH" run _install_brew_formulae "$SCRATCH/core"
+    PATH="$SCRATCH/bin:$PATH" run bash -c 'set -euo pipefail; source "$1/scripts/lib-brew.sh"; _install_brew_formulae "$2"' _ "$CORE_DIR" "$SCRATCH/core"
     [ "$status" -eq 0 ]
     [[ "$output" == *"WARNING: Failed to install Homebrew formula: ffmpeg"* ]]
     grep -qx "install jq" "$SCRATCH/brew-calls.log"

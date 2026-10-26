@@ -38,7 +38,8 @@ _install_brew_formulae() {
             continue
         fi
         echo "  Installing Homebrew formula: $formula (can take several minutes)"
-        brew install "$formula" 2>&1 | sed 's/^/    /'
-        [ "${PIPESTATUS[0]}" = 0 ] || echo "  WARNING: Failed to install Homebrew formula: $formula" >&2
+        if ! brew install "$formula" 2>&1 | sed 's/^/    /'; then
+            echo "  WARNING: Failed to install Homebrew formula: $formula" >&2
+        fi
     done
 }
