@@ -1,6 +1,14 @@
 # Changelog
 
 > **How to update:** The pre-commit hook (`scripts/pre-commit.sh`) is auto-installed by `install.sh`. It runs a fast leakage check (`scripts/check-no-leakage.sh`) and re-renders the generated `CLAUDE.md.generated` and `AGENTS.md.generated` files on every commit. A pre-push gate (`scripts/pre-push.sh`, also auto-installed) scans every outgoing commit's tree and metadata before it leaves the machine. CI runs lint, consult-grammar, and the test suite (including synthetic-token leakage mechanism tests) on every PR; the company-token scan is a separate step that runs only when guard data is present on the runner. If you bypass the hooks or work in a context where hooks cannot run, keep this file current manually. Each release heading links to the diff on the public mirror.
+## v1.24.1 — 2026-10-26 (record-demo on Linux CI)
+
+The v1.24.0 `check` job failed on the public mirror's Ubuntu runner: `finish.sh` read the encoded file's size with BSD `stat -f%z`, which GNU `stat` rejects, so the script exited under `set -euo pipefail`.
+
+### Fixed
+
+- `/record-demo` `scripts/finish.sh` sizes the file with `wc -c` and prints megabytes with `awk`, so it no longer depends on BSD `stat` or on `bc` being installed. `tests/record-demo.bats` stubs a failing `stat` so the test fails the same way on macOS and Linux, and checks that `finish.sh` calls neither tool.
+
 ## v1.24.0 — 2026-10-26 (record-demo)
 
 PRs had no repeatable way to show reviewers a change working in the browser. `/record-demo` records one in the background, while the user keeps working, and embeds it in the PR description. `/pr-create-from-commits` now writes PR titles and bodies to each repo's own conventions instead of a fixed `[TICKET] Title` shape. `/ticket-pickup` now assigns a picked-up ticket to the user and fills in missing story points.
