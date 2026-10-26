@@ -77,6 +77,7 @@ Check for external tools required by optional skills. Report as INFO-level (not 
 |---|---|---|
 | `gcloud` ADC | google-docs, google-drive | `test -f ~/.config/gcloud/application_default_credentials.json` |
 | `mmdc` | mermaid-diagrams | `command -v mmdc` |
+| `ffmpeg` | record-demo (listed in `brew.txt`; `install.sh` installs it with brew) | `command -v ffmpeg` |
 | `python3` | mc-lint | `command -v python3` |
 | `uv` | jenkins-mcp | `command -v uv` |
 | `jenkins-mcp` config | briefing, ranger, scout, cyrus (CI diagnosis) | Check `~/.claude.json` for `mcpServers.jenkins-mcp` key |

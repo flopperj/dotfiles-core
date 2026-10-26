@@ -84,6 +84,17 @@ Parse the user's input to determine the ticket:
 
 If no ticket can be resolved, ask the user for a ticket key. If no ticket exists yet, offer to create one via `/create-jira-ticket`.
 
+Also resolve the **assignee target** from the user's request. Step 7
+applies it.
+
+- **Default: the user.** Picking up a ticket means taking it.
+- **A named person** ("assign it to Alex", "for @alex"): that person.
+- **No change** ("don't assign it", "leave the assignee"): skip
+  assignment entirely.
+
+A caller-passed `assignee` (ticket-swarm hands one down) replaces parsing the
+request.
+
 ---
 
 ## Step 2: Fetch ticket context
@@ -96,8 +107,17 @@ block the pipeline on a Jira failure.
    - Summary, description, acceptance criteria
    - Comments (especially reproduction steps, stack traces, linked PRs)
    - Status, priority, labels, components
+   - Current assignee (display name and account ID, or unassigned)
    - Linked issues (blockers, duplicates, related)
    - Attachments (note URLs for reference)
+2. Find the story points field. It is a custom field whose ID differs
+   between Jira sites, so look it up by name: call
+   `getJiraIssueTypeMetaWithFields` for the ticket's project and issue type
+   and match the field named "Story Points" or "Story point estimate"
+   (case-insensitive; prefer "Story Points" if both exist). Record its ID
+   and read the ticket's current value for it. No match means the issue
+   type has no points field (sub-tasks often don't); skip story points for
+   this ticket.
 
 For company-specific Jira fallback, consult `## Jira fallback` in `~/.claude/overlay-context.md`. If that file is absent, proceed with the primary tool only.
 
@@ -220,6 +240,8 @@ If the user picks `swarm` (or autonomous mode auto-selects it):
    - `execution_mode`: forward from caller (or default `gated`)
    - `swarm_mode`: forward from caller if present
    - `unbounded`: forward from caller if present
+   - `assignee`: the assignee target from Step 1 (the user, a named person,
+     or no change)
 2. ticket-swarm skips its JQL harvest (Step 1 Source A) and uses the
    provided child tickets directly.
 3. Transition the parent Story to "In Progress" if available.
@@ -429,7 +451,7 @@ blocker — stop this ticket and surface the failure. Otherwise auto-select
 4. **On success:** delegate exactly like Step 2.5's "Delegating to
    ticket-swarm" block — `child_tickets` = the created keys,
    `parent_story_key` = the parent ticket key, `execution_mode`,
-   `swarm_mode` and `unbounded` forwarded from the caller. Transition the
+   `swarm_mode`, `unbounded` and `assignee` forwarded from the caller. Transition the
    parent to "In Progress" and add a plain-language parent comment naming the split
    and merge order, e.g.:
    `🤖 This ticket spans two repositories, so I split it into one sub-task per repo: PROJ-1235 (other-repo), PROJ-1236 (my-repo). Merge order: other-repo first, then my-repo. Each sub-task will post its own updates.`
@@ -503,6 +525,22 @@ Any of these:
 - Cross-service or cross-system boundaries
 - Previous fix attempts failed (linked duplicate/reverted tickets)
 
+### Story point estimate
+
+Only when Step 2 found a points field and the ticket has no value in it.
+Estimate on the same Fibonacci scale `/create-jira-ticket` uses, **1, 2, 3,
+5, 8**, and never other values:
+
+- **1 pt**: Trivial change — a single config update, copy change, or one-liner fix
+- **2 pts**: Small, well-defined task — a single file change with minimal risk
+- **3 pts**: Medium task — touches 2-3 files, straightforward implementation
+- **5 pts**: Larger task — multiple files, some complexity or unknowns
+- **8 pts**: Significant effort — cross-cutting changes, new patterns, or substantial unknowns
+
+Base it on the enrichment from Step 3, not on the classification alone. As
+a sanity check, Simple tickets usually land at 1-2, Medium at 3-5, and
+Complex at 5-8. Never overwrite an existing value.
+
 ---
 
 ## Step 5: Present and gate
@@ -514,6 +552,8 @@ Ticket Pickup: PROJ-1234
 
   Summary:    Campaign preview returns 404
   Priority:   P1
+  Assignee:   Alex Kim -> you (reassigning)
+  Points:     none -> 3 (estimated)
   Complexity: Medium
   Pipeline:   Optimus -> Cyrus (2-3 files, needs a plan)
 
@@ -529,11 +569,23 @@ Ticket Pickup: PROJ-1234
   -> g  = Go — launch the pipeline as classified
   -> s  = Simplify — I think this is simpler, route to Cyrus directly
   -> e  = Escalate — this is more complex, route through Aristotle
+  -> k  = Keep the current assignee, then go
+  -> p N = Use N story points instead (1, 2, 3, 5, or 8)
   -> c  = Add context (provide additional information)
   -> x  = Cancel
 ```
 
-**In gated mode:** Wait for user input.
+The `Points` line reads `none -> N (estimated)` when Step 7 will set an
+estimate and `N (no change)` when the ticket already has one. Omit it, and
+the `p` option, when the issue type has no points field.
+
+The `Assignee` line shows the change Step 7 will make: `Unassigned -> you`,
+`Alex Kim -> you (reassigning)`, or `you (no change)`. With an explicit
+no-change request it reads `Alex Kim (left as-is)`, and the `k` option is
+omitted.
+
+**In gated mode:** Wait for user input. Choosing `g`, `s`, or `e` approves
+the assignee change shown, including taking the ticket from a teammate.
 
 **In autonomous mode:** Log the classification and auto-select `g` unless
 the complexity is ambiguous (e.g., borderline Simple/Medium). If ambiguous,
@@ -669,7 +721,7 @@ blocked. It is a success. Handle it as:
 2. Add a Jira comment: `🤖 Looked into this one and the answer isn't a code
    change. {verdict}. Full reasoning is in the pipeline output — leaving the
    ticket as-is for a human to decide what to do with it.`
-3. Leave the ticket status unchanged (it is already In Progress from Step 7).
+3. Leave the ticket status unchanged (it is already In Progress from Step 7, or from ticket-swarm Step 4.5 in swarm mode).
    Do not transition to In Review; there is no PR to review.
 4. In swarm mode, return `outcome: advisory` and the verdict to the caller
    instead of a PR URL, so ticket-swarm counts it under Advisory rather
@@ -678,27 +730,50 @@ blocked. It is a success. Handle it as:
 Do not treat an advisory outcome as a failure, retry it, or escalate it
 through smart failure analysis.
 
-**IMPORTANT:** Immediately after launching the pipeline, proceed to
-Step 7 (Jira transition). Do not skip it.
+**IMPORTANT:** Outside swarm mode, immediately after launching the pipeline,
+proceed to Step 7 (Jira transition). Do not skip it.
 
 ---
 
 ## Step 7: Jira status transition (MANDATORY)
 
+**In swarm mode:** Skip this step — ticket-swarm Step 4.5 assigns, sets story
+points, transitions and comments, so a story-points change made at its triage
+gate is not overwritten.
+
 You **MUST** transition the ticket to "In Progress" **IMMEDIATELY** after
 launching the pipeline. Do not defer this. Do not skip it.
 
-1. Call `getTransitionsForJiraIssue` to find the "In Progress" transition ID.
-2. Call `transitionJiraIssue` with the transition ID.
-3. Add a comment: `🤖 Picked this one up. {action_phrase}` — where `{action_phrase}` is one of:
+1. Assign the ticket to the assignee target from Step 1:
+   - **Resolve the account ID.** For the user, call `atlassianUserInfo`.
+     For a named person, call `lookupJiraAccountId`. If the lookup returns
+     zero or several matches, ask which person in gated mode. In autonomous
+     mode, skip assignment and log why.
+   - **Already that person, or the user asked for no change:** do nothing.
+   - **Unassigned:** call `editJiraIssue` with
+     `fields={"assignee": {"accountId": "<id>"}}`.
+   - **Assigned to someone else:** in gated mode, reassign as the Step 5
+     gate showed unless the user chose `k`. In autonomous mode, reassign
+     only when the caller named the assignee. Otherwise leave the teammate
+     in place and log the ticket key and current assignee so the summary
+     can list it. Nobody approved taking that teammate's ticket.
+2. Set story points if Step 4 made an estimate: call `editJiraIssue` with
+   `fields={"<points-field-id>": <N>}`, using the field ID from Step 2 and
+   the value from the gate (the user's `p N` choice, else the estimate).
+   Autonomous mode sets the estimate without asking. Skip this when the
+   ticket already has points or has no points field.
+3. Call `getTransitionsForJiraIssue` to find the "In Progress" transition ID.
+4. Call `transitionJiraIssue` with the transition ID.
+5. Add a comment: `🤖 Picked this one up. {action_phrase}` — where `{action_phrase}` is one of:
    - For Simple tickets: `Going straight to implementing.`
    - For Medium tickets: `Planning the work first, then implementing.`
    - For Complex tickets: `Doing some strategic analysis first, then planning, then implementing.`
    Use the phrase matching the classification from Step 4. If classification is uncertain, omit the action phrase entirely (the comment still reads sanely as "🤖 Picked this one up.").
 
-**Verify:** Confirm the transition succeeded by checking the response.
-If it fails (no valid transition, Jira unavailable), log the failure
-but do not block the pipeline.
+**Verify:** Confirm the assignment, the story points, and the transition
+succeeded by checking the responses. If any fails (no permission to assign,
+points field not on the edit screen, no valid transition, Jira
+unavailable), log the failure but do not block the pipeline.
 
 This step is **not optional**. The user expects ticket status to reflect
 pipeline activity in real time.
@@ -713,8 +788,13 @@ pipeline activity in real time.
 - **Autonomous mode still gates on ambiguous classification.** When in doubt,
   escalate complexity one level.
 - **Each downstream pipeline runs as a subagent** to keep context clean.
-- **NEVER skip Jira transitions.** They happen at pipeline launch, not later.
+- **NEVER skip Jira transitions.** They happen at pipeline launch (Step 7, or ticket-swarm Step 4.5 in swarm mode), not later.
   The user expects real-time status updates.
+- **A picked-up ticket is assigned to the user** unless they named someone
+  else or asked for no change. Take a ticket from a teammate only when the
+  user approved it at the gate or named the assignee.
+- **A picked-up ticket with no story points gets an estimate** when its
+  issue type has a points field. Never overwrite existing points.
 - **Fallback gracefully.** If Jira is unavailable, if codebase search finds
   nothing, if enrichment is thin — still present what you have and let the
   user decide.

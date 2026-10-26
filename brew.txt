@@ -1,0 +1,5 @@
+# Homebrew formulae for core skills, installed by scripts/lib-brew.sh when brew
+# is present (skipped with a hint otherwise). One formula per line; the comment
+# after it names the skill that needs it. An overlay installer can pass its
+# own .claude/brew.txt to the same function. Opt out: install.sh --skip-brew.
+ffmpeg  # record-demo: encodes and trims demo videos
