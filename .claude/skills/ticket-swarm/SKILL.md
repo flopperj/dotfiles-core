@@ -126,6 +126,13 @@ If no tickets are found, inform the user and suggest broadening the query.
 If Jira is unavailable, show `⚠️ Jira unavailable — provide ticket keys
 manually (comma-separated)` and wait for input.
 
+### Assignee target
+
+Step 4.5 assigns each launched ticket to the `assignee` target: the `assignee`
+input when the caller passes one (ticket-pickup does, from its own Step 1),
+otherwise parsed from the user's swarm request the way ticket-pickup Step 1
+does: default the user, a named person, or no change.
+
 ---
 
 ## Step 2: Parallel triage
@@ -411,11 +418,15 @@ respect these as targets and adjust based on observed performance.
 You **MUST** transition each launched ticket to "In Progress" **IMMEDIATELY**
 after pipeline launch. Do not defer this to later steps. Do not skip it.
 
+In swarm mode ticket-pickup skips its Step 7, so this step is the only writer
+of assignment, story points, the transition and the comment.
+
 For each ticket:
-1. Assign it to the user, following ticket-pickup Step 7.1's autonomous
-   rules. Unassigned tickets (common for Story sub-tickets) are assigned to
-   the user. A teammate's ticket is left in place and listed in the final
-   summary, unless the user named an assignee when starting the swarm.
+1. Assign it to the `assignee` target, following ticket-pickup Step 7.1's autonomous
+   rules; with no change, skip assignment. Unassigned tickets
+   (common for Story sub-tickets) are assigned to the target. A teammate's
+   ticket is reassigned only when an assignee was named; otherwise it is left
+   in place and listed in the final summary.
 2. Set story points if the ticket has none and its issue type has a points
    field, following ticket-pickup Step 7.2. Use the estimate approved at
    Gate 1, including any `p N M` change.
