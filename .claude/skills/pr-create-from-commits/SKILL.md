@@ -16,7 +16,7 @@ Create a PR from recent commits. Detects the repo's PR template and its conventi
 - Run `git log origin/{default_branch}..HEAD --oneline` to see commits on this branch
 - Run `git diff origin/{default_branch}` for a full diff overview
 - Understand the purpose and scope of the changes
-- Extract the Jira ticket number from the branch name (format: `ABC-1234`). If not found in the branch name and the repo's conventions (Step 2) put a ticket in the title or body, ask the user; if no ticket exists yet, offer to create one via `/create-jira-ticket`. If the conventions never reference a ticket, don't ask.
+- Extract the Jira ticket number from the branch name (format: `ABC-1234`). If it isn't in the branch name, resolve the ticket question after Step 2: if the repo's conventions put a ticket in the title or body, ask the user; if no ticket exists yet, offer to create one via `/create-jira-ticket`. If the conventions never reference a ticket, don't ask.
 - **Check for flag-only changes:** if the only changed file is `config/flags.ini`, suggest using `/mc-pr-flag` instead for a specialized flag PR template with proper rollout metadata.
 - **Check for mixed changes:** if commits contain clearly unrelated concerns, WARN the user and suggest splitting into multiple PRs. Only proceed if the user confirms.
 
@@ -57,6 +57,8 @@ Ask all missing questions in a single message — don't interrupt later steps wi
 
 ### 4. Check and update Jira ticket status
 
+Without a ticket, skip this step.
+
 **Primary: Atlassian MCP plugin**
 1. Call `getJiraIssue` with the ticket key. If the Atlassian plugin is unavailable, fall back to an alternative Jira integration if available.
 2. Check the status field. If already In Progress/Verify/Blocked/Closed: show `ℹ️ Ticket {TICKET} is: {status} (no status change needed)` and continue.
@@ -74,7 +76,7 @@ All Jira operations are best-effort — never block PR creation on a Jira failur
 1. Check for uncommitted changes (`git status`):
    - If YES: ask the user if they want to stage and commit them before creating the PR. If confirmed, stage relevant files and commit.
 2. Check current branch:
-   - If on `main` or `master`: create a new branch named `{ticket-prefix}-{ticket-num}-{feature-summary}` (e.g. `EEE-1234-add-campaign-preview`) and check it out.
+   - If on `main` or `master`: create a new branch and check it out. Name it `{ticket-prefix}-{ticket-num}-{feature-summary}` (e.g. `EEE-1234-add-campaign-preview`), or the repo's branch convention if Step 2 found one. Without a ticket, name it `{feature-summary}`.
 3. Push the branch to origin if not already pushed: `git push -u origin {branch}`.
 
 ### 6. Create the PR
@@ -113,12 +115,12 @@ Built against the unmerged changes in the PR above — merge that one first.
      - Missing summary heading: "PR body has no Summary/Why/Motivation/Context/Overview section. Add one before I create the PR."
    - Wait for the user to provide an expanded body (or confirm `skip_body_validation`). Re-check after the expansion. Only proceed when the body passes both checks.
 
-   **3b. Validate the title and body against the conventions** (always; `skip_body_validation` does not skip it). Check the title against every rule in the conventions summary — pattern, allowed type, scope, ticket placement and case, length limit — and check that the body has the required sections in order and the required footer lines. If a rule is a regex or a commitlint config, test the title against it; when the repo ships a checker (e.g. `npx commitlint` over the title, the same rule CI runs), run it. On a mismatch, fix the title or body and re-check; never create a PR that the repo's own hooks or CI would reject for its title.
+   **3b. Validate the title and body against the conventions** (always; `skip_body_validation` does not skip it). Check the title against every rule in the conventions summary — pattern, allowed type, scope, ticket placement and case, length limit — and check that the body has the required sections in order and the required footer lines. If a rule is a regex or a commitlint config, test the title against it; when the repo ships a checker that is already installed locally (a binary in `node_modules/.bin`, or `npx --no-install commitlint` over the title, the same rule CI runs), run it. Never fetch a checker from the registry; if none is installed, test against the parsed rules. On a mismatch, fix the title or body and re-check; never create a PR that the repo's own hooks or CI would reject for its title.
 4. Create the PR as a **draft by default**, with the title and body that passed 3b:
    ```
    gh pr create --draft --title "{title}" --body-file "{body_file}"
    ```
-5. If the user explicitly requests a non-draft PR (e.g., "open a PR for review", "create a ready PR"): use `gh pr create --title "..." --body "..."` without `--draft`. Non-draft PRs require the code auditor to run first (see CLAUDE.md PR Creation Workflow).
+5. If the user explicitly requests a non-draft PR (e.g., "open a PR for review", "create a ready PR"): use `gh pr create --title "{title}" --body-file "{body_file}"` (the title and body that passed 3b) without `--draft`. Non-draft PRs require the code auditor to run first (see CLAUDE.md PR Creation Workflow).
 
    **5b. Parent-ticket comment (repo-split tickets only, best-effort).** For the same trigger as item 2b (either shape), after the PR is created, post a comment via `addCommentToJiraIssue` on the **parent** ticket — plain language with the 🤖 prefix, stating which repo's PR this is, the full merge order, and that later PRs are built against earlier unmerged changes. Example:
 
