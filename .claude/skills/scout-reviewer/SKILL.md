@@ -30,6 +30,12 @@ Determine the PR to review from:
 
 If the PR cannot be determined, ask the user.
 
+Then read, with a literal host and repo in every command (§ REVIEW-BODY-FORMAT):
+
+- `gh pr view <n> --repo <host>/<o>/<r> --json url,headRefOid,baseRefName,state,isDraft,author` — the head sha the verdict will name.
+- `gh pr checks <n> --repo <host>/<o>/<r>` — CI at that head, for the body's CI sentence; never the PR description's claim about CI.
+- `gh api --hostname <host> user --jq .login`, then `gh api --hostname <host> repos/<o>/<r>/pulls/<n>/reviews --paginate` — a prior review by that login makes this a **re-review**: keep its id, `commit_id` and body for the "Since my review" table.
+
 ### Step 1b: Discover ticket context (when not provided)
 
 **Skip this step when** `ticket_context` was already passed by the caller (swarm mode, code auditor routing). In that case, ticket context is already available — proceed to Step 2.
@@ -329,19 +335,63 @@ Review complete. What next?
 
 Wait for user input. **Never post anything without explicit approval.**
 
+<!-- BEGIN REVIEW-BODY-FORMAT -->
+<!-- REVIEWER_BLOCK: review-body-format -->
+#### Posted review body
+
+The review `body` — the top of the pending review that carries the inline comments, and the body of an approval — follows one shape, so a reader of a long PR thread finds the verdict, the sha it applies to, and what is still open without reading the inline comments first. Inline comments are unchanged: anchored, one concern each, within the tone budget.
+
+```
+🤖 **<Verdict> @ `<short-sha>`**
+
+<emoji> **<One-sentence verdict.>** <What the verdict rests on, one clause.>
+
+| Since my review @ `<old-sha>` | Result |                       ← re-review only
+|---|---|
+| <prior blocker or important item, or a case traced> | ✅ Fixed in `<sha>` · ❌ Still open · ➖ Unchanged |
+
+**Unchanged since my review:** <files or areas with no diff since then>   ← re-review only
+
+<CI sentence>
+
+**Blockers (N):**                                                 ← only when N > 0
+- [<title>](<code permalink at the head sha>) — <one clause>
+
+<details>
+<summary>💬 Non-blocking (N important · M suggestions)</summary>
+
+- <title> — <one clause> (<code permalink>)
+
+</details>
+
+**After merging:** <one line>                                      ← only when there is a post-merge action
+```
+
+- **First line.** `🤖 ` first (Automated Comment Marker), then the verdict in bold — never a `#` heading, which would put `#` before the marker. The vocabulary and emoji are fixed: `✅ No blockers` (READY, posted as a comment review), `✅ Approving` (READY, on the `a` path), `🟡 Needs changes` (NEEDS CHANGES), `🔴 Blocked` (BLOCKED). The sha is the head that was reviewed (`headRefOid`, short), so a later push is visibly outside the verdict.
+- **Re-review.** Step 1 fetched the PR's reviews and the user's login. When a prior review by that login exists, the first line is ``🤖 **🔁 Re-review @ `<short-sha>`**`` followed by a link to it (`[review <id>](<pr-url>#pullrequestreview-<id>)`), the table traces each blocker and important item from it to a commit in `<old-sha>..<head>` or marks it still open, and the Unchanged line names the files or areas with no diff since then (`git diff <old-sha> <head> -- <path>` is empty) — the reader learns what was not re-read as well as what was.
+- **Verdict sentence.** One sentence carrying the emoji, then one clause on what it rests on ("traced the three new cases through the retry loop", "re-read the migration and its down step"). Praise is at most one specific clause here; the tone budget bans it inline.
+- **CI at the head.** One sentence from the live `gh pr checks` read, never from the PR description or a request form: "CI is green at `<sha>`." / "CI is still running on `<sha>` (<check>), so let it go green before merging." / "CI is red at `<sha>` (<check>)." Pending or red CI never turns into an approval.
+- **Blockers are never collapsed.** One bullet per blocking inline comment, linked, one clause each. The `<details>` block holds important items and suggestions only, with the counts in its summary so the reader can decide whether to open it; omit it when there are none. Nothing else goes in `<details>`.
+- **After merging** appears only when the author has something to do after the merge (approve a deploy gate, run a backfill, watch a dashboard).
+- **Links.** A PR or issue from another repo is `[owner/repo#N — title](url)`, never a bare `#N`, which GitHub resolves against the repo the review is posted in. Same-repo shas stay bare in backticks. Blocker and non-blocking bullets link the code at the head sha (`https://<host>/<o>/<r>/blob/<head-sha>/<path>#L<a>-L<b>`): the body is created in the same request as its inline comments, so their `#discussion_r<id>` ids do not exist yet. A `#discussion_r<id>` link is right only for a comment that already exists, such as an earlier review's comment in the re-review table.
+- **Literal `gh` commands.** Every `gh` call that reads or posts spells out the host and the repo (`gh api --hostname <host> repos/<o>/<r>/…`, `gh pr view <n> --repo <host>/<o>/<r>`), with no shell variable or command substitution anywhere in the command: exec guards reject the dynamic form, and a literal is what the user audits at the gate.
+- **The chat view is not the posted body.** The `## PR Review:` structure the agent returns (confidence scores, Ranger confirmations, Requirements Coverage) is the working view shown at the gate; this block is what posts. Show the posted body verbatim at the gate, as with every comment.
+<!-- END REVIEW-BODY-FORMAT -->
+
 ### Step 4: Post comments (if approved)
 
 If the user chooses "post":
 1. **Prefix each comment body with `🤖 `** (robot emoji + single space) per `~/.claude/AGENTS.md` § "Automated Comment Marker — 🤖 prefix". This applies even though the user approved the text — approval makes the content theirs, authorship is still the agent. Omit only if the user explicitly says to post without the marker.
 2. Show the exact comment text that will be posted for each finding, **including the 🤖 prefix**, so what the user approves is what posts.
-3. Confirm one more time: "Ready to post N comments. Proceed?"
-4. Post as inline diff comments via `gh api`.
-5. Report which comments were successfully posted.
+3. Draft the review `body` to § REVIEW-BODY-FORMAT — verdict and head sha first, the CI sentence from Step 1's live read, blockers listed, important items and suggestions in `<details>`, the "Since my review" table when Step 1 found a prior review by the user — and show it above the comments.
+4. Confirm one more time: "Ready to post N comments. Proceed?"
+5. Post as inline diff comments via `gh api`, with that body.
+6. Report which comments were successfully posted.
 
 If the user chooses "a" (approve):
-1. Draft the approval message (prefixed with `🤖 ` per the marker rule above) and show it.
+1. Draft the approval body to § REVIEW-BODY-FORMAT with ``🤖 **✅ Approving @ `<short-sha>`**`` as its first line, and show it. CI must be green at that sha from Step 1's read; pending or red CI returns to the menu instead.
 2. Wait for confirmation.
-3. Submit via `gh pr review --approve`.
+3. Submit via `gh pr review <n> --repo <host>/<o>/<r> --approve --body-file <path>`.
 
 If the user chooses "fix":
 Launch the `cyrus-tdd-engineer` agent with Scout's findings as the task. Cyrus implements fixes with TDD discipline. Scout does not fix anything himself.
@@ -416,6 +466,8 @@ Before posting, the orchestrator should run `gh pr diff <number>` and verify, fo
 - **Never auto-post.** All GitHub interactions require explicit approval.
 - **Draft before posting.** Always show exact text before submitting.
 - **🤖 prefix every posted comment** (and the approval message) per `~/.claude/AGENTS.md` § "Automated Comment Marker — 🤖 prefix", unless the user explicitly instructs otherwise.
+- **One posted-body shape.** The review body and the approval body follow § REVIEW-BODY-FORMAT: ``🤖 **<Verdict> @ `<sha>`**`` first, CI from the live read, blockers never collapsed, non-blocking items in `<details>`.
+- **Literal host and repo in every `gh` command** (`--hostname <host>`, `--repo <host>/<o>/<r>`), with no shell variable or command substitution anywhere in it.
 - **Scout never implements.** If the user wants fixes, hand off to Cyrus.
 - **Scout can run standalone.** No upstream agent is required.
 - **Each agent runs as a subagent** to keep the main context clean.
@@ -425,6 +477,7 @@ Before posting, the orchestrator should run `gh pr diff <number>` and verify, fo
 ## Checklist
 
 - [ ] PR identified (number, branch, or current branch)
+- [ ] Head sha, live CI (`gh pr checks`) and the PR's reviews read in Step 1; a prior review by the user makes this a re-review
 - [ ] Ticket context loaded if applicable (swarm-passed or discovered from PR metadata)
 - [ ] Per-project review context loaded from `~/.claude/review-context/<project>/llms.txt` (or absence noted)
 - [ ] Scout subagent launched with explicit "review only, do not implement" instruction
@@ -436,12 +489,14 @@ Before posting, the orchestrator should run `gh pr diff <number>` and verify, fo
 - [ ] Anchors validated against hunk-locality before posting (gh pr diff pre-flight)
 - [ ] Findings presented with confidence scores, severity tiers, and DoD section citations
 - [ ] User asked for next action (post / edit / approve / fix / done)
+- [ ] Review body (or approval body) drafted to § REVIEW-BODY-FORMAT and shown verbatim at the gate
+- [ ] Every `gh` command carried a literal host and repo
 - [ ] No GitHub posting happened without explicit approval
 - [ ] No code, edits, or commits produced by Scout — boundary preserved
 
 ## Tools
 
-- **`gh` CLI** — `gh pr list`, `gh pr view --json`, `gh pr diff`, `gh pr review --approve`, `gh api` (for inline comment posting).
+- **`gh` CLI** — `gh pr list`, `gh pr view --json`, `gh pr diff`, `gh pr checks`, `gh api --hostname <host> user` and `repos/<o>/<r>/pulls/<n>/reviews` (re-review detection), `gh pr review --approve --body-file`, `gh api` (for inline comment posting) — every call with a literal host and repo.
 - **Agent tool** — launches the `scout-reviewer` agent for the parallel 6+1 analysis; launches the `generalPurpose` subagent for Ranger confirmation; hands off to `cyrus-tdd-engineer` if user chooses "fix".
 - **Atlassian MCP** — `getJiraIssue` to fetch ticket context when discoverable from PR metadata. Falls back gracefully if MCP is unavailable.
 - **Filesystem reads** — `~/.claude/review-context/<project>/llms.txt` (per-project review priorities) and `~/.claude/DoD.md` (the canonical Definition of Done used as the finding taxonomy).

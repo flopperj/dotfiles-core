@@ -1,6 +1,24 @@
 # Changelog
 
 > **How to update:** The pre-commit hook (`scripts/pre-commit.sh`) is auto-installed by `install.sh`. It runs a fast leakage check (`scripts/check-no-leakage.sh`) and re-renders the generated `CLAUDE.md.generated` and `AGENTS.md.generated` files on every commit. A pre-push gate (`scripts/pre-push.sh`, also auto-installed) scans every outgoing commit's tree and metadata before it leaves the machine. CI runs lint, consult-grammar, and the test suite (including synthetic-token leakage mechanism tests) on every PR; the company-token scan is a separate step that runs only when guard data is present on the runner. If you bypass the hooks or work in a context where hooks cannot run, keep this file current manually. Each release heading links to the diff on the public mirror.
+
+## v1.25.0 — 2026-11-04 (review-format)
+
+Review-round summaries and posted reviews now lead with the verdict and the head sha it applies to, state CI at that sha, and keep what a reader skips out of the way — the shape of a teammate's re-review comments that read well in a long PR thread. `/review-respond` also refuses to post while CI is red, names merges from the base branch, and ends each summary with a machine-readable result line.
+
+### Added
+
+- `review-respond.sh merges --base <sha>`: the first-parent merge commits `commits` leaves out, so the summary names what came in from the base branch instead of letting it pass as the author's own change. Same preflight and `ERROR:*` tokens as `commits`.
+- `review-respond.sh ci --checks <file>`: classifies a `gh pr checks --json name,state,bucket` capture into `passed` / `pending` / `failed` / `none` with counts and the pending and failing names. `cancel` counts as failed, `skipping` counts for nothing, an unknown bucket counts as pending.
+- `render` ends the body with `<!-- review-respond-result: {…} -->` (row counts, also-found and merge counts, `checks`, `ci`) ahead of the hidden review marker, for `/babysit-prs` and `/briefing` to read without parsing the table. `find-prior` still keys on the marker.
+- `.claude/_shared/reviewer-blocks/review-body-format.md`, the fifth shared reviewer block, spliced into `scout-reviewer` and `ranger-reviewer` SKILL.md as § REVIEW-BODY-FORMAT: the posted review body and the approval body open with ``🤖 **<Verdict> @ `<sha>`**`` (fixed vocabulary: `✅ No blockers`, `✅ Approving`, `🟡 Needs changes`, `🔴 Blocked`), give one verdict sentence, state CI at that sha from the live `gh pr checks` read, list blockers uncollapsed, fold important items and suggestions into `<details>`, and — when the user reviewed the PR before — add a "Since my review @ `<old-sha>`" table and an "Unchanged since my review" line. Cross-repo references are full links, blocker and non-blocking bullets link the code at the head sha (the inline comments' ids do not exist until the review is created), and every `gh` command carries a literal host and repo.
+- `tests/reviewer-body-format.bats` (10) pins that contract; `tests/review-respond.bats` grows from 145 to 186 cases (verdict variants, the CI clause and refusal order, bullets, merges, the result line, `merges` and `ci`).
+
+### Changed
+
+- `/review-respond` body: the first line carries the head sha; a verdict line follows (`✅ **All 3 comments fixed.**` or `🟡 **2 of 3 fixed; 1 needs your call.**`, then "Checks and CI green at `<sha>`; ready for another look", or the CI-still-running clause, or the push-dismissed sentence); table cells carry ✅ / 🚫 / 💬; "Also found" is a bullet list that also names commits no row, item or merge cites, and reads `no other changes since the review` only when every commit since the review is accounted for (`render` takes the commit list); with no detected check command the verdict says "No local checks detected" instead of "Checks green" and the result line records `"checks":"none"`; the Testing line ends with the CI count. `render` refuses with `REFUSE:ci-failed:<check>` after `checks-failed` and before any row problem.
+- `/review-respond` workflow: Step 2 captures `gh pr checks`, Step 4 runs `merges`, Step 6 classifies CI and stops on red, Step 9's gate names the write ("This posts publicly to …"), Step 11 prints a one-line audit; `argument-hint` in the frontmatter.
+- Scout and Ranger: Step 1 reads the head sha, live CI and the PR's reviews (a prior review by the user makes it a re-review); Step 4 drafts the review body and the approval body to the shared block and posts the approval with `--body-file`; the gate rules add the one-shape and literal-host rules. The agent prompts keep the `## PR Review:` working view and point at the block for what posts, mapping Merge Readiness onto its vocabulary.
 ## v1.24.1 — 2026-10-26 (record-demo on Linux CI)
 
 The v1.24.0 `check` job failed on the public mirror's Ubuntu runner: `finish.sh` read the encoded file's size with BSD `stat -f%z`, which GNU `stat` rejects, so the script exited under `set -euo pipefail`.

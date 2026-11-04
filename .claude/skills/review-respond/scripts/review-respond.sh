@@ -5,9 +5,9 @@
 # also-found wording) and the approval gate. This script owns every DECISION:
 # which review to answer, which commits touch which thread, what may be called
 # "Fixed", whether a push dismissed an approval, whether a prior summary exists,
-# which checks to run, what the runner logs say, and how the comment renders.
-# Nothing here calls gh or the network. Only `commits` reads git, read-only.
-# jq is required.
+# which checks to run, what the runner logs say, whether CI is green at the
+# head, and how the comment renders. Nothing here calls gh or the network.
+# Only `commits` and `merges` read git, read-only. jq is required.
 #
 # Subcommands:
 #   threads        --graphql <file> | --rest <file>
@@ -16,6 +16,8 @@
 #                    -> "<review_id>" | "NONE:no-qualifying-review" | "NONE:review-not-found"
 #   commits        --base <sha> [--head <ref>] [--repo-dir <dir>]
 #                    -> JSON array of commits | "ERROR:base-missing" | "ERROR:base-not-ancestor" (exit 3)
+#   merges         --base <sha> [--head <ref>] [--repo-dir <dir>]
+#                    -> JSON array of first-parent merge commits [{sha,short,subject}] | same ERROR tokens
 #   map-threads    --threads <file> --review <id> --commits <file> [--window <n>]
 #                    -> {"threads":[...with touching/overlapping...], "unlinked_commits":[...], "commits":[...]}
 #   classify       --map <file>
@@ -28,6 +30,9 @@
 #                    -> JSON array [{kind,label,cmd,runner}]
 #   parse-test-output --runner <vitest|jest|pytest|bats|phpunit|go>   (log on stdin)
 #                    -> {"runner","files","tests_passed","tests_failed","parsed"}
+#   ci             --checks <file>   (gh pr checks --json name,state,bucket)
+#                    -> {"status":"passed|pending|failed|none","total","passed","pending","failed","skipped",
+#                        "pending_names","failed_names"}
 #   render         --input <file>
 #                    -> markdown on stdout (exit 0) | "REFUSE:<reason>" (exit 2)
 #
@@ -65,12 +70,14 @@ usage: review-respond.sh <subcommand> [flags]
   threads            --graphql <file> | --rest <file>
   select-review      --reviews <file> --threads <file> --author <login> [--review <id>]
   commits            --base <sha> [--head <ref>] [--repo-dir <dir>]
+  merges             --base <sha> [--head <ref>] [--repo-dir <dir>]
   map-threads        --threads <file> --review <id> --commits <file> [--window <n>]
   classify           --map <file>
   dismissed          --reviews <file> --head <sha> [--timeline <file>] [--review-decision <s>]
   find-prior         --comments <file> --review <id> --me <login>
   detect-checks      --dir <dir>
   parse-test-output  --runner <vitest|jest|pytest|bats|phpunit|go>   (log on stdin)
+  ci                 --checks <file>
   render             --input <file>
 USAGE
     exit 1
@@ -102,13 +109,14 @@ FLAG_me=""
 FLAG_dir=""
 FLAG_runner=""
 FLAG_input=""
+FLAG_checks=""
 
 _parse_args() {
     while [ "$#" -gt 0 ]; do
         case "$1" in
             --graphql|--rest|--reviews|--threads|--author|--review|--base|--head|\
             --repo-dir|--commits|--window|--map|--timeline|--review-decision|\
-            --comments|--me|--dir|--runner|--input)
+            --comments|--me|--dir|--runner|--input|--checks)
                 [ "$#" -ge 2 ] || _die "flag $1 needs a value"
                 ;;
             *) _die "unknown argument: $1" ;;
@@ -133,6 +141,7 @@ _parse_args() {
             --dir)             FLAG_dir="$2" ;;
             --runner)          FLAG_runner="$2" ;;
             --input)           FLAG_input="$2" ;;
+            --checks)          FLAG_checks="$2" ;;
         esac
         shift 2
     done
@@ -267,32 +276,51 @@ def header_path:
    files: (.files | map(select(.path != null)))}
 '
 
-cmd_commits() {
-    _parse_args "$@"
+# Shared by commits and merges. Sets RANGE_HEAD and RANGE_DIR; the base must
+# exist locally and be an ancestor of the head, or the decision token is
+# printed on both streams and the run stops.
+_range_preflight() {
     [ -n "$FLAG_base" ] || _die "--base is required"
-    local head="${FLAG_head:-HEAD}" dir="${FLAG_repo_dir:-.}"
-    [ -d "$dir" ] || _die "--repo-dir: no such directory: $dir"
-    if ! git -C "$dir" cat-file -e "${FLAG_base}^{commit}" 2>/dev/null; then
+    RANGE_HEAD="${FLAG_head:-HEAD}"
+    RANGE_DIR="${FLAG_repo_dir:-.}"
+    [ -d "$RANGE_DIR" ] || _die "--repo-dir: no such directory: $RANGE_DIR"
+    if ! git -C "$RANGE_DIR" cat-file -e "${FLAG_base}^{commit}" 2>/dev/null; then
         _token_both ERROR:base-missing
         exit 3
     fi
-    git -C "$dir" rev-parse --verify --quiet "${head}^{commit}" >/dev/null \
-        || _die "--head: not a commit: $head"
-    if ! git -C "$dir" merge-base --is-ancestor "$FLAG_base" "$head"; then
+    git -C "$RANGE_DIR" rev-parse --verify --quiet "${RANGE_HEAD}^{commit}" >/dev/null \
+        || _die "--head: not a commit: $RANGE_HEAD"
+    if ! git -C "$RANGE_DIR" merge-base --is-ancestor "$FLAG_base" "$RANGE_HEAD"; then
         _token_both ERROR:base-not-ancestor
         exit 3
     fi
+}
+
+cmd_commits() {
+    _parse_args "$@"
+    _range_preflight
     local sha short subject
     {
         while IFS=$'\x1f' read -r sha short subject; do
             [ -n "$sha" ] || continue
-            git -C "$dir" -c core.quotepath=false --no-pager show -U0 --format= \
+            git -C "$RANGE_DIR" -c core.quotepath=false --no-pager show -U0 --format= \
                 --no-color --no-ext-diff --no-renames --src-prefix=a/ --dst-prefix=b/ \
                 --inter-hunk-context=0 "$sha" \
               | jq -R -n --arg sha "$sha" --arg short "$short" --arg subject "$subject" "$JQ_COMMIT"
-        done < <(git -C "$dir" --no-pager log --first-parent --no-merges --reverse \
-                    --format='%H%x1f%h%x1f%s' "${FLAG_base}..${head}")
+        done < <(git -C "$RANGE_DIR" --no-pager log --first-parent --no-merges --reverse \
+                    --format='%H%x1f%h%x1f%s' "${FLAG_base}..${RANGE_HEAD}")
     } | jq -s '.'
+}
+
+# The merge commits `commits` leaves out — merges from the base branch, as a
+# rule. The summary names them so the reviewer can tell the author's changes
+# from what came in from the base, and so a merge is never passed off as a fix.
+cmd_merges() {
+    _parse_args "$@"
+    _range_preflight
+    git -C "$RANGE_DIR" --no-pager log --first-parent --merges --reverse \
+        --format='%H%x1f%h%x1f%s' "${FLAG_base}..${RANGE_HEAD}" \
+      | jq -R -s 'split("\n") | map(select(. != "") | split("\u001f") | {sha: .[0], short: .[1], subject: .[2]})'
 }
 
 # Thread line numbers are in the coordinates of the commit the reviewer drafted
@@ -689,13 +717,41 @@ cmd_parse_test_output() {
         {runner: $r, files: ($files | num), tests_passed: ($p | num), tests_failed: ($f | num), parsed: $parsed}'
 }
 
-# render is where two promises are enforced mechanically rather than by prose:
-# a failed check can never be dropped from the Testing line (the whole body is
-# refused), and a row can never say "Fixed" without a commit behind it. The
-# body starts with the 🤖 marker and ends with a hidden review marker that
-# find-prior matches on. Defined through a heredoc because the Won't-fix cell
-# needs a literal apostrophe; read with the builtin so loading the script runs
-# no external command before the jq guard (read returns 1 at EOF, hence || true).
+# CI at the head, classified from `gh pr checks --json name,state,bucket`. The
+# buckets are gh's own (pass, fail, pending, skipping, cancel). A cancelled run
+# is not green, so it counts as failed; a skipped check counts for nothing; an
+# unknown bucket is treated as pending, the direction that never claims green.
+cmd_ci() {
+    _parse_args "$@"
+    _require_file --checks "$FLAG_checks"
+    jq "$JQ_DEFS"'
+        flat
+        | map(select(type == "object"))
+        | map(.bucket = (.bucket // "") | .name = ((.name // "unnamed") | tostring))
+        | {total: length,
+           passed: (map(select(.bucket == "pass")) | length),
+           skipped: (map(select(.bucket == "skipping")) | length),
+           failed_names: (map(select(.bucket == "fail" or .bucket == "cancel") | .name)),
+           pending_names: (map(select(.bucket | IN("pass", "fail", "cancel", "skipping") | not) | .name))}
+        | .failed = (.failed_names | length)
+        | .pending = (.pending_names | length)
+        | .status = (if .failed > 0 then "failed"
+                     elif .pending > 0 then "pending"
+                     elif .passed > 0 then "passed"
+                     else "none" end)
+        | {status, total, passed, pending, failed, skipped, pending_names, failed_names}' \
+        "$FLAG_checks"
+}
+
+# render is where three promises are enforced mechanically rather than by
+# prose: a failed check or a red CI run can never be dropped from the summary
+# (the whole body is refused), and a row can never say "Fixed" without a commit
+# behind it. The body starts with the 🤖 marker, states the verdict before the
+# table, and ends with a machine-readable result line followed by the hidden
+# review marker that find-prior matches on. Defined through a heredoc because
+# the Won't-fix cell needs a literal apostrophe; read with the builtin so
+# loading the script runs no external command before the jq guard (read
+# returns 1 at EOF, hence || true).
 JQ_RENDER=""
 IFS= read -r -d '' JQ_RENDER <<'JQ' || true
 def commas: tostring | if length <= 3 then . else (.[0:length-3] | commas) + "," + .[length-3:] end;
@@ -703,12 +759,15 @@ def clean: tostring | gsub("\r"; "") | gsub("\n"; " ") | gsub("<!--"; "") | gsub
 def clean_title: clean | gsub("\\["; "\\[") | gsub("\\]"; "\\]");
 def oxford: if length == 0 then "" elif length == 1 then .[0]
             else (.[0:length-1] | join(", ")) + " and " + .[length-1] end;
+def plural($n; $one; $many): if $n == 1 then $one else $many end;
+def code_list: map("`" + . + "`") | join(", ");
+def names: map(clean) | (.[0:3] | join(", ")) + (if length > 3 then ", …" else "" end);
 def with_detail($d): if $d != "" then ": " + $d else "" end;
 def cell:
   ((.detail // "") | clean) as $d
-  | if .outcome == "fixed" then "Fixed in `" + .sha + "`" + with_detail($d)
-    elif .outcome == "wont_fix" then "Won't fix" + with_detail($d)
-    else "Needs discussion" + with_detail($d) end;
+  | if .outcome == "fixed" then "✅ Fixed in `" + .sha + "`" + with_detail($d)
+    elif .outcome == "wont_fix" then "🚫 Won't fix" + with_detail($d)
+    else "💬 Needs discussion" + with_detail($d) end;
 def check_label: (.label // "") | clean;
 def test_clause:
   if .parsed == true and .tests_passed != null then
@@ -721,9 +780,26 @@ def test_clause:
 . as $in
 | ($in.rows // []) as $rows
 | ($in.testing.checks // []) as $checks
+| (($checks | length) > 0) as $has_checks
+| ($in.ci // null) as $ci
+| (($ci.status // "none") | tostring) as $cs
+| (($ci.pending_names // []) | map(tostring)) as $pending
+| (($in.merges.shas // []) | map(tostring)) as $merge_shas
+| (($in.merges.base_ref // "") | clean) as $merge_base
+| ($in.commits // null) as $all_commits
+| (if $all_commits == null then null
+   else ($all_commits | map(if type == "object" then (.short // .sha // "") else . end | tostring) | map(select(. != ""))) end) as $all_shorts
+| ([($in.rows // [])[] | (.sha // "") | tostring | select(. != "")]
+   + [($in.also_found // [])[] | ((.shas // []) | map(tostring))[]]
+   + $merge_shas) as $cited
+| (if $all_shorts == null then [] else [$all_shorts[] | select(. as $s | any($cited[]; . == $s) | not)] end) as $uncited
 | ($in.review.id | tostring) as $rid
 | ($in.head.short | tostring) as $short
 | ($in.pr_url // "") as $pr
+| ($rows | length) as $n
+| ([$rows[] | select(.outcome == "fixed")] | length) as $nf
+| ([$rows[] | select(.outcome == "wont_fix")] | length) as $nw
+| ([$rows[] | select(.outcome == "needs_discussion")] | length) as $nd
 | (first($checks[] | select(.status != "passed") | .label | tostring) // null) as $failed
 | (first($rows[]
      | if .outcome == "ambiguous" then "REFUSE:unresolved-ambiguous:" + (.comment_id | tostring)
@@ -733,28 +809,74 @@ def test_clause:
 | if ($in.review.id // null) == null then "REFUSE:missing-review"
   elif (($in.head.short // "") | tostring) == "" then "REFUSE:missing-head"
   elif $failed != null then "REFUSE:checks-failed:" + $failed
-  elif ($rows | length) == 0 then "REFUSE:empty-rows"
+  elif $cs == "failed" then "REFUSE:ci-failed:" + ((($ci.failed_names // [])[0] // "unknown") | tostring)
+  elif $n == 0 then "REFUSE:empty-rows"
   elif $row_refusal != null then $row_refusal
   else
     (["🤖 **Review round: " + ($in.review.reviewer_name // "" | clean) + "** ([review " + $rid
-      + "](" + $pr + "#pullrequestreview-" + $rid + "))"]) as $header
-    | (["Head is now `" + $short + "`."
-        + (if $in.needs_look == true then " The push dismissed the approval, so this needs another look." else "" end)]) as $head
+      + "](" + $pr + "#pullrequestreview-" + $rid + ")) — head `" + $short + "`"]) as $header
+    | (if $nd == 0 and $nw == 0 then
+         (if $n == 1 then "✅ **The comment is fixed.**" else "✅ **All " + ($n | tostring) + " comments fixed.**" end)
+       elif $nd > 0 then
+         "🟡 **" + ($nf | tostring) + " of " + ($n | tostring) + " fixed; " + ($nd | tostring)
+           + plural($nd; " needs"; " need") + " your call"
+           + (if $nw > 0 then ", " + ($nw | tostring) + " won't fix" else "" end) + ".**"
+       else
+         "🟡 **" + ($nf | tostring) + " of " + ($n | tostring) + " fixed; " + ($nw | tostring)
+           + " won't fix (reasons in the table).**"
+       end) as $outcome
+    | (if ($pending | length) > 0 then " (" + ($pending | names) + ")" else "" end) as $pending_names
+    | (if $has_checks then
+         (if $cs == "passed" then "Checks and CI green at `" + $short + "`"
+          elif $cs == "pending" then "Checks green at `" + $short + "`; CI is still running" + $pending_names + ", so wait for it before re-reviewing"
+          else "Checks green at `" + $short + "`" end)
+       else
+         (if $cs == "passed" then "CI green at `" + $short + "`; no local test, lint, or typecheck command detected"
+          elif $cs == "pending" then "No local checks detected at `" + $short + "`; CI is still running" + $pending_names + ", so wait for it before re-reviewing"
+          else "No local checks detected at `" + $short + "`" end)
+       end
+       + (if $nd == 0 and $cs != "pending" and $in.needs_look != true then "; ready for another look" else "" end) + "."
+       + (if $in.needs_look == true then " The push dismissed the approval, so this needs another look." else "" end)) as $status
+    | ([$outcome + " " + $status]) as $verdict
     | (["| Comment | Outcome |", "|---|---|"]
        + ($rows | map("| [" + (.title | clean_title) + "](" + $pr + "#discussion_r" + (.comment_id | tostring)
                       + ") | " + cell + " |"))) as $table
-    | (($in.also_found // []) | if length == 0 then [] else
-         ["**Also found:** " + (map(((.text // "") | clean) + " (" + (.shas | map("`" + . + "`") | join(", ")) + ").") | join(" "))] end) as $also
+    | (($in.also_found // []) | map("- " + ((.text // "") | clean) + " (" + ((.shas // []) | code_list) + ")")) as $found
+    | (if ($merge_shas | length) == 0 then [] else
+         ["- " + ($merge_shas | length | tostring) + plural($merge_shas | length; " merge"; " merges")
+          + " from `" + $merge_base + "` (" + ($merge_shas | code_list) + ")"] end) as $merged
+    | (if ($uncited | length) == 0 then [] else
+         ["- " + ($uncited | length | tostring) + plural($uncited | length; " other commit"; " other commits")
+          + " not tied to a comment above (" + ($uncited | map(clean) | code_list) + ")"] end) as $unaccounted
+    | (($found + $merged + $unaccounted) as $bullets
+       | if ($bullets | length) > 0 then ["**Also found:**"] + $bullets
+         elif $all_shorts != null then ["**Also found:** no other changes since the review."]
+         else [] end) as $also
     | ("**Testing at `" + $short + "`**"
        + (if (($in.testing.cwd // "") != "") and ($in.testing.cwd != ".") then " (from `" + ($in.testing.cwd | clean) + "`)" else "" end)) as $prefix
-    | (if ($checks | length) == 0 then [$prefix + ": no test, lint, or typecheck command detected."]
+    | (if ($checks | length) == 0 then $prefix + ": no test, lint, or typecheck command detected."
        else
          (([$checks[] | select(.kind == "test") | test_clause])
           + ([$checks[] | select(.kind != "test") | check_label] | if length == 0 then [] else [oxford + " clean"] end)) as $clauses
-         | [$prefix + ": " + ($clauses | join("; ")) + "."]
-       end) as $testing
-    | (["<!-- review-respond review=" + $rid + " -->"]) as $marker
-    | [$header, $head, $table, $also, $testing, $marker]
+         | $prefix + ": " + ($clauses | join("; ")) + "."
+       end) as $local_checks
+    | ((($ci.passed // 0) + ($ci.pending // 0) + ($ci.failed // 0)) as $considered
+       | (($ci.skipped // 0)) as $skipped
+       | if $cs == "passed" then
+           " **CI:** " + ($ci.passed | tostring) + " of " + ($considered | tostring) + plural($considered; " check"; " checks")
+             + " passed" + (if $skipped > 0 then " (" + ($skipped | tostring) + " skipped)" else "" end) + "."
+         elif $cs == "pending" then
+           " **CI:** " + (($ci.passed // 0) | tostring) + " of " + ($considered | tostring) + " passed, "
+             + (($ci.pending // 0) | tostring) + " still running"
+             + (if ($pending | length) > 0 then " (" + ($pending | names) + ")" else "" end) + "."
+         else "" end) as $ci_clause
+    | ([$local_checks + $ci_clause]) as $testing
+    | ({review: (try ($in.review.id | tonumber) catch $in.review.id), head: $short, rows: $n,
+        fixed: $nf, wont_fix: $nw, needs_discussion: $nd,
+        also_found: (($in.also_found // []) | length), merges: ($merge_shas | length),
+        checks: (if $has_checks then "passed" else "none" end), ci: (if $ci == null then "unknown" else $cs end)} | tojson) as $result
+    | (["<!-- review-respond-result: " + $result + " -->", "<!-- review-respond review=" + $rid + " -->"]) as $tail
+    | [$header, $verdict, $table, $also, $testing, $tail]
       | map(select(length > 0) | join("\n")) | join("\n\n")
   end
 JQ
@@ -783,12 +905,14 @@ main() {
         threads)            cmd_threads "$@" ;;
         select-review)      cmd_select_review "$@" ;;
         commits)            cmd_commits "$@" ;;
+        merges)             cmd_merges "$@" ;;
         map-threads)        cmd_map_threads "$@" ;;
         classify)           cmd_classify "$@" ;;
         dismissed)          cmd_dismissed "$@" ;;
         find-prior)         cmd_find_prior "$@" ;;
         detect-checks)      cmd_detect_checks "$@" ;;
         parse-test-output)  cmd_parse_test_output "$@" ;;
+        ci)                 cmd_ci "$@" ;;
         render)             cmd_render "$@" ;;
         *) _die "unknown subcommand: $sub" ;;
     esac

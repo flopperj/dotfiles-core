@@ -27,7 +27,7 @@ FRAGMENTS_DIR="$DOTFILES_DIR/.claude/_shared/reviewer-blocks"
 RANGER_SKILL="$DOTFILES_DIR/.claude/skills/ranger-reviewer/SKILL.md"
 SCOUT_SKILL="$DOTFILES_DIR/.claude/skills/scout-reviewer/SKILL.md"
 
-REVIEWER_BLOCK_KEYS="tone-calibration anchor-constraints findings-critique verify-then-draft"
+REVIEWER_BLOCK_KEYS="tone-calibration anchor-constraints findings-critique verify-then-draft review-body-format"
 
 # setup_file/teardown_file override the test_helper versions: same exports,
 # plus a snapshot of the real tree so teardown_file can prove the suite
