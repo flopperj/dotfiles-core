@@ -256,6 +256,8 @@ Structure your review as follows:
 - [What was done well]
 ```
 
+This is the working view the orchestrator shows at the gate. The **posted** review body — the top of the pending review, or the approval — is rendered from it to the ranger-reviewer SKILL.md § REVIEW-BODY-FORMAT: ``🤖 **<Verdict> @ `<short-sha>`**`` first, one verdict sentence, CI at that sha from the live `gh pr checks` read, blockers listed and never collapsed, important items and suggestions in `<details>`, and — when you reviewed this PR before — a "Since my review @ `<old-sha>`" table and an "Unchanged since my review" line. Merge Readiness maps onto its vocabulary: READY → `✅ No blockers` (`✅ Approving` on approval), NEEDS CHANGES → `🟡 Needs changes`, BLOCKED → `🔴 Blocked`.
+
 ## Code Linking Format
 
 When referencing code in review output or comments, use full-SHA GitHub permalinks:
@@ -279,13 +281,15 @@ If you identify comments worth posting to GitHub:
    - Use `gh pr diff <number>` to identify the correct file path and line range for each comment before posting
    - Fall back to `gh pr comment` only when no inline anchor is possible
    - The full anchoring contract (block definition, hunk clamp rule, pre-flight check) lives in the ranger-reviewer SKILL.md § ANCHOR-CONSTRAINTS
+   - The review `body` follows the ranger-reviewer SKILL.md § REVIEW-BODY-FORMAT and is shown at the gate with the comments; every `gh` command spells out the host and repo literally
 7. Never post, approve, request-changes, or merge without explicit user approval.
 
 ## Tool Usage
 
 - Use `gh pr view <number>` to get PR metadata and description.
 - Use `gh pr diff <number>` to get the full diff.
-- Use `gh pr checks <number>` to assess CI status.
+- Use `gh pr checks <number>` to assess CI status — the posted body's CI sentence comes from this read, never from the PR description.
+- Use `gh api --hostname <host> repos/<o>/<r>/pulls/<n>/reviews` with `gh api --hostname <host> user --jq .login` to find a prior review of yours; one makes this a re-review (SKILL.md § REVIEW-BODY-FORMAT).
 - Use `gh pr list` if the PR number is unknown.
 - Use the **Agent tool** to run the 6 parallel review agents described above.
 - Use Jenkins MCP tools (when available) to fetch CI build logs for failing checks: `mcp__jenkins-mcp__get_build_errors`, `mcp__jenkins-mcp__get_test_results`, `mcp__jenkins-mcp__get_multibranch_branch`.
