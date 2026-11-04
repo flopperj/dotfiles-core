@@ -1497,6 +1497,9 @@ _fx_render_input() {
     {"text": "the image search base URLs were missing the `/imagesearch` path", "shas": ["4a4adea"]},
     {"text": "`request_id` is now forwarded", "shas": ["19231d6"]}
   ],
+  "merges": {"base_ref": "master", "shas": []},
+  "ci": {"status": "passed", "total": 3, "passed": 3, "pending": 0, "failed": 0, "skipped": 0,
+         "pending_names": [], "failed_names": []},
   "testing": {"cwd": "app/", "checks": [
     {"kind": "test", "label": "vitest", "status": "passed", "files": 159, "tests_passed": 2753, "parsed": true},
     {"kind": "lint", "label": "eslint", "status": "passed"},
@@ -1506,22 +1509,28 @@ _fx_render_input() {
 JSON
 }
 
+# Layout the line-number assertions below rely on: 1 header, 3 verdict,
+# 5-9 table (header, rule, three rows), 11 Also found, 13 Testing,
+# 15 result line, 16 marker; even lines are blank.
 _fx_render_golden() {
     cat <<'MD'
-🤖 **Review round: Bob** ([review 900](https://github.example.com/acme/widgets/pull/79#pullrequestreview-900))
+🤖 **Review round: Bob** ([review 900](https://github.example.com/acme/widgets/pull/79#pullrequestreview-900)) — head `4bfe659`
 
-Head is now `4bfe659`. The push dismissed the approval, so this needs another look.
+✅ **All 3 comments fixed.** Checks and CI green at `4bfe659`. The push dismissed the approval, so this needs another look.
 
 | Comment | Outcome |
 |---|---|
-| [Image search misconfig escapes fail-soft](https://github.example.com/acme/widgets/pull/79#discussion_r101) | Fixed in `651eb74` |
-| [Supersede rule depends on completion order](https://github.example.com/acme/widgets/pull/79#discussion_r102) | Fixed in `7126064`: outcomes keep line order |
-| [Weak test assertions](https://github.example.com/acme/widgets/pull/79#discussion_r103) | Fixed in `51423a4` |
+| [Image search misconfig escapes fail-soft](https://github.example.com/acme/widgets/pull/79#discussion_r101) | ✅ Fixed in `651eb74` |
+| [Supersede rule depends on completion order](https://github.example.com/acme/widgets/pull/79#discussion_r102) | ✅ Fixed in `7126064`: outcomes keep line order |
+| [Weak test assertions](https://github.example.com/acme/widgets/pull/79#discussion_r103) | ✅ Fixed in `51423a4` |
 
-**Also found:** the image search base URLs were missing the `/imagesearch` path (`4a4adea`). `request_id` is now forwarded (`19231d6`).
+**Also found:**
+- the image search base URLs were missing the `/imagesearch` path (`4a4adea`)
+- `request_id` is now forwarded (`19231d6`)
 
-**Testing at `4bfe659`** (from `app/`): vitest 159 files / **2,753 tests passed**; eslint and `tsc --noEmit --skipLibCheck` clean.
+**Testing at `4bfe659`** (from `app/`): vitest 159 files / **2,753 tests passed**; eslint and `tsc --noEmit --skipLibCheck` clean. **CI:** 3 of 3 checks passed.
 
+<!-- review-respond-result: {"review":900,"head":"4bfe659","rows":3,"fixed":3,"wont_fix":0,"needs_discussion":0,"also_found":2,"merges":0,"checks":"passed","ci":"passed"} -->
 <!-- review-respond review=900 -->
 MD
 }
@@ -1539,10 +1548,17 @@ _render_with() {
     cmp "$TEST_HOME/out.md" "$TEST_HOME/expected.md"
 }
 
-@test "render: needs_look false omits the dismissal clause" {
+@test "render: needs_look false drops the dismissal sentence and says ready for another look" {
     _render_with '.needs_look = false'
     [ "$status" -eq 0 ]
-    [ "$(echo "$output" | sed -n '3p')" = 'Head is now `4bfe659`.' ]
+    [ "$(echo "$output" | sed -n '3p')" = '✅ **All 3 comments fixed.** Checks and CI green at `4bfe659`; ready for another look.' ]
+}
+
+@test "render: needs_look true never also says ready for another look" {
+    _fx_render_input | _write input.json
+    run "$RR" render --input "$TEST_HOME/input.json"
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"ready for another look"* ]]
 }
 
 @test "render: wont_fix and needs_discussion cells" {
@@ -1552,30 +1568,29 @@ _render_with() {
         {comment_id:103,title:"C",outcome:"needs_discussion",detail:"needs product input"},
         {comment_id:104,title:"D",outcome:"wont_fix",detail:""}]'
     [ "$status" -eq 0 ]
-    [[ "$output" == *"| [A](https://github.example.com/acme/widgets/pull/79#discussion_r101) | Won't fix: by design |"* ]] || return 1
-    [[ "$output" == *"#discussion_r102) | Needs discussion |"* ]] || return 1
-    [[ "$output" == *"#discussion_r103) | Needs discussion: needs product input |"* ]] || return 1
-    [[ "$output" == *"#discussion_r104) | Won't fix |"* ]]
+    [[ "$output" == *"| [A](https://github.example.com/acme/widgets/pull/79#discussion_r101) | 🚫 Won't fix: by design |"* ]] || return 1
+    [[ "$output" == *"#discussion_r102) | 💬 Needs discussion |"* ]] || return 1
+    [[ "$output" == *"#discussion_r103) | 💬 Needs discussion: needs product input |"* ]] || return 1
+    [[ "$output" == *"#discussion_r104) | 🚫 Won't fix |"* ]]
 }
 
-@test "render: empty also_found omits the section" {
+@test "render: empty also_found renders the explicit no-other-changes line" {
     _render_with '.also_found = []'
     [ "$status" -eq 0 ]
-    [[ "$output" != *"Also found"* ]] || return 1
-    # The table's last row is line 9; one blank line and then the Testing line follow.
-    [ "$(echo "$output" | sed -n '10,11p')" = "$(printf '\n**Testing at `4bfe659`** (from `app/`): vitest 159 files / **2,753 tests passed**; eslint and `tsc --noEmit --skipLibCheck` clean.')" ]
+    [ "$(echo "$output" | sed -n '11p')" = '**Also found:** no other changes since the review.' ]
+    [ "$(echo "$output" | sed -n '12,13p')" = "$(printf '\n**Testing at `4bfe659`** (from `app/`): vitest 159 files / **2,753 tests passed**; eslint and `tsc --noEmit --skipLibCheck` clean. **CI:** 3 of 3 checks passed.')" ]
 }
 
 @test "render: pipe and brackets in a title are escaped" {
     _render_with '.rows[0].title = "Handle a|b [x] case"'
     [ "$status" -eq 0 ]
-    [[ "$output" == *'| [Handle a\|b \[x\] case](https://github.example.com/acme/widgets/pull/79#discussion_r101) | Fixed in `651eb74` |'* ]]
+    [[ "$output" == *'| [Handle a\|b \[x\] case](https://github.example.com/acme/widgets/pull/79#discussion_r101) | ✅ Fixed in `651eb74` |'* ]]
 }
 
 @test "render: newline in a detail collapses to a space and markup is neutralised" {
     _render_with '.rows[0].detail = "line one\nline two | three <!-- hidden"'
     [ "$status" -eq 0 ]
-    [[ "$output" == *'| Fixed in `651eb74`: line one line two \| three  hidden |'* ]]
+    [[ "$output" == *'| ✅ Fixed in `651eb74`: line one line two \| three  hidden |'* ]]
 }
 
 @test "render: reviewer_name is sanitized (comment opener, pipe, newline)" {
@@ -1583,13 +1598,13 @@ _render_with() {
     # an unclosed <!-- there would hide the whole body up to the trailing marker.
     _render_with '.review.reviewer_name = "Bob <!-- x | y\nz"'
     [ "$status" -eq 0 ]
-    [ "$(echo "$output" | sed -n '1p')" = '🤖 **Review round: Bob  x \| y z** ([review 900](https://github.example.com/acme/widgets/pull/79#pullrequestreview-900))' ]
+    [ "$(echo "$output" | sed -n '1p')" = '🤖 **Review round: Bob  x \| y z** ([review 900](https://github.example.com/acme/widgets/pull/79#pullrequestreview-900)) — head `4bfe659`' ]
 }
 
 @test "render: also_found text is sanitized" {
     _render_with '.also_found[0].text = "hidden <!-- comment | here"'
     [ "$status" -eq 0 ]
-    [[ "$output" == *'**Also found:** hidden  comment \| here (`4a4adea`). `request_id` is now forwarded (`19231d6`).'* ]]
+    [ "$(echo "$output" | sed -n '12p')" = '- hidden  comment \| here (`4a4adea`)' ]
 }
 
 @test "render: testing.cwd is sanitized" {
@@ -1749,5 +1764,320 @@ _render_with() {
 @test "render: also_found with two shas lists both" {
     _render_with '.also_found = [{text:"renamed the helper", shas:["aaa1111","bbb2222"]}]'
     [ "$status" -eq 0 ]
-    [[ "$output" == *'**Also found:** renamed the helper (`aaa1111`, `bbb2222`).'* ]]
+    [ "$(echo "$output" | sed -n '11,12p')" = "$(printf '**Also found:**\n- renamed the helper (`aaa1111`, `bbb2222`)')" ]
+}
+
+# ---------------------------------------------------------------------------
+# render: verdict line, CI clause, merges, result line
+# ---------------------------------------------------------------------------
+
+@test "render: header carries the head sha" {
+    _render_with '.'
+    [ "$status" -eq 0 ]
+    [[ "$(echo "$output" | sed -n '1p')" == *')) — head `4bfe659`' ]]
+}
+
+@test "render: a single fixed row reads 'The comment is fixed'" {
+    _render_with '.rows = [.rows[0]] | .needs_look = false'
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | sed -n '3p')" = '✅ **The comment is fixed.** Checks and CI green at `4bfe659`; ready for another look.' ]
+}
+
+@test "render: needs_discussion rows turn the verdict amber and ask for a call, singular and plural" {
+    _render_with '.needs_look = false | .rows[1].outcome = "needs_discussion" | .rows[1].sha = null'
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | sed -n '3p')" = '🟡 **2 of 3 fixed; 1 needs your call.** Checks and CI green at `4bfe659`.' ]
+    _render_with '.needs_look = false | .rows[1].outcome = "needs_discussion" | .rows[2].outcome = "needs_discussion"'
+    [ "$status" -eq 0 ]
+    [[ "$(echo "$output" | sed -n '3p')" == '🟡 **1 of 3 fixed; 2 need your call.**'* ]]
+}
+
+@test "render: a needs_discussion and a wont_fix row are both counted in the verdict" {
+    _render_with '.needs_look = false | .rows[1].outcome = "needs_discussion" | .rows[2].outcome = "wont_fix"'
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | sed -n '3p')" = "🟡 **1 of 3 fixed; 1 needs your call, 1 won't fix.** Checks and CI green at \`4bfe659\`." ]
+}
+
+@test "render: wont_fix rows alone keep the amber verdict but still say ready for another look" {
+    _render_with '.needs_look = false | .rows[0].outcome = "wont_fix" | .rows[0].detail = "by design"'
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | sed -n '3p')" = "🟡 **2 of 3 fixed; 1 won't fix (reasons in the table).** Checks and CI green at \`4bfe659\`; ready for another look." ]
+}
+
+@test "render: pending CI names the running checks and withholds 'ready for another look'" {
+    _render_with '.needs_look = false | .ci = {status:"pending",total:4,passed:2,pending:2,failed:0,skipped:0,pending_names:["pr-head","e2e"],failed_names:[]}'
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | sed -n '3p')" = '✅ **All 3 comments fixed.** Checks green at `4bfe659`; CI is still running (pr-head, e2e), so wait for it before re-reviewing.' ]
+    [[ "$output" == *'clean. **CI:** 2 of 4 passed, 2 still running (pr-head, e2e).'* ]] || return 1
+    [[ "$output" == *'"ci":"pending"}'* ]]
+}
+
+@test "render: more than three pending check names are elided" {
+    _render_with '.ci = {status:"pending",total:5,passed:1,pending:4,failed:0,skipped:0,pending_names:["a","b","c","d"],failed_names:[]}'
+    [ "$status" -eq 0 ]
+    [[ "$output" == *'CI is still running (a, b, c, …), so wait'* ]]
+}
+
+@test "render: pending check names are sanitized" {
+    _render_with '.ci = {status:"pending",total:1,passed:0,pending:1,failed:0,skipped:0,pending_names:["x <!-- y | z"],failed_names:[]}'
+    [ "$status" -eq 0 ]
+    [[ "$output" == *'CI is still running (x  y \| z), so wait'* ]]
+}
+
+@test "render: failed CI refuses with REFUSE:ci-failed and the first failing check" {
+    _render_with '.ci = {status:"failed",total:3,passed:2,pending:0,failed:1,skipped:0,pending_names:[],failed_names:["lint","e2e"]}'
+    [ "$status" -eq 2 ]
+    [ "$output" = "REFUSE:ci-failed:lint" ]
+}
+
+@test "render: a failing local check is reported before failed CI, and failed CI before any row problem" {
+    _render_with '.testing.checks[1].status = "failed" | .ci.status = "failed" | .ci.failed_names = ["lint"]'
+    [ "$status" -eq 2 ]
+    [ "$output" = "REFUSE:checks-failed:eslint" ]
+    _render_with '.ci.status = "failed" | .ci.failed_names = ["lint"] | .rows[0].outcome = "ambiguous"'
+    [ "$status" -eq 2 ]
+    [ "$output" = "REFUSE:ci-failed:lint" ]
+    _render_with '.ci.status = "failed" | .ci.failed_names = ["lint"] | .rows = []'
+    [ "$status" -eq 2 ]
+    [ "$output" = "REFUSE:ci-failed:lint" ]
+}
+
+@test "render: failed CI without a name refuses with 'unknown'" {
+    _render_with '.ci = {status:"failed"}'
+    [ "$status" -eq 2 ]
+    [ "$output" = "REFUSE:ci-failed:unknown" ]
+}
+
+@test "render: without a ci object the verdict says Checks green, no CI clause, result ci unknown" {
+    _render_with 'del(.ci) | .needs_look = false'
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | sed -n '3p')" = '✅ **All 3 comments fixed.** Checks green at `4bfe659`; ready for another look.' ]
+    [[ "$output" != *"**CI:**"* ]] || return 1
+    [[ "$output" == *'"checks":"passed","ci":"unknown"}'* ]]
+}
+
+@test "render: ci status none (no checks configured) reads like absent CI but records none" {
+    _render_with '.ci = {status:"none",total:0,passed:0,pending:0,failed:0,skipped:0,pending_names:[],failed_names:[]} | .needs_look = false'
+    [ "$status" -eq 0 ]
+    [[ "$(echo "$output" | sed -n '3p')" == '✅ **All 3 comments fixed.** Checks green at `4bfe659`;'* ]]
+    [[ "$output" != *"**CI:**"* ]] || return 1
+    [[ "$output" == *'"ci":"none"}'* ]]
+}
+
+@test "render: skipped CI checks are excluded from the count and noted" {
+    _render_with '.ci.total = 4 | .ci.skipped = 1'
+    [ "$status" -eq 0 ]
+    [[ "$output" == *'**CI:** 3 of 3 checks passed (1 skipped).'* ]]
+}
+
+@test "render: a single passing CI check is singular" {
+    _render_with '.ci = {status:"passed",total:1,passed:1,pending:0,failed:0,skipped:0,pending_names:[],failed_names:[]}'
+    [ "$status" -eq 0 ]
+    [[ "$output" == *'**CI:** 1 of 1 check passed.'* ]]
+}
+
+@test "render: a single also_found item is still a bullet" {
+    _render_with '.also_found = [.also_found[0]]'
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | sed -n '11,13p')" = "$(printf '**Also found:**\n- the image search base URLs were missing the `/imagesearch` path (`4a4adea`)\n')" ]
+}
+
+@test "render: merges from the base branch are the last Also found bullet, singular and plural" {
+    _render_with '.merges.shas = ["abc1234"]'
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | sed -n '14p')" = '- 1 merge from `master` (`abc1234`)' ]
+    _render_with '.merges.shas = ["abc1234","def5678"]'
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | sed -n '14p')" = '- 2 merges from `master` (`abc1234`, `def5678`)' ]
+    [[ "$output" == *'"merges":2,'* ]]
+}
+
+@test "render: merges with no other also_found still render the heading and the bullet" {
+    _render_with '.also_found = [] | .merges.shas = ["abc1234"]'
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | sed -n '11,12p')" = "$(printf '**Also found:**\n- 1 merge from `master` (`abc1234`)')" ]
+}
+
+@test "render: merges base_ref is sanitized and a missing merges object is fine" {
+    _render_with '.merges = {base_ref:"ma|in <!-- x", shas:["abc1234"]}'
+    [ "$status" -eq 0 ]
+    [[ "$output" == *'- 1 merge from `ma\|in  x` (`abc1234`)'* ]] || return 1
+    _render_with 'del(.merges)'
+    [ "$status" -eq 0 ]
+    [[ "$output" == *'"merges":0,'* ]]
+}
+
+@test "render: the result line is valid JSON with the row counts and sits right above the marker" {
+    _fx_render_input | _write input.json
+    "$RR" render --input "$TEST_HOME/input.json" > "$TEST_HOME/out.md"
+    local line result
+    line="$(tail -n 2 "$TEST_HOME/out.md" | head -n 1)"
+    [[ "$line" == "<!-- review-respond-result: "*" -->" ]] || return 1
+    result="${line#<!-- review-respond-result: }"
+    result="${result% -->}"
+    [ "$(echo "$result" | jq -c '[.review, .head, .rows, .fixed, .wont_fix, .needs_discussion, .also_found, .merges, .checks, .ci]')" = '[900,"4bfe659",3,3,0,0,2,0,"passed","passed"]' ]
+    [ "$(tail -n 1 "$TEST_HOME/out.md")" = "<!-- review-respond review=900 -->" ]
+}
+
+@test "render: a string review id is a number in the result line" {
+    _render_with '.review.id = "900"'
+    [ "$status" -eq 0 ]
+    [[ "$output" == *'<!-- review-respond-result: {"review":900,'* ]]
+}
+
+@test "render: find-prior still matches a body rendered with the result line" {
+    _fx_render_input | _write input.json
+    "$RR" render --input "$TEST_HOME/input.json" > "$TEST_HOME/out.md"
+    jq -n --rawfile body "$TEST_HOME/out.md" '[{id: 7001, user: {login: "alice"}, created_at: "2026-10-05T13:00:00Z", body: $body}]' \
+        | _write comments.json
+    run "$RR" find-prior --comments "$TEST_HOME/comments.json" --review 900 --me alice
+    [ "$status" -eq 0 ]
+    [ "$output" = "7001" ]
+    run "$RR" find-prior --comments "$TEST_HOME/comments.json" --review 90 --me alice
+    [ "$status" -eq 0 ]
+    [ "$output" = "NONE" ]
+}
+
+# ---------------------------------------------------------------------------
+# merges — first-parent merge commits in the range, same preflight as commits
+# ---------------------------------------------------------------------------
+
+@test "merges on a range without merges prints []" {
+    _mkrepo
+    echo seed > "$REPO/a.txt"
+    base="$(_commit_all 'chore: seed')"
+    echo one > "$REPO/a.txt"
+    _commit_all 'fix: one' >/dev/null
+    run "$RR" merges --base "$base" --repo-dir "$REPO"
+    [ "$status" -eq 0 ]
+    [ "$output" = "[]" ]
+}
+
+@test "merges lists first-parent merge commits with short sha and subject, excluding merged-in commits" {
+    _mkrepo
+    echo seed > "$REPO/a.txt"
+    base="$(_commit_all 'chore: seed')"
+    _g checkout -q -b feature
+    echo one > "$REPO/a.txt"
+    _commit_all 'fix: one' >/dev/null
+    _g checkout -q main
+    echo side > "$REPO/side.txt"
+    _commit_all 'feat: side work on main' >/dev/null
+    _g checkout -q feature
+    _g merge -q --no-ff -m 'Merge branch main into feature' main
+    merge="$(_g rev-parse HEAD)"
+    echo two > "$REPO/a.txt"
+    _commit_all 'fix: two' >/dev/null
+    run "$RR" merges --base "$base" --head feature --repo-dir "$REPO"
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c 'map([.sha, .short, .subject])')" = "[[\"$merge\",\"$(_g rev-parse --short "$merge")\",\"Merge branch main into feature\"]]" ]
+    run "$RR" commits --base "$base" --head feature --repo-dir "$REPO"
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c 'map(.subject)')" = '["fix: one","fix: two"]' ]
+}
+
+@test "merges prints ERROR:base-missing exit 3 for an unknown sha, on both streams" {
+    _mkrepo
+    echo seed > "$REPO/a.txt"
+    _commit_all 'chore: seed' >/dev/null
+    local status=0
+    "$RR" merges --base 0000000000000000000000000000000000000001 --repo-dir "$REPO" \
+        > "$TEST_HOME/out" 2> "$TEST_HOME/err" || status=$?
+    [ "$status" -eq 3 ]
+    [ "$(cat "$TEST_HOME/out")" = "ERROR:base-missing" ]
+    [ "$(cat "$TEST_HOME/err")" = "ERROR:base-missing" ]
+}
+
+@test "merges prints ERROR:base-not-ancestor exit 3 after a history rewrite, on both streams" {
+    _mkrepo
+    echo seed > "$REPO/a.txt"
+    base="$(_commit_all 'chore: seed')"
+    echo one > "$REPO/a.txt"
+    old="$(_commit_all 'fix: reviewed then rewritten')"
+    _g reset -q --hard "$base"
+    echo one-rewritten > "$REPO/a.txt"
+    _commit_all 'fix: rewritten' >/dev/null
+    local status=0
+    "$RR" merges --base "$old" --repo-dir "$REPO" \
+        > "$TEST_HOME/out" 2> "$TEST_HOME/err" || status=$?
+    [ "$status" -eq 3 ]
+    [ "$(cat "$TEST_HOME/out")" = "ERROR:base-not-ancestor" ]
+    [ "$(cat "$TEST_HOME/err")" = "ERROR:base-not-ancestor" ]
+}
+
+@test "merges requires --base" {
+    _mkrepo
+    run "$RR" merges --repo-dir "$REPO"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"--base is required"* ]]
+}
+
+# ---------------------------------------------------------------------------
+# ci — classify `gh pr checks --json name,state,bucket`
+# ---------------------------------------------------------------------------
+
+_run_ci() {
+    # $1 = JSON checks array
+    printf '%s' "$1" | _write checks.json
+    run "$RR" ci --checks "$TEST_HOME/checks.json"
+}
+
+@test "ci: all pass is passed with counts and empty name lists" {
+    _run_ci '[{"name":"build","state":"SUCCESS","bucket":"pass"},{"name":"lint","state":"SUCCESS","bucket":"pass"}]'
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c .)" = '{"status":"passed","total":2,"passed":2,"pending":0,"failed":0,"skipped":0,"pending_names":[],"failed_names":[]}' ]
+}
+
+@test "ci: a skipped check counts for nothing" {
+    _run_ci '[{"name":"build","bucket":"pass"},{"name":"docs","bucket":"skipping"}]'
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '[.status, .total, .passed, .skipped]')" = '["passed",2,1,1]' ]
+}
+
+@test "ci: any pending check makes the status pending and names it" {
+    _run_ci '[{"name":"pr-head","bucket":"pending"},{"name":"build","bucket":"pass"}]'
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '[.status, .passed, .pending, .pending_names]')" = '["pending",1,1,["pr-head"]]' ]
+}
+
+@test "ci: a failed check wins over a pending one and both lists are kept" {
+    _run_ci '[{"name":"lint","bucket":"fail"},{"name":"e2e","bucket":"pending"}]'
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '[.status, .failed_names, .pending_names]')" = '["failed",["lint"],["e2e"]]' ]
+}
+
+@test "ci: a cancelled run is failed, not green" {
+    _run_ci '[{"name":"build","bucket":"cancel"}]'
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '[.status, .failed_names]')" = '["failed",["build"]]' ]
+}
+
+@test "ci: an unknown bucket is treated as pending, never as green" {
+    _run_ci '[{"name":"odd","bucket":"neutral"},{"bucket":"pass"}]'
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '[.status, .pending_names]')" = '["pending",["odd"]]' ]
+}
+
+@test "ci: an empty array or null is status none" {
+    _run_ci '[]'
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -r .status)" = "none" ]
+    _run_ci 'null'
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | jq -c '[.status, .total]')" = '["none",0]' ]
+}
+
+@test "ci: --checks is required and must exist" {
+    run "$RR" ci
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"--checks is required"* ]]
+    run "$RR" ci --checks "$TEST_HOME/nope.json"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"no such file"* ]]
+}
+
+@test "ci: a checks file that is not JSON exits 5" {
+    printf 'gh: not found\n' | _write checks.json
+    run "$RR" ci --checks "$TEST_HOME/checks.json"
+    [ "$status" -eq 5 ]
 }
