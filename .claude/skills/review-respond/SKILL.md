@@ -153,12 +153,13 @@ review-respond.sh dismissed --reviews $RUN_DIR/reviews.json --head <headRefOid> 
     "rows": [{"comment_id": 101, "title": "...", "outcome": "fixed|wont_fix|needs_discussion", "sha": "651eb74", "detail": ""}],
     "also_found": [{"text": "...", "shas": ["4a4adea"]}],
     "merges": {"base_ref": "main", "shas": ["abc1234"]},
+    "commits": [{"short": "651eb74"}, {"short": "4a4adea"}, {"short": "abc1234"}],
     "ci": {"status": "passed", "total": 3, "passed": 3, "pending": 0, "failed": 0, "skipped": 0, "pending_names": [], "failed_names": []},
     "testing": {"cwd": ".", "checks": [
       {"kind": "test", "label": "vitest", "status": "passed", "files": 159, "tests_passed": 2753, "parsed": true},
       {"kind": "lint", "label": "eslint", "status": "passed"}]}}
    ```
-   `status` is `"passed"` only for an exit code of 0. `merges.shas` are the `short` values from `merges.json`; `ci` is `ci.json` verbatim, or absent. The verdict line (✅ all fixed / 🟡 some need a call, plus the checks-and-CI clause) is derived from the rows and `ci` by `render`; it is changed by changing an outcome, never by hand.
+   `status` is `"passed"` only for an exit code of 0. `merges.shas` are the `short` values from `merges.json`; `ci` is `ci.json` verbatim, or absent. `commits` is every commit since the review (the `short` values from `commits.json`): `render` lists any commit no row, also-found item or merge cites as a final Also found bullet, prints `no other changes since the review` only when every commit is cited, and omits an empty section when `commits` is absent. With no detected check command the verdict reads "No local checks detected at `<sha>`" (or "CI green at `<sha>`; no local test, lint, or typecheck command detected") and the result line records `"checks":"none"`. The verdict line (✅ all fixed / 🟡 some need a call, plus the checks-and-CI clause) is derived from the rows and `ci` by `render`; it is changed by changing an outcome, never by hand.
 3. `review-respond.sh render --input $RUN_DIR/render-input.json > $RUN_DIR/body.md`. On exit 2, show the `REFUSE:<reason>` token and return to the gate; a refusal is never worked around.
 
 ### Step 9: Gate (draft-first)
@@ -275,7 +276,7 @@ Body posted:
 <!-- review-respond review=900 -->
 ```
 
-With no unlinked commits the Also found section reads `**Also found:** no other changes since the review.`; with merges from the base it ends with a bullet such as ``- 2 merges from `main` (`abc1234`, `def5678`)``. A `needs_discussion` row turns the verdict into ``🟡 **2 of 3 fixed; 1 needs your call.**`` and drops "ready for another look".
+When every commit since the review is cited by a row, an Also found item or a merge, the section reads `**Also found:** no other changes since the review.`; commits nothing cites appear as a final bullet (``- 1 other commit not tied to a comment above (`ddd4444`)``); with merges from the base it ends with a bullet such as ``- 2 merges from `main` (`abc1234`, `def5678`)``. A `needs_discussion` row turns the verdict into ``🟡 **2 of 3 fixed; 1 needs your call.**`` and drops "ready for another look".
 
 ### Example 2 — An ambiguous thread resolved at the gate
 

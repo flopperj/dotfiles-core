@@ -355,12 +355,12 @@ The review `body` — the top of the pending review that carries the inline comm
 <CI sentence>
 
 **Blockers (N):**                                                 ← only when N > 0
-- [<title>](<inline comment link>) — <one clause>
+- [<title>](<code permalink at the head sha>) — <one clause>
 
 <details>
 <summary>💬 Non-blocking (N important · M suggestions)</summary>
 
-- <title> — <one clause> (<permalink>)
+- <title> — <one clause> (<code permalink>)
 
 </details>
 
@@ -373,7 +373,7 @@ The review `body` — the top of the pending review that carries the inline comm
 - **CI at the head.** One sentence from the live `gh pr checks` read, never from the PR description or a request form: "CI is green at `<sha>`." / "CI is still running on `<sha>` (<check>), so let it go green before merging." / "CI is red at `<sha>` (<check>)." Pending or red CI never turns into an approval.
 - **Blockers are never collapsed.** One bullet per blocking inline comment, linked, one clause each. The `<details>` block holds important items and suggestions only, with the counts in its summary so the reader can decide whether to open it; omit it when there are none. Nothing else goes in `<details>`.
 - **After merging** appears only when the author has something to do after the merge (approve a deploy gate, run a backfill, watch a dashboard).
-- **Links.** A PR or issue from another repo is `[owner/repo#N — title](url)`, never a bare `#N`, which GitHub resolves against the repo the review is posted in. Same-repo shas stay bare in backticks; inline comments link by `#discussion_r<id>`.
+- **Links.** A PR or issue from another repo is `[owner/repo#N — title](url)`, never a bare `#N`, which GitHub resolves against the repo the review is posted in. Same-repo shas stay bare in backticks. Blocker and non-blocking bullets link the code at the head sha (`https://<host>/<o>/<r>/blob/<head-sha>/<path>#L<a>-L<b>`): the body is created in the same request as its inline comments, so their `#discussion_r<id>` ids do not exist yet. A `#discussion_r<id>` link is right only for a comment that already exists, such as an earlier review's comment in the re-review table.
 - **Literal `gh` commands.** Every `gh` call that reads or posts spells out the host and the repo (`gh api --hostname <host> repos/<o>/<r>/…`, `gh pr view <n> --repo <host>/<o>/<r>`), with no shell variable or command substitution anywhere in the command: exec guards reject the dynamic form, and a literal is what the user audits at the gate.
 - **The chat view is not the posted body.** The `## PR Review:` structure the agent returns (confidence scores, Ranger confirmations, Requirements Coverage) is the working view shown at the gate; this block is what posts. Show the posted body verbatim at the gate, as with every comment.
 <!-- END REVIEW-BODY-FORMAT -->

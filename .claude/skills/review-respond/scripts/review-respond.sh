@@ -780,11 +780,19 @@ def test_clause:
 . as $in
 | ($in.rows // []) as $rows
 | ($in.testing.checks // []) as $checks
+| (($checks | length) > 0) as $has_checks
 | ($in.ci // null) as $ci
 | (($ci.status // "none") | tostring) as $cs
 | (($ci.pending_names // []) | map(tostring)) as $pending
 | (($in.merges.shas // []) | map(tostring)) as $merge_shas
 | (($in.merges.base_ref // "") | clean) as $merge_base
+| ($in.commits // null) as $all_commits
+| (if $all_commits == null then null
+   else ($all_commits | map(if type == "object" then (.short // .sha // "") else . end | tostring) | map(select(. != ""))) end) as $all_shorts
+| ([($in.rows // [])[] | (.sha // "") | tostring | select(. != "")]
+   + [($in.also_found // [])[] | ((.shas // []) | map(tostring))[]]
+   + $merge_shas) as $cited
+| (if $all_shorts == null then [] else [$all_shorts[] | select(. as $s | any($cited[]; . == $s) | not)] end) as $uncited
 | ($in.review.id | tostring) as $rid
 | ($in.head.short | tostring) as $short
 | ($in.pr_url // "") as $pr
@@ -817,11 +825,16 @@ def test_clause:
          "🟡 **" + ($nf | tostring) + " of " + ($n | tostring) + " fixed; " + ($nw | tostring)
            + " won't fix (reasons in the table).**"
        end) as $outcome
-    | (if $cs == "passed" then "Checks and CI green at `" + $short + "`"
-       elif $cs == "pending" then "Checks green at `" + $short + "`; CI is still running"
-         + (if ($pending | length) > 0 then " (" + ($pending | names) + ")" else "" end)
-         + ", so wait for it before re-reviewing"
-       else "Checks green at `" + $short + "`" end
+    | (if ($pending | length) > 0 then " (" + ($pending | names) + ")" else "" end) as $pending_names
+    | (if $has_checks then
+         (if $cs == "passed" then "Checks and CI green at `" + $short + "`"
+          elif $cs == "pending" then "Checks green at `" + $short + "`; CI is still running" + $pending_names + ", so wait for it before re-reviewing"
+          else "Checks green at `" + $short + "`" end)
+       else
+         (if $cs == "passed" then "CI green at `" + $short + "`; no local test, lint, or typecheck command detected"
+          elif $cs == "pending" then "No local checks detected at `" + $short + "`; CI is still running" + $pending_names + ", so wait for it before re-reviewing"
+          else "No local checks detected at `" + $short + "`" end)
+       end
        + (if $nd == 0 and $cs != "pending" and $in.needs_look != true then "; ready for another look" else "" end) + "."
        + (if $in.needs_look == true then " The push dismissed the approval, so this needs another look." else "" end)) as $status
     | ([$outcome + " " + $status]) as $verdict
@@ -832,8 +845,13 @@ def test_clause:
     | (if ($merge_shas | length) == 0 then [] else
          ["- " + ($merge_shas | length | tostring) + plural($merge_shas | length; " merge"; " merges")
           + " from `" + $merge_base + "` (" + ($merge_shas | code_list) + ")"] end) as $merged
-    | (if ($found + $merged | length) == 0 then ["**Also found:** no other changes since the review."]
-       else ["**Also found:**"] + $found + $merged end) as $also
+    | (if ($uncited | length) == 0 then [] else
+         ["- " + ($uncited | length | tostring) + plural($uncited | length; " other commit"; " other commits")
+          + " not tied to a comment above (" + ($uncited | map(clean) | code_list) + ")"] end) as $unaccounted
+    | (($found + $merged + $unaccounted) as $bullets
+       | if ($bullets | length) > 0 then ["**Also found:**"] + $bullets
+         elif $all_shorts != null then ["**Also found:** no other changes since the review."]
+         else [] end) as $also
     | ("**Testing at `" + $short + "`**"
        + (if (($in.testing.cwd // "") != "") and ($in.testing.cwd != ".") then " (from `" + ($in.testing.cwd | clean) + "`)" else "" end)) as $prefix
     | (if ($checks | length) == 0 then $prefix + ": no test, lint, or typecheck command detected."
@@ -856,7 +874,7 @@ def test_clause:
     | ({review: (try ($in.review.id | tonumber) catch $in.review.id), head: $short, rows: $n,
         fixed: $nf, wont_fix: $nw, needs_discussion: $nd,
         also_found: (($in.also_found // []) | length), merges: ($merge_shas | length),
-        checks: "passed", ci: (if $ci == null then "unknown" else $cs end)} | tojson) as $result
+        checks: (if $has_checks then "passed" else "none" end), ci: (if $ci == null then "unknown" else $cs end)} | tojson) as $result
     | (["<!-- review-respond-result: " + $result + " -->", "<!-- review-respond review=" + $rid + " -->"]) as $tail
     | [$header, $verdict, $table, $also, $testing, $tail]
       | map(select(length > 0) | join("\n")) | join("\n\n")

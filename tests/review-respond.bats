@@ -196,7 +196,7 @@ _write() {
         return 1
     }
     local sub
-    for sub in threads select-review commits map-threads classify dismissed find-prior detect-checks parse-test-output render; do
+    for sub in threads select-review commits merges map-threads classify dismissed find-prior detect-checks parse-test-output ci render; do
         run "$RR" "$sub"
         [[ "$output" != *"unknown subcommand"* ]] || {
             echo "subcommand not wired into dispatch: $sub"
@@ -1498,6 +1498,7 @@ _fx_render_input() {
     {"text": "`request_id` is now forwarded", "shas": ["19231d6"]}
   ],
   "merges": {"base_ref": "master", "shas": []},
+  "commits": [{"short": "651eb74"}, {"short": "7126064"}, {"short": "51423a4"}, {"short": "4a4adea"}, {"short": "19231d6"}],
   "ci": {"status": "passed", "total": 3, "passed": 3, "pending": 0, "failed": 0, "skipped": 0,
          "pending_names": [], "failed_names": []},
   "testing": {"cwd": "app/", "checks": [
@@ -1574,8 +1575,8 @@ _render_with() {
     [[ "$output" == *"#discussion_r104) | 🚫 Won't fix |"* ]]
 }
 
-@test "render: empty also_found renders the explicit no-other-changes line" {
-    _render_with '.also_found = []'
+@test "render: empty also_found renders the explicit no-other-changes line when every commit is cited" {
+    _render_with '.also_found = [] | .commits = .commits[0:3]'
     [ "$status" -eq 0 ]
     [ "$(echo "$output" | sed -n '11p')" = '**Also found:** no other changes since the review.' ]
     [ "$(echo "$output" | sed -n '12,13p')" = "$(printf '\n**Testing at `4bfe659`** (from `app/`): vitest 159 files / **2,753 tests passed**; eslint and `tsc --noEmit --skipLibCheck` clean. **CI:** 3 of 3 checks passed.')" ]
@@ -1688,10 +1689,25 @@ _render_with() {
     [[ "$output" == *'**Testing at `4bfe659`** (from `app/`): vitest passed (count not reported); eslint and `tsc --noEmit --skipLibCheck` clean.'* ]]
 }
 
-@test "render: no checks renders the explicit no-command sentence" {
+@test "render: no checks renders the explicit no-command sentence and never claims checks green" {
     _render_with '.testing.checks = [] | .testing.cwd = "."'
     [ "$status" -eq 0 ]
-    [[ "$output" == *'**Testing at `4bfe659`**: no test, lint, or typecheck command detected.'* ]]
+    [[ "$output" == *'**Testing at `4bfe659`**: no test, lint, or typecheck command detected.'* ]] || return 1
+    [ "$(echo "$output" | sed -n '3p')" = '✅ **All 3 comments fixed.** CI green at `4bfe659`; no local test, lint, or typecheck command detected. The push dismissed the approval, so this needs another look.' ]
+    [[ "$output" == *'"checks":"none","ci":"passed"}'* ]]
+}
+
+@test "render: no checks and no CI says so instead of claiming green" {
+    _render_with '.testing.checks = [] | del(.ci) | .needs_look = false'
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | sed -n '3p')" = '✅ **All 3 comments fixed.** No local checks detected at `4bfe659`; ready for another look.' ]
+    [[ "$output" == *'"checks":"none","ci":"unknown"}'* ]]
+}
+
+@test "render: no checks with CI pending waits on CI without claiming local checks" {
+    _render_with '.testing.checks = [] | .ci = {status:"pending",total:2,passed:1,pending:1,failed:0,skipped:0,pending_names:["build"],failed_names:[]} | .needs_look = false'
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | sed -n '3p')" = '✅ **All 3 comments fixed.** No local checks detected at `4bfe659`; CI is still running (build), so wait for it before re-reviewing.' ]
 }
 
 @test "render: cwd '.' or empty omits the from-clause" {
@@ -1859,7 +1875,7 @@ _render_with() {
 @test "render: ci status none (no checks configured) reads like absent CI but records none" {
     _render_with '.ci = {status:"none",total:0,passed:0,pending:0,failed:0,skipped:0,pending_names:[],failed_names:[]} | .needs_look = false'
     [ "$status" -eq 0 ]
-    [[ "$(echo "$output" | sed -n '3p')" == '✅ **All 3 comments fixed.** Checks green at `4bfe659`;'* ]]
+    [[ "$(echo "$output" | sed -n '3p')" == '✅ **All 3 comments fixed.** Checks green at `4bfe659`;'* ]] || return 1
     [[ "$output" != *"**CI:**"* ]] || return 1
     [[ "$output" == *'"ci":"none"}'* ]]
 }
@@ -1877,7 +1893,7 @@ _render_with() {
 }
 
 @test "render: a single also_found item is still a bullet" {
-    _render_with '.also_found = [.also_found[0]]'
+    _render_with '.also_found = [.also_found[0]] | .commits = .commits[0:4]'
     [ "$status" -eq 0 ]
     [ "$(echo "$output" | sed -n '11,13p')" = "$(printf '**Also found:**\n- the image search base URLs were missing the `/imagesearch` path (`4a4adea`)\n')" ]
 }
@@ -1893,9 +1909,25 @@ _render_with() {
 }
 
 @test "render: merges with no other also_found still render the heading and the bullet" {
-    _render_with '.also_found = [] | .merges.shas = ["abc1234"]'
+    _render_with '.also_found = [] | .merges.shas = ["abc1234"] | .commits = .commits[0:3]'
     [ "$status" -eq 0 ]
     [ "$(echo "$output" | sed -n '11,12p')" = "$(printf '**Also found:**\n- 1 merge from `master` (`abc1234`)')" ]
+}
+
+@test "render: commits no row, item or merge cites are listed instead of claiming no other changes" {
+    _render_with '.also_found = []'
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | sed -n '11,12p')" = "$(printf '**Also found:**\n- 2 other commits not tied to a comment above (`4a4adea`, `19231d6`)')" ]
+    _render_with '.also_found = [.also_found[0]]'
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | sed -n '13p')" = '- 1 other commit not tied to a comment above (`19231d6`)' ]
+}
+
+@test "render: without a commits list an empty Also found is omitted rather than asserted" {
+    _render_with '.also_found = [] | del(.commits)'
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"Also found"* ]] || return 1
+    [ "$(echo "$output" | sed -n '11p')" = '**Testing at `4bfe659`** (from `app/`): vitest 159 files / **2,753 tests passed**; eslint and `tsc --noEmit --skipLibCheck` clean. **CI:** 3 of 3 checks passed.' ]
 }
 
 @test "render: merges base_ref is sanitized and a missing merges object is fine" {
@@ -2070,7 +2102,7 @@ _run_ci() {
 @test "ci: --checks is required and must exist" {
     run "$RR" ci
     [ "$status" -eq 1 ]
-    [[ "$output" == *"--checks is required"* ]]
+    [[ "$output" == *"--checks is required"* ]] || return 1
     run "$RR" ci --checks "$TEST_HOME/nope.json"
     [ "$status" -eq 1 ]
     [[ "$output" == *"no such file"* ]]
