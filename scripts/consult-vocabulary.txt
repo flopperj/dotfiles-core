@@ -10,3 +10,4 @@
 ## Jenkins MCP clone URL
 ## Repo registry
 ## Demo recording targets
+## Slack reaction vocabulary
