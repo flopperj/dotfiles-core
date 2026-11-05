@@ -723,6 +723,11 @@ cmd_stop() {
 #   tick start (passed in so the bound is testable); it defaults to the clock.
 #   An unrecognized value is a usage error, never a silent default.
 # ===========================================================================
+_since_not_future() {
+    # $1 = bound, $2 = now, $3 = the --since text. A bound after now reads nothing.
+    [ "$1" -le "$2" ] || _die "since-ts: --since '$3' is after now; nothing would be read"
+}
+
 cmd_since_ts() {
     _parse_args "$@"
     local now="$FLAG_now"
@@ -732,13 +737,19 @@ cmd_since_ts() {
     local v="${FLAG_since:-24h}" out
     case "$v" in
         [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9])
-            out="$(jq -rn --arg d "$v" '($d + "T00:00:00Z") | fromdateiso8601' 2>/dev/null)" \
+            # Round-trip the parse: mktime normalizes an impossible date such
+            # as 02-30 to March 2 instead of rejecting it.
+            out="$(jq -rn --arg d "$v" '($d + "T00:00:00Z") | fromdateiso8601 as $e
+                | if ($e | todate | .[0:10]) == $d then $e else error("normalized") end' 2>/dev/null)" \
                 || _die "since-ts: invalid date in --since '$v'"
+            _since_not_future "$out" "$now" "$v"
             printf '%s\n' "$out"
             ;;
         [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z)
-            out="$(jq -rn --arg d "$v" '$d | fromdateiso8601' 2>/dev/null)" \
+            out="$(jq -rn --arg d "$v" '$d | fromdateiso8601 as $e
+                | if ($e | todate) == $d then $e else error("normalized") end' 2>/dev/null)" \
                 || _die "since-ts: invalid timestamp in --since '$v'"
+            _since_not_future "$out" "$now" "$v"
             printf '%s\n' "$out"
             ;;
         *[!0-9]*)
@@ -758,6 +769,13 @@ cmd_since_ts() {
             printf '%s\n' "$bound"
             ;;
         *)
+            # A bare number is epoch seconds only when it can be one: ten
+            # digits or more (2001-09-09 onward). A short number is a forgotten
+            # unit, which would otherwise read the whole channel history.
+            if [ "$(( 10#$v ))" -lt 1000000000 ]; then
+                _die "since-ts: '$v' is neither a duration (add m, h, d or w) nor epoch seconds"
+            fi
+            _since_not_future "$(( 10#$v ))" "$now" "$v"
             printf '%s\n' "$(( 10#$v ))"
             ;;
     esac
@@ -784,12 +802,15 @@ cmd_claim() {
     local claim_set="${FLAG_claim_reactions:-eyes}"
     local settled_set="${FLAG_settled_reactions:-}"
 
-    jq -rn --argjson m "$msg" --arg claim "$claim_set" --arg settled "$settled_set" '
-      def names($csv): $csv | split(",") | map(gsub("^\\s+|\\s+$"; "") | gsub("^:|:$"; "")) | map(select(. != ""));
+    # The whole message is read by one jq program; a shape it cannot read
+    # (reactions as an object, users as a string) is a usage error, never FREE.
+    local out
+    out="$(jq -rn --argjson m "$msg" --arg claim "$claim_set" --arg settled "$settled_set" '
+      def names($csv): $csv | split(",") | map(gsub("^\\s+|\\s+$"; "") | gsub("^:|:$"; "")) | map(select(. != "" and . != "none"));
       def rname: (.name // "" | tostring | gsub("^:|:$"; ""));
-      def by_other($self): ((.users // null) as $u
-        | if $u == null then ((.count // 0) > 0)
-          else (($u | map(tostring) | map(select(. != "" and . != $self)) | length) > 0) end);
+      def by_other($self): ((.users // null) as $u | ((.count // 0) | (tonumber? // 0)) as $c
+        | if $u == null then ($c > 0)
+          else ((($u | map(tostring) | map(select(. != "" and . != $self)) | length) > 0) or ($c > ($u | length))) end);
       ($m.self_user_id // "" | tostring) as $self
       | ($m.reactions // []) as $rx
       | ($m.replies // []) as $rp
@@ -805,7 +826,9 @@ cmd_claim() {
                 elif any($rp[]; (.bot != true) and ((.user // "" | tostring) != "") and ((.user // "" | tostring) != $self)) then "CLAIMED:reply"
                 else "FREE" end
             end
-        end'
+        end' 2>/dev/null)" \
+        || _die "claim?: could not read --message (reactions: [{name, users, count}], replies: [{user, bot}])"
+    printf '%s\n' "$out"
 }
 
 # ---------------------------------------------------------------------------

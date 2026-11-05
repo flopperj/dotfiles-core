@@ -1232,10 +1232,10 @@ JSON
 
 @test "claim?: a settled reaction wins over a claim, from any user, but only when passed in --settled-reactions" {
     local msg
-    msg="$(_msg_free | jq '.reactions = [{name:"eyes", users:["U_OTHER"]}, {name:"merged-3001", users:["U_SELF"]}]')"
-    run "$GATE" claim? --message "$msg" --settled-reactions merged-3001,git-closed-pr
+    msg="$(_msg_free | jq '.reactions = [{name:"eyes", users:["U_OTHER"]}, {name:"white_check_mark", users:["U_SELF"]}]')"
+    run "$GATE" claim? --message "$msg" --settled-reactions white_check_mark,no_entry
     [ "$status" -eq 0 ]
-    [ "$output" = "SETTLED:merged-3001" ] || { echo "settled: $output"; return 1; }
+    [ "$output" = "SETTLED:white_check_mark" ] || { echo "settled: $output"; return 1; }
     run "$GATE" claim? --message "$msg"
     [ "$output" = "CLAIMED:reaction:eyes" ]
 }
@@ -1253,8 +1253,8 @@ JSON
 
 @test "claim?: an explicitly named PR is always FREE:explicitly-named (the user's naming wins)" {
     local msg
-    msg="$(_msg_free | jq '.explicitly_named = true | .reactions = [{name:"eyes", users:["U_OTHER"]}, {name:"merged-3001", users:["U_X"]}] | .replies = [{user:"U_OTHER", bot:false}]')"
-    run "$GATE" claim? --message "$msg" --settled-reactions merged-3001
+    msg="$(_msg_free | jq '.explicitly_named = true | .reactions = [{name:"eyes", users:["U_OTHER"]}, {name:"white_check_mark", users:["U_X"]}] | .replies = [{user:"U_OTHER", bot:false}]')"
+    run "$GATE" claim? --message "$msg" --settled-reactions white_check_mark
     [ "$status" -eq 0 ]
     [ "$output" = "FREE:explicitly-named" ]
 }
@@ -1273,4 +1273,74 @@ JSON
     run "$GATE" defer? --pr "$pr"
     [ "$status" -eq 0 ]
     [ "$output" = "HOLD:human-engaged:claim-reaction" ]
+}
+
+@test "since-ts: a bare number without a unit is an error, not an epoch; a real epoch still passes" {
+    run "$GATE" since-ts --since 7 --now 1000000
+    [ "$status" -ne 0 ]
+    echo "$output" | grep -q 'neither a duration' || { echo "got: $output"; return 1; }
+    run "$GATE" since-ts --since 24 --now 1800000000
+    [ "$status" -ne 0 ]
+    run "$GATE" since-ts --since 1000000000 --now 1800000000
+    [ "$status" -eq 0 ]
+    [ "$output" = "1000000000" ]
+}
+
+@test "since-ts: a bound after now is an error (a future date would silently empty the scan)" {
+    run "$GATE" since-ts --since 2027-11-01 --now 1793491200
+    [ "$status" -ne 0 ]
+    echo "$output" | grep -q 'after now' || { echo "got: $output"; return 1; }
+    run "$GATE" since-ts --since 1800000000 --now 1793491200
+    [ "$status" -ne 0 ]
+}
+
+@test "since-ts: an impossible date or timestamp is rejected even when the clock would normalize it" {
+    run "$GATE" since-ts --since 2026-02-30 --now 1800000000
+    [ "$status" -ne 0 ]
+    echo "$output" | grep -q 'invalid date' || { echo "got: $output"; return 1; }
+    run "$GATE" since-ts --since 2026-13-40 --now 1800000000
+    [ "$status" -ne 0 ]
+    run "$GATE" since-ts --since 2026-11-01T25:00:00Z --now 1800000000
+    [ "$status" -ne 0 ]
+}
+
+@test "since-ts: leading zeros in a duration are decimal, not octal" {
+    run "$GATE" since-ts --since 08h --now 1000000
+    [ "$status" -eq 0 ]
+    [ "$output" = "971200" ] || { echo "08h: $output"; return 1; }
+    run "$GATE" since-ts --since 09d --now 1000000
+    [ "$output" = "222400" ]
+}
+
+@test "claim?: an empty user list with a count, or a count above the listed users, still counts as a claim" {
+    local msg
+    msg="$(_msg_free | jq '.reactions = [{name:"eyes", users:[], count:1}]')"
+    run "$GATE" claim? --message "$msg"
+    [ "$status" -eq 0 ]
+    [ "$output" = "CLAIMED:reaction:eyes" ] || { echo "empty users: $output"; return 1; }
+    msg="$(_msg_free | jq '.reactions = [{name:"eyes", users:["U_SELF"], count:2}]')"
+    run "$GATE" claim? --message "$msg"
+    [ "$output" = "CLAIMED:reaction:eyes" ]
+}
+
+@test "claim?: 'none' empties a reaction set; an empty argument keeps the default" {
+    local msg
+    msg="$(_msg_free | jq '.reactions = [{name:"eyes", users:["U_OTHER"]}]')"
+    run "$GATE" claim? --message "$msg" --claim-reactions none
+    [ "$status" -eq 0 ]
+    [ "$output" = "FREE" ] || { echo "none: $output"; return 1; }
+    run "$GATE" claim? --message "$msg" --claim-reactions ""
+    [ "$output" = "CLAIMED:reaction:eyes" ]
+}
+
+@test "claim?: a reply without a user id does not count; malformed inner shapes are a usage error, not FREE" {
+    local msg
+    msg="$(_msg_free | jq '.replies = [{bot:false}, {user:"", bot:false}]')"
+    run "$GATE" claim? --message "$msg"
+    [ "$status" -eq 0 ]
+    [ "$output" = "FREE" ] || { echo "no user id: $output"; return 1; }
+    run "$GATE" claim? --message '{"self_user_id":"U_SELF","reactions":{"name":"eyes"}}'
+    [ "$status" -ne 0 ]
+    run "$GATE" claim? --message '[]'
+    [ "$status" -ne 0 ]
 }

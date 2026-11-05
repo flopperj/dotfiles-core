@@ -15,6 +15,7 @@
       "head_sha": "abc123def456",
       "authored_by_me": true,
       "explicitly_named": true,
+      "discovered_from": null,
       "ci_failures": {
         "lint": 2,
         "unit-tests": 1
@@ -52,6 +53,7 @@
       "head_sha": "Last-seen head SHA of the PR. Drives staleness / re-review / counter-reset.",
       "authored_by_me": "true iff PR author == my_login. One (weak) input to the blast-radius gate.",
       "explicitly_named": "true iff the PR was a command-line seed target (vs Slack-discovered).",
+      "discovered_from": "{channel_id, ts} of the Slack message the PR was discovered from (Step 1); null/absent for seed targets. Lets later ticks and a resumed run re-read that message's replies and reactions for defer?.",
       "ci_failures": "Map of check-name -> consecutive-failure count. Flake guard arms a fix only at count >= 2. Reset to 0 on green/pending; whole map cleared on a new head_sha.",
       "fix_attempts": "Count of Cyrus dispatches for this PR this run. Bounded (default 3). Reset by a human commit.",
       "blocker_fingerprints": "Fingerprints (file|category|fuzzy-claim, NOT line number) of blockers seen. A surviving fingerprint after a dispatch trips the non-convergence stop.",

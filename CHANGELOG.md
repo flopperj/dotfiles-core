@@ -8,15 +8,15 @@ Two more borrowings from the on-call review loop for `/babysit-prs`: the first S
 
 ### Added
 
-- `babysit-gate.sh since-ts --since <v> --now <epoch>`: the `oldest` bound for a run's first `slack_read_channel`. `--since` takes a date (`2026-11-01`, midnight UTC), a timestamp (`2026-11-01T09:30:00Z`), a duration back from now (`30m`, `36h`, `7d`, `2w`) or epoch seconds; without it the bound is 24 hours back. An unrecognized value is a usage error, never a silent default.
-- `babysit-gate.sh claim? --message <facts> [--claim-reactions a,b] [--settled-reactions c,d]`: reads a discovering message's reactions and replies and answers `SETTLED:<name>` (done, any user), `CLAIMED:reaction:<name>` (a claim reaction by anyone but the loop's own user; a reaction with a count but no user list counts), `CLAIMED:reply` (a non-bot, non-self reply) or `FREE`; an explicitly named PR is always `FREE:explicitly-named`. Defaults: `eyes` claims, nothing settles.
+- `babysit-gate.sh since-ts --since <v> --now <epoch>`: the `oldest` bound for a run's first `slack_read_channel`. `--since` takes a date (`2026-11-01`, midnight UTC), a timestamp (`2026-11-01T09:30:00Z`), a duration back from now (`30m`, `36h`, `7d`, `2w`) or epoch seconds; without it the bound is 24 hours back. An unrecognized value, a bare number without a unit, an impossible date or a bound after now is a usage error, never a silent default.
+- `babysit-gate.sh claim? --message <facts> [--claim-reactions a,b] [--settled-reactions c,d]`: reads a discovering message's reactions and replies and answers `SETTLED:<name>` (done, any user), `CLAIMED:reaction:<name>` (a claim reaction by anyone but the loop's own user; a reaction whose count exceeds its listed users, or that lists none, counts), `CLAIMED:reply` (a non-bot, non-self reply) or `FREE`; an explicitly named PR is always `FREE:explicitly-named`. Defaults: `eyes` claims, nothing settles; `none` empties a set; a message shape it cannot read is a usage error.
 - `defer?` gains a fourth signal, `human_claim_reaction` → `HOLD:human-engaged:claim-reaction`, for a teammate who picks a PR up after discovery.
 - Consult vocabulary: `## Slack reaction vocabulary`, the overlay section that names the workspace's claim and settled reactions for `claim?`.
-- `tests/babysit-gate.bats`: 15 new cases for `since-ts`, `claim?` and the new `defer?` signal.
+- `tests/babysit-gate.bats`: 22 new cases for `since-ts`, `claim?` and the new `defer?` signal.
 
 ### Changed
 
-- `/babysit-prs` Step 1: the `--since <date|duration>` tuning flag; the first scan's bound comes from `since-ts` instead of "a sensible recent bound"; every discovered message goes through `claim?` before its PR joins the watchlist, so a claimed or settled PR is skipped with its reason reported and never acked (naming it on the command line still watches it). Step 4 gathers four engagement signals; one `slack_read_thread` per discovered PR gives replies and reactions together.
+- `/babysit-prs` Step 1: the `--since <date|duration>` tuning flag; the first scan's bound comes from `since-ts` instead of "a sensible recent bound"; every discovered message goes through `claim?` before its PR joins the watchlist, so a claimed or settled PR is skipped with its reason reported and never acked (naming it on the command line still watches it). Discovered PRs record `discovered_from` (channel and message ts) so a later tick or a resumed run can re-read the message. Step 4 gathers four engagement signals; one `slack_read_thread` per discovered PR that changed gives replies and reactions together.
 
 ## v1.25.0 — 2026-11-04 (review-format)
 
