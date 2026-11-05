@@ -37,6 +37,11 @@
 #   defer?        --pr <facts>            -> "HOLD:human-engaged:<why>" | "PROCEED"
 #   stop?         --flags <flags> --now <epoch> --until <epoch|empty> \
 #                 --all-terminal <true|false>   -> "STOP:<reason>" | "CONTINUE"
+#   since-ts      --since <date|timestamp|duration|epoch> --now <epoch>
+#                   -> epoch seconds: the lower bound of a run's first Slack scan
+#   claim?        --message <facts> [--claim-reactions a,b] [--settled-reactions c,d]
+#                   -> "SETTLED:<name>" | "CLAIMED:reaction:<name>" | "CLAIMED:reply"
+#                      | "FREE" | "FREE:explicitly-named"
 #
 # shellcheck shell=bash
 
@@ -85,6 +90,10 @@ FLAG_head_sha=""
 FLAG_now=""
 FLAG_until=""
 FLAG_all_terminal=""
+FLAG_since=""
+FLAG_message=""
+FLAG_claim_reactions=""
+FLAG_settled_reactions=""
 
 _parse_args() {
     while [ "$#" -gt 0 ]; do
@@ -116,6 +125,10 @@ _parse_args() {
             --now)          FLAG_now="${2:-}";           shift 2 ;;
             --until)        FLAG_until="${2:-}";         shift 2 ;;
             --all-terminal) FLAG_all_terminal="${2:-}";  shift 2 ;;
+            --since)        FLAG_since="${2:-}";         shift 2 ;;
+            --message)      FLAG_message="${2:-}";       shift 2 ;;
+            --claim-reactions)   FLAG_claim_reactions="${2:-}";   shift 2 ;;
+            --settled-reactions) FLAG_settled_reactions="${2:-}"; shift 2 ;;
             *) _die "unknown argument: $1" ;;
         esac
     done
@@ -619,18 +632,21 @@ cmd_auto_approve() {
 # ===========================================================================
 # Subcommand: defer?
 #   Human-deference: before review/approve/merge, hold if a human is engaged —
-#   an in-flight human review, a human (non-bot, non-self) thread reply, or an
-#   existing human approval. Must NOT fire on the loop's own ack or a bot reply.
-#   Distinct from CHANGES_REQUESTED (which is the merge gate's permanent veto).
+#   an in-flight human review, a human (non-bot, non-self) thread reply, an
+#   existing human approval, or a claim reaction (eyes and the like, see claim?)
+#   from anyone but the loop's own user on the discovering Slack message. Must
+#   NOT fire on the loop's own ack or a bot reply. Distinct from
+#   CHANGES_REQUESTED (which is the merge gate's permanent veto).
 # ===========================================================================
 cmd_defer() {
     _parse_args "$@"
     local pr="$FLAG_pr"
-    local in_flight human_reply human_approval
+    local in_flight human_reply human_approval claim_reaction
 
     in_flight="$(_pr_field "$pr" '.human_review_in_flight' "false")"
     human_reply="$(_pr_field "$pr" '.human_thread_reply' "false")"
     human_approval="$(_pr_field "$pr" '.human_approval_exists' "false")"
+    claim_reaction="$(_pr_field "$pr" '.human_claim_reaction' "false")"
 
     if [ "$in_flight" = "true" ]; then
         printf 'HOLD:human-engaged:review-in-flight\n'
@@ -642,6 +658,10 @@ cmd_defer() {
     fi
     if [ "$human_approval" = "true" ]; then
         printf 'HOLD:human-engaged:approval-exists\n'
+        return 0
+    fi
+    if [ "$claim_reaction" = "true" ]; then
+        printf 'HOLD:human-engaged:claim-reaction\n'
         return 0
     fi
     # own ack / bot reply / CHANGES_REQUESTED-with-no-engagement all PROCEED here.
@@ -693,6 +713,101 @@ cmd_stop() {
     printf 'CONTINUE\n'
 }
 
+# ===========================================================================
+# Subcommand: since-ts
+#   The lower bound for the FIRST Slack scan of a run, before any watermark is
+#   stored. --since takes YYYY-MM-DD (midnight UTC), YYYY-MM-DDTHH:MM:SSZ, a
+#   duration back from --now (<n>m|h|d|w), or bare epoch seconds; without it
+#   the bound is 24 hours back. Prints epoch seconds, the shape
+#   slack_read_channel's `oldest` takes. --now is the wall-clock epoch read at
+#   tick start (passed in so the bound is testable); it defaults to the clock.
+#   An unrecognized value is a usage error, never a silent default.
+# ===========================================================================
+cmd_since_ts() {
+    _parse_args "$@"
+    local now="$FLAG_now"
+    [ -n "$now" ] || now="$(date +%s)"
+    case "$now" in ''|*[!0-9]*) _die "since-ts: --now must be epoch seconds" ;; esac
+
+    local v="${FLAG_since:-24h}" out
+    case "$v" in
+        [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9])
+            out="$(jq -rn --arg d "$v" '($d + "T00:00:00Z") | fromdateiso8601' 2>/dev/null)" \
+                || _die "since-ts: invalid date in --since '$v'"
+            printf '%s\n' "$out"
+            ;;
+        [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z)
+            out="$(jq -rn --arg d "$v" '$d | fromdateiso8601' 2>/dev/null)" \
+                || _die "since-ts: invalid timestamp in --since '$v'"
+            printf '%s\n' "$out"
+            ;;
+        *[!0-9]*)
+            local n unit secs
+            n="${v%[mhdw]}"
+            unit="${v#"$n"}"
+            case "$n" in
+                ''|*[!0-9]*) _die "since-ts: unrecognized --since '$v' (want YYYY-MM-DD, YYYY-MM-DDTHH:MM:SSZ, <n>m|h|d|w, or epoch seconds)" ;;
+            esac
+            case "$unit" in
+                m) secs=60 ;; h) secs=3600 ;; d) secs=86400 ;; w) secs=604800 ;;
+                *) _die "since-ts: unrecognized --since '$v' (want YYYY-MM-DD, YYYY-MM-DDTHH:MM:SSZ, <n>m|h|d|w, or epoch seconds)" ;;
+            esac
+            # Base-10 for the same leading-zero reason as the churn calc above.
+            local bound=$(( 10#$now - 10#$n * secs ))
+            [ "$bound" -ge 0 ] || bound=0
+            printf '%s\n' "$bound"
+            ;;
+        *)
+            printf '%s\n' "$(( 10#$v ))"
+            ;;
+    esac
+}
+
+# ===========================================================================
+# Subcommand: claim?
+#   Does the discovering Slack message already say a human has this PR, or
+#   that it is done? Asked before a discovered PR joins the watchlist (and so
+#   before the single ack). A reaction from --settled-reactions, by any user,
+#   means done => SETTLED:<name>. A reaction from --claim-reactions by anyone
+#   but the loop's own user => CLAIMED:reaction:<name>; a reaction that lists
+#   no users but has a count cannot be proven to be the loop's own, so it
+#   counts. A non-bot, non-self thread reply => CLAIMED:reply. An explicitly
+#   named PR is the user's call and is always FREE. Defaults: eyes claims,
+#   nothing settles; the workspace's names come from the Actor (SKILL.md Step 1).
+# ===========================================================================
+cmd_claim() {
+    _parse_args "$@"
+    local msg="$FLAG_message"
+    [ -n "$msg" ] || msg='{}'
+    printf '%s' "$msg" | jq -e 'type == "object"' >/dev/null 2>&1 \
+        || _die "claim? requires --message as a JSON object"
+    local claim_set="${FLAG_claim_reactions:-eyes}"
+    local settled_set="${FLAG_settled_reactions:-}"
+
+    jq -rn --argjson m "$msg" --arg claim "$claim_set" --arg settled "$settled_set" '
+      def names($csv): $csv | split(",") | map(gsub("^\\s+|\\s+$"; "") | gsub("^:|:$"; "")) | map(select(. != ""));
+      def rname: (.name // "" | tostring | gsub("^:|:$"; ""));
+      def by_other($self): ((.users // null) as $u
+        | if $u == null then ((.count // 0) > 0)
+          else (($u | map(tostring) | map(select(. != "" and . != $self)) | length) > 0) end);
+      ($m.self_user_id // "" | tostring) as $self
+      | ($m.reactions // []) as $rx
+      | ($m.replies // []) as $rp
+      | names($claim) as $claims
+      | names($settled) as $settleds
+      | if $m.explicitly_named == true then "FREE:explicitly-named"
+        else
+          (first($rx[] | select(rname as $n | any($settleds[]; . == $n)) | rname) // null) as $s
+          | if $s != null then "SETTLED:" + $s
+            else
+              (first($rx[] | select(rname as $n | any($claims[]; . == $n)) | select(by_other($self)) | rname) // null) as $c
+              | if $c != null then "CLAIMED:reaction:" + $c
+                elif any($rp[]; (.bot != true) and ((.user // "" | tostring) != "") and ((.user // "" | tostring) != $self)) then "CLAIMED:reply"
+                else "FREE" end
+            end
+        end'
+}
+
 # ---------------------------------------------------------------------------
 # Dispatch
 # ---------------------------------------------------------------------------
@@ -712,6 +827,8 @@ main() {
         auto-approve?)  cmd_auto_approve "$@" ;;
         defer?)         cmd_defer "$@" ;;
         stop?)          cmd_stop "$@" ;;
+        since-ts)       cmd_since_ts "$@" ;;
+        claim?)         cmd_claim "$@" ;;
         *) _die "unknown subcommand: $sub" ;;
     esac
 }

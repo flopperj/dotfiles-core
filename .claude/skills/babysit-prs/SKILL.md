@@ -39,7 +39,7 @@ user-invocable: true
   - `--fix`: hand blocking findings and flake-guarded CI failures to Cyrus.
   - `--approve`: auto-approve clean PRs (including teammates' — approval is reversible).
   - `--merge`: merge when the strict gate passes and blast-radius is not high.
-- **Tuning flags**: `--max-fix-attempts N` (default 3), `--repos owner/a,owner/b`, `--merge-method squash|merge|rebase`, `--slack #channel`, `--hold-above <threshold>` / `--no-hold-above`, `--until <time>`, `--until-empty`.
+- **Tuning flags**: `--max-fix-attempts N` (default 3), `--repos owner/a,owner/b`, `--merge-method squash|merge|rebase`, `--slack #channel`, `--since <date|duration>` (the first Slack scan's lower bound, e.g. `2026-11-01` or `7d`; default 24 hours back), `--hold-above <threshold>` / `--no-hold-above`, `--until <time>`, `--until-empty`.
 
 > The capability flags select *which* capability is enabled; the gate script (`scripts/babysit-gate.sh`) decides *how much unattended latitude* that capability has on a given PR. There is deliberately no third latitude-config surface — see the Actor half.
 
@@ -72,9 +72,10 @@ Do this once at run start (resume-aware), then keep the resolved values in the r
 4. **Slack discovery (only when `--slack #channel` is set)**:
    - **Resolve the channel_id at runtime** — do not hardcode. Resolve `#channel` → `channel_id` via `slack_search_channels` and store it run-level (`state-set-run … --set slack.channel_id=<id> --set slack.enabled=true`).
    - **Resolve the loop's own Slack `user_id` at runtime** via `slack_search_users` / `slack_read_user_profile` (needed later so the Actor's human-deference check can tell a human reply from the loop's own ack). Do not hardcode it.
-   - **Read only new messages**: call `slack_read_channel` with `oldest = <stored last_seen_ts>`, newest-first. On the first tick with no watermark, use a sensible recent bound rather than the full channel history.
+   - **Read only new messages**: call `slack_read_channel` with `oldest = <stored last_seen_ts>`, newest-first. On the first tick with no watermark, seed the bound deterministically: `babysit-gate.sh since-ts --since <the --since value, or empty> --now <tick-start epoch>` prints the epoch to pass as `oldest` (a date is midnight UTC, a duration such as `7d` counts back from now, no `--since` means 24 hours back; an unrecognized value is an error, not a silent default). Never read the full channel history.
    - **Extract PR URLs** from the new messages (GitHub PR URL / `owner/repo#N` patterns).
    - **Filter to the launch repo** by default, or to `--repos owner/a,owner/b` when set. Drop non-matching URLs so a busy channel doesn't add noise.
+   - **Leave claimed and settled PRs alone.** For each remaining message build `{self_user_id, explicitly_named, reactions: [{name, users, count}], replies: [{user, bot}]}` from the channel read (one `slack_read_thread` on the message when it has replies) and call `babysit-gate.sh claim? --message <facts> --claim-reactions <names> --settled-reactions <names>`. `SETTLED:<name>` → the PR is already done in Slack's terms; do not watch it, report `#NNN skipped — already settled (:<name>:)`. `CLAIMED:reaction:<name>` / `CLAIMED:reply` → a teammate has it; do not watch it and post no ack, report `#NNN skipped — a teammate has it (:<name>:)`. `FREE` → add it. A claimed PR stays with the teammate for the run; naming it on the command line is the way to watch it anyway (`claim?` answers `FREE:explicitly-named`). For the workspace's reaction names, consult `## Slack reaction vocabulary` in `~/.claude/overlay-context.md`. If that file is absent, use the defaults: `eyes` claims, nothing settles.
    - **Add new matches** to the watchlist with `explicitly_named = false` (discovered, not seeded) — these are the PRs the Actor may later post the single "🤖 babysitting" ack on.
    - **Advance `last_seen_ts`** to the newest message timestamp seen this tick (`state-set-run … --set slack.last_seen_ts=<ts>`), so the next tick never re-scans history.
 
@@ -136,11 +137,11 @@ For each watched PR the Watcher handed off (`{pr_ref, transition_kind, routing_c
 
 Before the Actor reviews, approves, or merges a PR, defer to a human who is already engaged. This is a **courtesy hold**, distinct from the permanent `CHANGES_REQUESTED` merge veto (which lives in the merge gate, Step 8).
 
-1. **Gather the three engagement signals** from the Watcher's read (no extra mutation): `human_review_in_flight` (a human review is `PENDING` / in-flight or freshly submitted), `human_thread_reply` (a **non-bot, non-self** reply on the discovering Slack message), `human_approval_exists` (an existing human `APPROVED` review).
-   - **Self / bot exclusion is load-bearing.** A reply from the loop's own Slack `user_id` (resolved in Step 1) or from any bot must **not** count as human engagement — otherwise the loop's own "🤖 babysitting" ack would make it defer to itself forever. Compute these three booleans with the self/bot filter applied before calling the gate.
+1. **Gather the four engagement signals** from the Watcher's read plus, for a discovered PR, one `slack_read_thread` on its discovering message (reads only, no mutation): `human_review_in_flight` (a human review is `PENDING` / in-flight or freshly submitted), `human_thread_reply` (a **non-bot, non-self** reply on the discovering Slack message), `human_approval_exists` (an existing human `APPROVED` review), `human_claim_reaction` (a reaction from the claim set Step 1 passed to `claim?`, by anyone but the loop's own user — a teammate who picked the PR up after discovery).
+   - **Self / bot exclusion is load-bearing.** A reply or reaction from the loop's own Slack `user_id` (resolved in Step 1) or a reply from any bot must **not** count as human engagement — otherwise the loop's own "🤖 babysitting" ack would make it defer to itself forever. Compute these four booleans with the self/bot filter applied before calling the gate.
 2. **Call the gate:** `babysit-gate.sh defer? --pr <facts-with-engagement>`.
    - `PROCEED` → continue to Step 5.
-   - `HOLD:human-engaged:<why>` → **hold this PR for this tick.** Report inline (e.g. `#491 held — a human review is in flight; deferring`) and skip Steps 5–8 for this PR. Still run Step 9 (settle/re-arm) so a deferred-but-clean PR parks cheaply rather than re-checking engagement every tick.
+   - `HOLD:human-engaged:<why>` (`review-in-flight`, `thread-reply`, `approval-exists` or `claim-reaction`) → **hold this PR for this tick.** Report inline (e.g. `#491 held — a human review is in flight; deferring`) and skip Steps 5–8 for this PR. Still run Step 9 (settle/re-arm) so a deferred-but-clean PR parks cheaply rather than re-checking engagement every tick.
 
 > Deference holds the *loop's* action; it is not itself a merge veto. Once the human finishes and the PR is clean, the next tick proceeds normally (unlike `CHANGES_REQUESTED`, which the merge gate blocks permanently).
 
@@ -256,7 +257,7 @@ Every gate `HOLD:<reason>` the Actor echoes inline is *also* stored in the per-P
 - [ ] `my_login` resolved once via `gh api user --jq .login` and stored run-level
 - [ ] State file resumed (`state-load` on the target set) or initialized (`state-init`); counters/history intact on resume
 - [ ] Seed targets added with `explicitly_named = true`; seed PRs get no Slack ack
-- [ ] Slack (if `--slack`): `channel_id` and the loop's own `user_id` resolved at runtime (never hardcoded); `slack_read_channel` uses `oldest = last_seen_ts`, newest-first; PR URLs extracted, filtered to launch repo / `--repos`; `last_seen_ts` advanced
+- [ ] Slack (if `--slack`): `channel_id` and the loop's own `user_id` resolved at runtime (never hardcoded); the first scan's `oldest` comes from `babysit-gate.sh since-ts` (`--since`, default 24 hours back), later ticks use `oldest = last_seen_ts`, newest-first; PR URLs extracted, filtered to launch repo / `--repos`; messages `babysit-gate.sh claim?` reports as claimed or settled skipped (no watch, no ack) with the reason printed; `last_seen_ts` advanced
 - [ ] Exactly one `gh pr view --json` read per non-terminal PR per tick (terminal PRs skipped)
 - [ ] Hand-off record `{pr_ref, transition_kind, routing_ctx}` computed per PR; exactly one `transition_kind` assigned
 - [ ] Required-check set = branch-protection required checks when defined, else all checks (fails safe, never open)
@@ -268,7 +269,7 @@ Every gate `HOLD:<reason>` the Actor echoes inline is *also* stored in the per-P
 
 - [ ] PRs processed **sequentially** (single-writer state); one PR's full sequence + `state-write-pr` completes before the next PR starts
 - [ ] Gate-facts `--pr` blob assembled once per PR from the Watcher read + CI classification; the same blob passed to every gate call
-- [ ] Human-deference checked via `babysit-gate.sh defer?` (self/bot-filtered); `HOLD:human-engaged` holds the loop's action for the tick (distinct from the permanent `CHANGES_REQUESTED` merge veto)
+- [ ] Human-deference checked via `babysit-gate.sh defer?` (four signals, self/bot-filtered, claim reactions included); `HOLD:human-engaged` holds the loop's action for the tick (distinct from the permanent `CHANGES_REQUESTED` merge veto)
 - [ ] Review run only when reviewable AND the SHA moved (`head_sha != last_review.sha`); dispatched via `/code-auditor` (never a bespoke reviewer); SHA-valid review reused, not re-run
 - [ ] Blocking findings reduced to line-number-independent fingerprints via `babysit-gate.sh fingerprint`
 - [ ] Fix (`--fix` only) behind the flake guard (same name-matched check `>= 2`), the attempt bound (default 3, `--max-fix-attempts` overrides), and the non-convergence early stop (`babysit-gate.sh converged?` → `STOP` marks `needs-human` immediately)
@@ -283,13 +284,13 @@ Every gate `HOLD:<reason>` the Actor echoes inline is *also* stored in the per-P
 
 ## Tools
 
-- **`scripts/babysit-gate.sh`** — the tested decision core. Subcommands: `decide` (the reversibility × blast-radius gate), `merge-gate`, `blast-radius`, `flake-tick`, `fingerprint`, `converged?`, `settle?`, `rearm?`, `auto-approve?`, `defer?`, `stop?`. Every subcommand is a pure function (JSON/args in → token + reason on stdout, exit 0, no side effects). Shellchecked by `make lint` (via the `.claude/skills/*/scripts/*.sh` glob); its behavior is covered by `tests/babysit-gate.bats`.
+- **`scripts/babysit-gate.sh`** — the tested decision core. Subcommands: `decide` (the reversibility × blast-radius gate), `merge-gate`, `blast-radius`, `flake-tick`, `fingerprint`, `converged?`, `settle?`, `rearm?`, `auto-approve?`, `defer?`, `stop?`, `since-ts` (the first Slack scan's bound), `claim?` (claimed or settled per the discovering message's reactions and replies). Every subcommand is a pure function (JSON/args in → token + reason on stdout, exit 0, no side effects). Shellchecked by `make lint` (via the `.claude/skills/*/scripts/*.sh` glob); its behavior is covered by `tests/babysit-gate.bats`.
 - **`scripts/babysit-state.sh`** — the per-run JSON state store: `state-init`, `state-load` (resume-match), `state-read-pr`, `state-write-pr`, `state-set-run`. Atomic write-temp-then-rename (refuses to commit empty content); single-writer per tick (no locking). Shellchecked by `make lint`; covered by `tests/babysit-state.bats`.
 - **`data/state-schema.json`** — documents and round-trip-fixtures the per-run state shape.
 - **`gh` CLI** — `gh api user` (login), `gh pr view --json` (the one read per PR), `gh api repos/.../branches/.../protection` (required checks), `gh run view --log-failed` (failing logs), `gh pr review --approve`, `gh pr merge`, `gh api repos/{owner}/{repo}` (allowed merge methods).
 - **Agent tool** — composes `/code-auditor` → Scout/Ranger for review, and `cyrus-tdd-engineer` for fixes. This skill never reviews or writes fix code itself.
 - **Jenkins MCP** — `get_failed_stages` → `get_build_errors` for failing-stage logs when a required check is a Jenkins job.
-- **Slack MCP** — `slack_search_channels` / `slack_search_users` / `slack_read_channel` / `slack_read_user_profile` (read-only discovery + self-id) and one narrow threaded-reply write (the discovered-PR ack).
+- **Slack MCP** — `slack_search_channels` / `slack_search_users` / `slack_read_channel` / `slack_read_thread` / `slack_read_user_profile` (read-only discovery, replies and reactions on a discovering message, self-id) and one narrow threaded-reply write (the discovered-PR ack).
 
 ## Resources
 
@@ -298,7 +299,7 @@ Every gate `HOLD:<reason>` the Actor echoes inline is *also* stored in the per-P
 - **Fix implementer** — `/cyrus-tdd-engineer` (the only agent allowed to write fix code).
 - **State home** — `~/.claude/tasks/<project>/babysit-prs/<run_id>.json` (+ `latest.json` symlink); persists after the run for inspection.
 - **Global rules** — `~/.claude/AGENTS.md` § "Automated Comment Marker — 🤖 prefix" (the ack + approval markers) and the PR-review draft-first rules.
-- **Sibling prior art** — `oncall-pr-review-loop` (the accountability echo, defer-to-in-flight-human, own-ack dedup, reaction→threaded-reply fallback, wall-clock robustness, and size/complexity hold valve were borrowed from it).
+- **Sibling prior art** — `oncall-pr-review-loop` (the accountability echo, defer-to-in-flight-human, own-ack dedup, reaction→threaded-reply fallback, wall-clock robustness, and size/complexity hold valve were borrowed from it, later joined by the first-scan start bound and the claimed/settled-reaction skip).
 
 ## Examples
 
@@ -342,7 +343,7 @@ flags = {"review_only": false, "fix": false, "approve": true, "merge": true,
 ```
 
 **Tick trace:**
-1. Slack ack posted once as a 🤖-prefixed threaded reply on the discovering message (discovered PR; own-ack dedup on later ticks).
+1. Step 1 `claim?` on the discovering message → `FREE` (no claim reaction, no human reply), so #491 joins the watchlist; the Slack ack is posted once as a 🤖-prefixed threaded reply on that message (discovered PR; own-ack dedup on later ticks).
 2. Step 4 `defer?` → `PROCEED`.
 3. Step 7 `decide --action approve` → **`ALLOW`** (clean; approve is held *only* by the size/files signal, and this PR is small — foreign-authorship never holds approve). Post a peer-toned 🤖 approval, once per SHA.
 4. Step 8 `decide --action merge` → **`HOLD:blast-radius-foreign-author`**. A teammate's PR can never merge unattended — and the hold **attributes to blast-radius, not to a standalone authorship predicate** (the precedence flip). Report **"#491 merge-ready, awaiting your OK."**

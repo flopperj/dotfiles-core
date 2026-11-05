@@ -2,6 +2,22 @@
 
 > **How to update:** The pre-commit hook (`scripts/pre-commit.sh`) is auto-installed by `install.sh`. It runs a fast leakage check (`scripts/check-no-leakage.sh`) and re-renders the generated `CLAUDE.md.generated` and `AGENTS.md.generated` files on every commit. A pre-push gate (`scripts/pre-push.sh`, also auto-installed) scans every outgoing commit's tree and metadata before it leaves the machine. CI runs lint, consult-grammar, and the test suite (including synthetic-token leakage mechanism tests) on every PR; the company-token scan is a separate step that runs only when guard data is present on the runner. If you bypass the hooks or work in a context where hooks cannot run, keep this file current manually. Each release heading links to the diff on the public mirror.
 
+## v1.26.0 — 2026-11-04 (babysit-claims)
+
+Two more borrowings from the on-call review loop for `/babysit-prs`: the first Slack scan of a run has an explicit lower bound, and a PR a teammate has already claimed, or that Slack already shows as done, is left alone instead of being watched and acked.
+
+### Added
+
+- `babysit-gate.sh since-ts --since <v> --now <epoch>`: the `oldest` bound for a run's first `slack_read_channel`. `--since` takes a date (`2026-11-01`, midnight UTC), a timestamp (`2026-11-01T09:30:00Z`), a duration back from now (`30m`, `36h`, `7d`, `2w`) or epoch seconds; without it the bound is 24 hours back. An unrecognized value is a usage error, never a silent default.
+- `babysit-gate.sh claim? --message <facts> [--claim-reactions a,b] [--settled-reactions c,d]`: reads a discovering message's reactions and replies and answers `SETTLED:<name>` (done, any user), `CLAIMED:reaction:<name>` (a claim reaction by anyone but the loop's own user; a reaction with a count but no user list counts), `CLAIMED:reply` (a non-bot, non-self reply) or `FREE`; an explicitly named PR is always `FREE:explicitly-named`. Defaults: `eyes` claims, nothing settles.
+- `defer?` gains a fourth signal, `human_claim_reaction` → `HOLD:human-engaged:claim-reaction`, for a teammate who picks a PR up after discovery.
+- Consult vocabulary: `## Slack reaction vocabulary`, the overlay section that names the workspace's claim and settled reactions for `claim?`.
+- `tests/babysit-gate.bats`: 15 new cases for `since-ts`, `claim?` and the new `defer?` signal.
+
+### Changed
+
+- `/babysit-prs` Step 1: the `--since <date|duration>` tuning flag; the first scan's bound comes from `since-ts` instead of "a sensible recent bound"; every discovered message goes through `claim?` before its PR joins the watchlist, so a claimed or settled PR is skipped with its reason reported and never acked (naming it on the command line still watches it). Step 4 gathers four engagement signals; one `slack_read_thread` per discovered PR gives replies and reactions together.
+
 ## v1.25.0 — 2026-11-04 (review-format)
 
 Review-round summaries and posted reviews now lead with the verdict and the head sha it applies to, state CI at that sha, and keep what a reader skips out of the way — the shape of a teammate's re-review comments that read well in a long PR thread. `/review-respond` also refuses to post while CI is red, names merges from the base branch, and ends each summary with a machine-readable result line.

@@ -36,6 +36,11 @@
 #                 -> "APPROVE" | "SKIP:<reason>"
 #   defer?       --pr <facts>
 #                 -> "HOLD:human-engaged:<why>" | "PROCEED"
+#   since-ts     --since <date|timestamp|duration|epoch> --now <epoch>
+#                 -> epoch seconds (the first Slack scan's lower bound)
+#   claim?       --message <facts> [--claim-reactions a,b] [--settled-reactions c,d]
+#                 -> "SETTLED:<name>" | "CLAIMED:reaction:<name>" | "CLAIMED:reply"
+#                    | "FREE" | "FREE:explicitly-named"
 #   stop?        --flags <flags> --now <epoch> --until <epoch|empty> \
 #                --all-terminal <true|false>
 #                 -> "STOP:<reason>" | "CONTINUE"
@@ -1118,4 +1123,154 @@ _decide() {
     run "$GATE" stop? --flags "$(_flags_all)" --now 1000 --until "" --all-terminal true
     [ "$status" -eq 0 ]
     [ "$output" = "CONTINUE" ]
+}
+
+# ---------------------------------------------------------------------------
+#    since-ts --since <v> --now <epoch>  -> epoch seconds (first-scan bound)
+# ---------------------------------------------------------------------------
+
+@test "since-ts: a duration counts back from --now (m/h/d/w)" {
+    run "$GATE" since-ts --since 7d --now 1000000
+    [ "$status" -eq 0 ]
+    [ "$output" = "395200" ] || { echo "7d: $output"; return 1; }
+    run "$GATE" since-ts --since 36h --now 1000000
+    [ "$output" = "870400" ] || { echo "36h: $output"; return 1; }
+    run "$GATE" since-ts --since 30m --now 1000000
+    [ "$output" = "998200" ] || { echo "30m: $output"; return 1; }
+    run "$GATE" since-ts --since 2w --now 2000000
+    [ "$output" = "790400" ]
+}
+
+@test "since-ts: a date is midnight UTC, a full timestamp is taken as is, bare epoch passes through" {
+    run "$GATE" since-ts --since 2026-11-01 --now 1800000000
+    [ "$status" -eq 0 ]
+    [ "$output" = "1793491200" ] || { echo "date: $output"; return 1; }
+    run "$GATE" since-ts --since 2026-11-01T09:30:00Z --now 1800000000
+    [ "$output" = "1793525400" ] || { echo "timestamp: $output"; return 1; }
+    run "$GATE" since-ts --since 1793491200 --now 1800000000
+    [ "$output" = "1793491200" ]
+}
+
+@test "since-ts: without --since the bound is 24 hours back; a bound before epoch zero clamps to 0" {
+    run "$GATE" since-ts --now 1000000
+    [ "$status" -eq 0 ]
+    [ "$output" = "913600" ] || { echo "default: $output"; return 1; }
+    run "$GATE" since-ts --since 4w --now 1000000
+    [ "$output" = "0" ]
+}
+
+@test "since-ts: an unrecognized --since is a usage error, not a silent default" {
+    run "$GATE" since-ts --since yesterday --now 1000000
+    [ "$status" -ne 0 ]
+    echo "$output" | grep -q 'unrecognized --since' || { echo "got: $output"; return 1; }
+    run "$GATE" since-ts --since 7x --now 1000000
+    [ "$status" -ne 0 ]
+}
+
+@test "since-ts: without --now the real clock is used" {
+    run "$GATE" since-ts --since 1h
+    [ "$status" -eq 0 ]
+    case "$output" in ''|*[!0-9]*) echo "not digits: $output"; return 1 ;; esac
+    local now; now="$(date +%s)"
+    [ "$(( now - output ))" -ge 3600 ] && [ "$(( now - output ))" -lt 3700 ]
+}
+
+# ---------------------------------------------------------------------------
+#    claim? --message <facts> [--claim-reactions a,b] [--settled-reactions c,d]
+#      -> SETTLED:<name> | CLAIMED:reaction:<name> | CLAIMED:reply | FREE[:explicitly-named]
+# ---------------------------------------------------------------------------
+
+_msg_free() {
+    cat <<'JSON'
+{"self_user_id": "U_SELF", "explicitly_named": false, "reactions": [], "replies": []}
+JSON
+}
+
+@test "claim?: a message with no reactions or replies is FREE" {
+    run "$GATE" claim? --message "$(_msg_free)"
+    [ "$status" -eq 0 ]
+    [ "$output" = "FREE" ]
+}
+
+@test "claim?: a claim reaction by another user => CLAIMED:reaction:<name>" {
+    local msg
+    msg="$(_msg_free | jq '.reactions = [{name:"eyes", users:["U_OTHER"], count:1}]')"
+    run "$GATE" claim? --message "$msg"
+    [ "$status" -eq 0 ]
+    [ "$output" = "CLAIMED:reaction:eyes" ]
+}
+
+@test "claim?: the loop's own claim reaction does not count; colons around a name are tolerated" {
+    local msg
+    msg="$(_msg_free | jq '.reactions = [{name:":eyes:", users:["U_SELF"], count:1}]')"
+    run "$GATE" claim? --message "$msg"
+    [ "$status" -eq 0 ]
+    [ "$output" = "FREE" ] || { echo "own reaction: $output"; return 1; }
+    msg="$(_msg_free | jq '.reactions = [{name:":eyes:", users:["U_SELF","U_OTHER"], count:2}]')"
+    run "$GATE" claim? --message "$msg"
+    [ "$output" = "CLAIMED:reaction:eyes" ]
+}
+
+@test "claim?: a reaction with a count but no user list counts as a claim (cannot be proven self)" {
+    local msg
+    msg="$(_msg_free | jq '.reactions = [{name:"eyes", count:1}]')"
+    run "$GATE" claim? --message "$msg"
+    [ "$status" -eq 0 ]
+    [ "$output" = "CLAIMED:reaction:eyes" ]
+}
+
+@test "claim?: a human (non-bot, non-self) reply => CLAIMED:reply; bot and own replies do not count" {
+    local msg
+    msg="$(_msg_free | jq '.replies = [{user:"U_OTHER", bot:false}]')"
+    run "$GATE" claim? --message "$msg"
+    [ "$status" -eq 0 ]
+    [ "$output" = "CLAIMED:reply" ] || { echo "human reply: $output"; return 1; }
+    msg="$(_msg_free | jq '.replies = [{user:"U_SELF", bot:false}, {user:"B_BOT", bot:true}]')"
+    run "$GATE" claim? --message "$msg"
+    [ "$output" = "FREE" ]
+}
+
+@test "claim?: a settled reaction wins over a claim, from any user, but only when passed in --settled-reactions" {
+    local msg
+    msg="$(_msg_free | jq '.reactions = [{name:"eyes", users:["U_OTHER"]}, {name:"merged-3001", users:["U_SELF"]}]')"
+    run "$GATE" claim? --message "$msg" --settled-reactions merged-3001,git-closed-pr
+    [ "$status" -eq 0 ]
+    [ "$output" = "SETTLED:merged-3001" ] || { echo "settled: $output"; return 1; }
+    run "$GATE" claim? --message "$msg"
+    [ "$output" = "CLAIMED:reaction:eyes" ]
+}
+
+@test "claim?: --claim-reactions replaces the default set (eyes alone is then FREE)" {
+    local msg
+    msg="$(_msg_free | jq '.reactions = [{name:"eyes", users:["U_OTHER"]}]')"
+    run "$GATE" claim? --message "$msg" --claim-reactions "approve, comments"
+    [ "$status" -eq 0 ]
+    [ "$output" = "FREE" ] || { echo "replaced set: $output"; return 1; }
+    msg="$(_msg_free | jq '.reactions = [{name:"comments", users:["U_OTHER"]}]')"
+    run "$GATE" claim? --message "$msg" --claim-reactions "approve, comments"
+    [ "$output" = "CLAIMED:reaction:comments" ]
+}
+
+@test "claim?: an explicitly named PR is always FREE:explicitly-named (the user's naming wins)" {
+    local msg
+    msg="$(_msg_free | jq '.explicitly_named = true | .reactions = [{name:"eyes", users:["U_OTHER"]}, {name:"merged-3001", users:["U_X"]}] | .replies = [{user:"U_OTHER", bot:false}]')"
+    run "$GATE" claim? --message "$msg" --settled-reactions merged-3001
+    [ "$status" -eq 0 ]
+    [ "$output" = "FREE:explicitly-named" ]
+}
+
+@test "claim?: no --message is FREE; a non-object --message is a usage error" {
+    run "$GATE" claim?
+    [ "$status" -eq 0 ]
+    [ "$output" = "FREE" ] || { echo "empty: $output"; return 1; }
+    run "$GATE" claim? --message 'not json'
+    [ "$status" -ne 0 ]
+}
+
+@test "defer?: HOLD when a human claim reaction sits on the discovering message" {
+    local pr
+    pr="$(_pr_clean_own | jq '.human_claim_reaction = true')"
+    run "$GATE" defer? --pr "$pr"
+    [ "$status" -eq 0 ]
+    [ "$output" = "HOLD:human-engaged:claim-reaction" ]
 }
