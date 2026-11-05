@@ -2,6 +2,17 @@
 
 > **How to update:** The pre-commit hook (`scripts/pre-commit.sh`) is auto-installed by `install.sh`. It runs a fast leakage check (`scripts/check-no-leakage.sh`) and re-renders the generated `CLAUDE.md.generated` and `AGENTS.md.generated` files on every commit. A pre-push gate (`scripts/pre-push.sh`, also auto-installed) scans every outgoing commit's tree and metadata before it leaves the machine. CI runs lint, consult-grammar, and the test suite (including synthetic-token leakage mechanism tests) on every PR; the company-token scan is a separate step that runs only when guard data is present on the runner. If you bypass the hooks or work in a context where hooks cannot run, keep this file current manually. Each release heading links to the diff on the public mirror.
 
+## v1.26.1 — 2026-11-05 (review-body emoji)
+
+The posted Scout and Ranger review body no longer puts a status emoji beside the 🤖 marker. The first line had shown the emoji there and again on the verdict sentence below it, which looked cluttered and said the same thing twice.
+
+### Changed
+
+- § REVIEW-BODY-FORMAT (`.claude/_shared/reviewer-blocks/review-body-format.md`, spliced into both reviewer SKILL.md files): the first line is the verdict in words only (``🤖 **Needs changes @ `<sha>`**``; also `No blockers`, `Approving`, `Blocked`, and `Re-review` without 🔁). The status emoji (`✅` / `🟡` / `🔴`) leads the verdict sentence only, the same layout `/review-respond` uses.
+- Scout and Ranger approval step: ``🤖 **Approving @ `<short-sha>`**``.
+- `scout-reviewer` and `ranger-reviewer` agent prompts: the Merge Readiness mapping uses the word-only vocabulary and says where the emoji goes.
+- `tests/reviewer-body-format.bats` (10 → 11): the vocabulary checks expect words; a new case fails if a status emoji follows `🤖 **` in the fragment, either SKILL.md or either agent prompt, and pins the verdict sentence as the line that carries it.
+
 ## v1.26.0 — 2026-11-04 (babysit-claims)
 
 Two more borrowings from the on-call review loop for `/babysit-prs`: the first Slack scan of a run has an explicit lower bound, and a PR a teammate has already claimed, or that Slack already shows as done, is left alone instead of being watched and acked.

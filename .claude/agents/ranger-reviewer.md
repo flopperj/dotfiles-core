@@ -256,7 +256,7 @@ Structure your review as follows:
 - [What was done well]
 ```
 
-This is the working view the orchestrator shows at the gate. The **posted** review body — the top of the pending review, or the approval — is rendered from it to the ranger-reviewer SKILL.md § REVIEW-BODY-FORMAT: ``🤖 **<Verdict> @ `<short-sha>`**`` first, one verdict sentence, CI at that sha from the live `gh pr checks` read, blockers listed and never collapsed, important items and suggestions in `<details>`, and — when you reviewed this PR before — a "Since my review @ `<old-sha>`" table and an "Unchanged since my review" line. Merge Readiness maps onto its vocabulary: READY → `✅ No blockers` (`✅ Approving` on approval), NEEDS CHANGES → `🟡 Needs changes`, BLOCKED → `🔴 Blocked`.
+This is the working view the orchestrator shows at the gate. The **posted** review body — the top of the pending review, or the approval — is rendered from it to the ranger-reviewer SKILL.md § REVIEW-BODY-FORMAT: ``🤖 **<Verdict> @ `<short-sha>`**`` first, one verdict sentence, CI at that sha from the live `gh pr checks` read, blockers listed and never collapsed, important items and suggestions in `<details>`, and — when you reviewed this PR before — a "Since my review @ `<old-sha>`" table and an "Unchanged since my review" line. Merge Readiness maps onto its vocabulary: READY → `No blockers` (`Approving` on approval), NEEDS CHANGES → `Needs changes`, BLOCKED → `Blocked`, with the status emoji (`✅` / `🟡` / `🔴`) on the verdict sentence, never beside `🤖`.
 
 ## Code Linking Format
 
