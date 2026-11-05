@@ -32,9 +32,21 @@ setup() {
 
 @test "the contract fixes the verdict vocabulary" {
     local v
-    for v in '✅ No blockers' '✅ Approving' '🟡 Needs changes' '🔴 Blocked'; do
+    for v in '`No blockers`' '`Approving`' '`Needs changes`' '`Blocked`'; do
         grep -qF -- "$v" "$FRAGMENT" || { echo "missing verdict: $v"; return 1; }
     done
+}
+
+@test "no status emoji sits beside the robot marker; it leads the verdict sentence instead" {
+    local f
+    for f in "$FRAGMENT" "$RANGER_SKILL" "$SCOUT_SKILL" "$RANGER_AGENT" "$SCOUT_AGENT"; do
+        if grep -nE '🤖 \*\*(✅|🟡|🔴|🔁)' "$f"; then
+            echo "status emoji beside 🤖 in $f"; return 1
+        fi
+    done
+    local second
+    second="$(awk '/^```$/ { fence++; next } fence == 1 && NF { n++; if (n == 2) { print; exit } }' "$FRAGMENT")"
+    [ "$second" = '<emoji> **<One-sentence verdict.>** <What the verdict rests on, one clause.>' ]
 }
 
 @test "blockers stay visible and only non-blocking items collapse" {
@@ -82,7 +94,7 @@ setup() {
     local f
     for f in "$RANGER_AGENT" "$SCOUT_AGENT"; do
         grep -qF 'REVIEW-BODY-FORMAT' "$f" || { echo "no pointer in $f"; return 1; }
-        grep -qF 'NEEDS CHANGES → `🟡 Needs changes`' "$f" || { echo "no vocabulary mapping in $f"; return 1; }
+        grep -qF 'NEEDS CHANGES → `Needs changes`' "$f" || { echo "no vocabulary mapping in $f"; return 1; }
     done
 }
 
