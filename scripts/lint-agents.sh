@@ -327,7 +327,7 @@ for skill_dir in "$SKILLS_DIR"/*/; do
     for heading in "When to Use" "Workflow" "Checklist" "Tools" "Resources" "Examples"; do
         # Use explicit "end-of-word" pattern (whitespace OR end-of-line) instead
         # of \b — \b is a GNU grep extension and behavior is undefined under
-        # strict POSIX grep on some platforms (e.g. minimal CWS images).
+        # strict POSIX grep on some platforms (e.g. minimal container images).
         if _has "$skill_file" "^## ${heading}(\s|$)"; then
             _check_soft pass "$skill_name/SKILL.md" "checklist-v1: ## ${heading}"
         else

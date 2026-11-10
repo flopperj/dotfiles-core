@@ -331,8 +331,8 @@ better than no enrichment.
 Compile the enrichment into a structured brief:
 
 ```
-Ticket: PROJ-1234 — Campaign preview returns 404
-Priority: P1 | Status: To Do | Components: campaigns, preview
+Ticket: PROJ-1234 — Invoice preview returns 404
+Priority: P1 | Status: To Do | Components: billing, preview
 
 Description:
   [Ticket description, trimmed to essentials]
@@ -341,9 +341,9 @@ Reproduction:
   [Steps from comments, if available]
 
 Codebase references found:
-  - app/controllers/CampaignPreviewController.php (line 142 — route handler)
-  - app/lib/MC/Campaign/Preview.php (line 89 — render method)
-  - tests_phpunit/MC/Campaign/PreviewTest.php (existing test coverage)
+  - src/billing/InvoicePreviewController.php (line 142 — route handler)
+  - src/billing/InvoicePreview.php (line 89 — render method)
+  - tests/billing/InvoicePreviewTest.php (existing test coverage)
 
 Related:
   - PROJ-1200 (duplicate, closed — previous fix reverted)
@@ -550,7 +550,7 @@ Show the enriched ticket with classification:
 ```
 Ticket Pickup: PROJ-1234
 
-  Summary:    Campaign preview returns 404
+  Summary:    Invoice preview returns 404
   Priority:   P1
   Assignee:   Alex Kim -> you (reassigning)
   Points:     none -> 3 (estimated)
@@ -558,13 +558,13 @@ Ticket Pickup: PROJ-1234
   Pipeline:   Optimus -> Cyrus (2-3 files, needs a plan)
 
   Codebase context:
-    - CampaignPreviewController.php:142 — route handler
-    - MC/Campaign/Preview.php:89 — render method
-    - PreviewTest.php — existing coverage
+    - InvoicePreviewController.php:142 — route handler
+    - billing/InvoicePreview.php:89 — render method
+    - InvoicePreviewTest.php — existing coverage
 
   Enrichment:
     - Previous fix (PR #4521) was reverted in PROJ-1200
-    - Stack trace points to null $campaign in render()
+    - Stack trace points to null $invoice in render()
 
   -> g  = Go — launch the pipeline as classified
   -> s  = Simplify — I think this is simpler, route to Cyrus directly
@@ -622,7 +622,7 @@ manually create a feature branch.
    but is not currently checked out, check it out and pull latest.
 4. **Create a new branch** if no matching branch exists:
    - Determine the branch name: `{ticket-key}-{slug}` (e.g.,
-     `PROJ-1234-fix-campaign-preview`). Slugify from the ticket summary.
+     `PROJ-1234-fix-invoice-preview`). Slugify from the ticket summary.
    - **If a repo root was bound earlier** (Step 2.4 resolution or a
      Step 3.5 `only N` choice, and the path differs from the current
      working directory): do NOT use the `newbranch` alias — it is an

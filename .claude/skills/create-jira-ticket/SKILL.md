@@ -59,7 +59,7 @@ Proceed to Step 1 with the original input. Note any gaps you noticed (missing ac
 
 Before creating the ticket, determine:
 
-- **Project key** (e.g., `EEE`, `MUL`). Infer from the branch name, conversation context, or ask.
+- **Project key** (e.g., `PROJ`, `OPS`). Infer from the branch name, conversation context, or ask.
 - **Issue type**: Story (default when user says "ticket"), Bug, Task, or Epic.
 - **Summary**: A concise title for the ticket.
 - **Description**: Detailed context. Use Markdown formatting (headings, bullet lists, code blocks).
@@ -102,12 +102,12 @@ Use `createJiraIssue` with:
 
 ```json
 {
-  "projectKey": "EEE",
+  "projectKey": "PROJ",
   "issueType": "Story",
   "summary": "Concise ticket title",
   "description": "## Summary\n\nMarkdown description...\n\n## Acceptance Criteria\n\n- ...",
   "sprint": 12345,
-  "parent": "EEE-100",
+  "parent": "PROJ-100",
   "storyPoints": 3,
   "labels": ["label"],
   "priority": "P2: Medium"
@@ -122,7 +122,7 @@ Use `createJiraIssue` with:
 ### 6. Report back
 
 After creation, share the ticket key and URL with the user:
-- Key: returned in `key` field (e.g., `EEE-11907`)
+- Key: returned in `key` field (e.g., `PROJ-1234`)
 - URL: returned in `url` field
 
 ### 7. Story decomposition (Stories only)
@@ -163,7 +163,7 @@ Edit this list (add/remove/change), or confirm to create.
 
 ```json
 {
-  "projectKey": "EEE",
+  "projectKey": "PROJ",
   "issueType": "Sub-task",
   "summary": "Sub-task summary",
   "description": "## Context\n\nSub-task of <PARENT-KEY>: <parent-summary>\n\n## Scope\n\n- ...",
@@ -174,7 +174,7 @@ Edit this list (add/remove/change), or confirm to create.
 
 Key details:
 - `issueType` must be `"Sub-task"` (not "Story" or "Task")
-- `parent` is the **Story key** (e.g., `EEE-11907`), not the Epic key
+- `parent` is the **Story key** (e.g., `PROJ-1234`), not the Epic key
 - Sub-tasks inherit sprint assignment from the parent Story
 - Sub-task points should roughly sum to the parent Story's estimate
 - Each sub-task description should reference the parent and scope its work clearly
@@ -309,7 +309,7 @@ Use the Atlassian plugin sprint tools to add issues to a sprint after creation.
 - Always prompt for the parent Epic and story point estimate before creating
 - Always confirm the ticket details before creating if the information is ambiguous
 - Story points use the Fibonacci scale: **1, 2, 3, 5, 8** — never use other values
-- **Sub-tasks**: Use `issueType: "Sub-task"` (not "Story" or "Task"). The `parent` field takes the **Story key** (e.g., `EEE-11907`), not the Epic key. Sub-tasks inherit sprint assignment from their parent Story. Sub-task points should roughly sum to the parent Story's estimate.
+- **Sub-tasks**: Use `issueType: "Sub-task"` (not "Story" or "Task"). The `parent` field takes the **Story key** (e.g., `PROJ-1234`), not the Epic key. Sub-tasks inherit sprint assignment from their parent Story. Sub-task points should roughly sum to the parent Story's estimate.
 - **Decomposition**: Step 7 only triggers for Stories. It is gated (user must choose "d") and never auto-fires. The `/ticket-pickup` skill expects Stories with 2+ children to be swarmable.
 - **Batch repo-split mode**: Only invoked by upstream automation (ticket-pickup multi-repo detection), never by users, and asks no questions — the gate happened upstream. Sequential creation, `repo:<name>` labels, `blocks` links added only after all creations, Task+`Relates` fallback when the project has no Sub-task type, and clean-stop on any failure (enumerate created vs. not-created; never report a partial batch as success).
 - **Fuzzy requests**: Step 0 gates on shape. If the user arrives with a one-liner and no acceptance criteria, offer `/grill-me` first to sharpen the ticket. The user can skip the gate for trivial or quick tickets.

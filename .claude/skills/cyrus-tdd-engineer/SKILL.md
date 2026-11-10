@@ -188,7 +188,9 @@ agent via the Agent tool with:
 If an Optimus plan is present, instruct Cyrus explicitly: "This plan comes
 from Optimus. Execute it step-by-step with TDD discipline. Do not redesign
 the architecture or re-sequence the steps — if you hit a blocker, surface
-it immediately rather than working around it."
+it immediately rather than working around it; if the work needs a file
+outside Section 3 or grows materially beyond a step, record a Deviation and
+stop until it is approved."
 
 Cyrus implements with Red-Green-Refactor discipline and reports progress
 after each step.
@@ -196,6 +198,8 @@ after each step.
 **Validate output:** If Cyrus's response includes architectural redesigns,
 new planning sections, or code review commentary — note this to the user as
 a boundary violation. Cyrus builds; he does not plan or review.
+A surfaced Deviation is a pause, not a boundary violation: in standard mode
+put it to the user; in swarm mode return it to the orchestrator as a blocker.
 
 When done, proceed to Step 3.
 
@@ -288,6 +292,8 @@ When all Cyrus work completes (sequential or parallel), summarize:
 - What tests were written (Red phase first)
 - Coverage metrics
 - Any open blockers or items
+- Acceptance criteria: met / unmet (unmet ones name the missing test or check)
+- Deviations recorded (trigger and who approved)
 - For parallel runs: how many waves executed and total agents launched
 
 **Before presenting, self-check:** *"Would a staff engineer approve this?"* If the honest answer is no — tests are thin, edge cases skipped, the design feels hacky, coverage is below bar — keep iterating before handing back. This is the same gate from `~/.claude/DoD.md`; surface any unresolved gaps in the "open blockers" list rather than hiding them.

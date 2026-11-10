@@ -128,3 +128,17 @@ HEREDOC
     [ "$status" -eq 1 ]
     [[ "$output" =~ "skill-b" ]]
 }
+
+@test "every vocabulary section is consulted by at least one core skill" {
+    local section missing=""
+    while IFS= read -r section; do
+        grep -rqF --include=SKILL.md "consult \`$section\` in \`~/.claude/overlay-context.md\`" "$CORE_DIR/.claude/skills" \
+            || missing="$missing [$section]"
+    done < <(grep '^## ' "$CORE_DIR/scripts/consult-vocabulary.txt")
+    [ -z "$missing" ] || { echo "unconsulted:$missing"; return 1; }
+}
+
+@test "core skills pass the grammar check against the shipped vocabulary" {
+    run bash "$CORE_DIR/scripts/check-consult-grammar.sh" "$CORE_DIR" "$CORE_DIR/scripts/consult-vocabulary.txt"
+    [ "$status" -eq 0 ]
+}

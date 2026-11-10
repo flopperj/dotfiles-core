@@ -67,7 +67,7 @@ A test earns its place only if it would catch a regression in code **this
 repository owns**.
 
 - **Don't test** thin wrappers around a design system or third-party library
-  (IDS, MCDS, Radix, shadcn/ui): that a `<Button>` renders its children, that a
+  (your design system, Radix, shadcn/ui): that a `<Button>` renders its children, that a
   `<Dialog>` opens on trigger, that a `className` prop forwards, that an HTML
   attribute plumbs through. Those libraries have their own suites; re-testing
   them here is pure noise and maintenance debt.

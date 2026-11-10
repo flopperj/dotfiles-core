@@ -158,7 +158,7 @@ Content here.'
 @test "token inside shell comment is caught" {
     _guard_fixture
     _check_file '#!/usr/bin/env bash
-# Uses the plugh MCP for campaign data'
+# Uses the plugh MCP for report data'
     [ "$status" -eq 1 ]
 }
 
@@ -196,6 +196,137 @@ Content here.'
     echo "clean content only" > "$SCAN/clean.txt"
     run bash "$CORE_DIR/scripts/check-no-leakage.sh" "$SCAN"
     [ "$status" -eq 0 ]
+}
+
+# ---------------------------------------------------------------------------
+# Directory enumeration: inside a git work tree only committable files are
+# scanned (tracked plus untracked-but-not-ignored); elsewhere every file is.
+# ---------------------------------------------------------------------------
+
+_git_scan_fixture() {
+    _guard_fixture
+    git -C "$SCAN" init -q
+    git -C "$SCAN" config user.email "dev@example.com"
+    git -C "$SCAN" config user.name "Dev"
+    printf 'vendored/\n' > "$SCAN/.gitignore"
+    git -C "$SCAN" add .gitignore
+    git -C "$SCAN" commit -qm seed
+}
+
+@test "work tree: gitignored file with a token is not reported" {
+    _git_scan_fixture
+    mkdir -p "$SCAN/vendored"
+    echo "xyzzy-corp" > "$SCAN/vendored/lib.js"
+    run bash "$CORE_DIR/scripts/check-no-leakage.sh" "$SCAN"
+    [ "$status" -eq 0 ]
+}
+
+@test "work tree: untracked, non-ignored file with a token is reported" {
+    _git_scan_fixture
+    echo "xyzzy-corp" > "$SCAN/new.txt"
+    run bash "$CORE_DIR/scripts/check-no-leakage.sh" "$SCAN"
+    [ "$status" -eq 1 ] || return 1
+    [[ "$output" == *"$SCAN/new.txt"* ]]
+}
+
+@test "work tree: tracked file with a token is reported" {
+    _git_scan_fixture
+    echo "xyzzy-corp" > "$SCAN/tracked.txt"
+    git -C "$SCAN" add tracked.txt
+    git -C "$SCAN" commit -qm tracked
+    run bash "$CORE_DIR/scripts/check-no-leakage.sh" "$SCAN"
+    [ "$status" -eq 1 ] || return 1
+    [[ "$output" == *"$SCAN/tracked.txt"* ]]
+}
+
+@test "non-git directory: a .gitignore has no effect, every file is scanned" {
+    _guard_fixture
+    printf 'vendored/\n' > "$SCAN/.gitignore"
+    mkdir -p "$SCAN/vendored"
+    echo "xyzzy-corp" > "$SCAN/vendored/lib.js"
+    run bash "$CORE_DIR/scripts/check-no-leakage.sh" "$SCAN"
+    [ "$status" -eq 1 ] || return 1
+    [[ "$output" == *"$SCAN/vendored/lib.js"* ]]
+}
+
+@test "work tree: a path with spaces is scanned and reported whole" {
+    _git_scan_fixture
+    mkdir -p "$SCAN/dir with space"
+    echo "xyzzy-corp" > "$SCAN/dir with space/a b.txt"
+    run bash "$CORE_DIR/scripts/check-no-leakage.sh" "$SCAN"
+    [ "$status" -eq 1 ] || return 1
+    [[ "$output" == *"$SCAN/dir with space/a b.txt"* ]]
+}
+
+@test "work tree: scanning a sub-directory reports paths under that directory" {
+    _git_scan_fixture
+    mkdir -p "$SCAN/sub/inner"
+    echo "xyzzy-corp" > "$SCAN/sub/inner/x.txt"
+    echo "xyzzy-corp" > "$SCAN/outside.txt"
+    run bash "$CORE_DIR/scripts/check-no-leakage.sh" "$SCAN/sub"
+    [ "$status" -eq 1 ] || return 1
+    [[ "$output" == *"$SCAN/sub/inner/x.txt"* ]] || return 1
+    [[ "$output" != *"outside.txt"* ]]
+}
+
+@test "work tree: a tracked symlink to a file outside the tree is not followed" {
+    _git_scan_fixture
+    echo "xyzzy-corp" > "$SCRATCH/outside.txt"
+    ln -s "$SCRATCH/outside.txt" "$SCAN/link.txt"
+    git -C "$SCAN" add link.txt
+    git -C "$SCAN" commit -qm link
+    run bash "$CORE_DIR/scripts/check-no-leakage.sh" "$SCAN"
+    [ "$status" -eq 0 ] || return 1
+    [[ "$output" != *"link.txt"* ]]
+}
+
+@test "work tree: a symlink does not hide the real file it points at" {
+    _git_scan_fixture
+    echo "xyzzy-corp" > "$SCAN/real.txt"
+    ln -s real.txt "$SCAN/alias.txt"
+    run bash "$CORE_DIR/scripts/check-no-leakage.sh" "$SCAN"
+    [ "$status" -eq 1 ] || return 1
+    [[ "$output" == *"$SCAN/real.txt"* ]] || return 1
+    [[ "$output" != *"alias.txt"* ]]
+}
+
+@test "work tree: a trailing slash on the scan dir reports clean paths" {
+    _git_scan_fixture
+    echo "xyzzy-corp" > "$SCAN/new.txt"
+    run bash "$CORE_DIR/scripts/check-no-leakage.sh" "$SCAN/"
+    [ "$status" -eq 1 ] || return 1
+    [[ "$output" == *"$SCAN/new.txt"* ]] || return 1
+    [[ "$output" != *"//"* ]]
+}
+
+@test "work tree: several trailing slashes on the scan dir report clean paths" {
+    _git_scan_fixture
+    echo "xyzzy-corp" > "$SCAN/new.txt"
+    run bash "$CORE_DIR/scripts/check-no-leakage.sh" "$SCAN///"
+    [ "$status" -eq 1 ] || return 1
+    [[ "$output" == *"$SCAN/new.txt"* ]] || return 1
+    [[ "$output" != *"//"* ]]
+}
+
+@test "work tree: a tracked file deleted from the work tree is skipped quietly" {
+    _git_scan_fixture
+    echo "clean" > "$SCAN/gone.txt"
+    git -C "$SCAN" add gone.txt
+    git -C "$SCAN" commit -qm gone
+    rm "$SCAN/gone.txt"
+    run bash "$CORE_DIR/scripts/check-no-leakage.sh" "$SCAN"
+    [ "$status" -eq 0 ] || return 1
+    [ -z "$output" ]
+}
+
+@test "work tree: a nested repository's files are not scanned in directory mode" {
+    _git_scan_fixture
+    mkdir -p "$SCAN/nested"
+    git -C "$SCAN/nested" init -q
+    echo "xyzzy-corp" > "$SCAN/nested/n.txt"
+    run bash "$CORE_DIR/scripts/check-no-leakage.sh" "$SCAN"
+    [ "$status" -eq 0 ] || return 1
+    [[ "$output" != *"n.txt"* ]]
 }
 
 # ---------------------------------------------------------------------------

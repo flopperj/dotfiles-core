@@ -209,7 +209,7 @@ policies:
       expected: exists
       actual: missing
     action: notify
-    # {key} is the Jira ticket key (e.g. MC-1234), {summary} is the title
+    # {key} is the Jira ticket key (e.g. PROJ-1234), {summary} is the title
     message: "{key}: {summary} is In Progress but has no linked branch"
     suggestion: "Type: Pickup {key}"
     priority: action_needed

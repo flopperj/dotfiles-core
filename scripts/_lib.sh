@@ -72,7 +72,7 @@ _iter_core_skill_dirs() {
 #   local  — the overlay (or a standalone core clone) lives in its own
 #            directory and the installer symlinks into ~/.claude/.
 #   yadm   — the overlay's files are checked out directly into $HOME (yadm,
-#            cloud workspaces). Overlay-tracked paths under ~/.claude/ are then real
+#            remote workstations). Overlay-tracked paths under ~/.claude/ are then real
 #            files owned by the overlay, and core must merge around them.
 #
 # Signals, in order: an explicit DOTFILES_LAYOUT override (tests, operators);
@@ -143,4 +143,30 @@ _symlink_targets() {
         "$dir"/*|"$phys_dir"/*) return 0 ;;
     esac
     return 1
+}
+
+# Enumerate regular files under a directory, NUL-delimited, as <dir>/<rel>.
+# Inside a git work tree only committable files are listed (tracked plus
+# untracked-but-not-ignored), so a scan never walks ignored build output;
+# elsewhere it is a plain find. .git/ is never listed on either branch, and
+# symlinks are skipped on both, so a link never pulls in a file from outside.
+# Tracked-but-deleted paths and submodule gitlinks can appear on the git
+# branch; callers skip them by testing the path as a readable text file.
+# The git branch does not descend into nested repositories or submodules:
+# their contents are not this repo's committable files and are not scanned.
+#
+# Usage: while IFS= read -r -d '' f; do … done < <(_scan_files "$dir")
+_scan_files() {
+    local dir="$1" rel
+    while [ "$dir" != "/" ] && [ "${dir%/}" != "$dir" ]; do
+        dir="${dir%/}"
+    done
+    if git -C "$dir" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        git -C "$dir" ls-files -z --cached --others --exclude-standard \
+            | while IFS= read -r -d '' rel; do
+                [ -L "$dir/$rel" ] || printf '%s/%s\0' "$dir" "$rel"
+            done
+    else
+        find "$dir" -not -path "*/.git/*" -not -name ".git" -type f -print0 2>/dev/null
+    fi
 }

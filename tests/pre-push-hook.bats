@@ -44,6 +44,7 @@ _repo_fixture() {
     git -C "$REPO" config user.name "Dev"
     cp "$CORE_DIR/scripts/check-no-leakage.sh" "$REPO/scripts/"
     cp "$CORE_DIR/scripts/pre-push.sh" "$REPO/scripts/"
+    cp "$CORE_DIR/scripts/_lib.sh" "$REPO/scripts/"
     git -C "$REPO" add scripts
     git -C "$REPO" commit -qm "baseline"
 }

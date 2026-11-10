@@ -106,6 +106,8 @@ teardown() {
 }
 
 @test "SKILL.md defines project resolution via basename git rev-parse" {
+    grep -q 'git rev-parse --path-format=absolute --git-common-dir' "$SKILL_FILE" || return 1
+    grep -q 'core.worktree' "$SKILL_FILE" || return 1
     grep -q 'basename.*git rev-parse --show-toplevel' "$SKILL_FILE"
 }
 
@@ -211,7 +213,6 @@ teardown() {
         "JIRA"
         "JQL"
         "Atlassian"
-        "DAST-Orch"
     )
     for token in "${tokens[@]}"; do
         if grep -qF "$token" "$SKILL_FILE"; then
@@ -219,4 +220,62 @@ teardown() {
             return 1
         fi
     done
+}
+
+# ---------------------------------------------------------------------------
+# In-flight work, refs and derived working-tree state
+# ---------------------------------------------------------------------------
+
+_flat() { tr '\n' ' ' < "$SKILL_FILE" | tr -s ' '; }
+
+@test "SKILL.md documents the running-work shutdown before the approval gate" {
+    _flat | grep -q 'Running-work shutdown' || return 1
+    _flat | grep -q 'Never stop a process' || return 1
+    local shutdown gate
+    shutdown=$(grep -n 'Running-work shutdown' "$SKILL_FILE" | head -1 | cut -d: -f1)
+    gate=$(grep -n 'Approval gate' "$SKILL_FILE" | head -1 | cut -d: -f1)
+    [ "$shutdown" -lt "$gate" ]
+}
+
+@test "SKILL.md documents the in_flight schema fields" {
+    for field in 'in_flight:' 'restart:' 'brief:' 'stopped:'; do
+        grep -qF "$field" "$SKILL_FILE" || {
+            echo "Missing in_flight field: $field"
+            return 1
+        }
+    done
+}
+
+@test "SKILL.md documents the refs field and its auto-proposal" {
+    grep -q '^refs:$' "$SKILL_FILE" || return 1
+    grep -qF 'gh pr view --json url' "$SKILL_FILE" || return 1
+    grep -qF 'Active plan files under `~/.claude/tasks/<project>/plans/*.md`' "$SKILL_FILE"
+}
+
+@test "SKILL.md keys a bare repository's worktree by the bare directory name" {
+    grep -qF 'core.bare' "$SKILL_FILE" || return 1
+    _flat | grep -qF 'bare directory name without `.git`'
+}
+
+@test "SKILL.md tells writers to quote values that start with a flow or anchor character" {
+    _flat | grep -qF 'starts with `[`, `{`, `*` or `&`'
+}
+
+@test "SKILL.md limits double-quoted escapes to the three the hook decodes" {
+    _flat | grep -qF 'only `\"`, `\\` and `\n` are decoded'
+}
+
+@test "SKILL.md documents the hook's shared time budget under the SessionStart timeout" {
+    _flat | grep -qF 'one 4-second budget'
+}
+
+@test "SKILL.md documents the hook-derived working-tree line" {
+    grep -qF 'Working tree:' "$SKILL_FILE" || return 1
+    grep -qF 'git status --porcelain' "$SKILL_FILE" || return 1
+    grep -qF 'rev-list --count @{u}..HEAD' "$SKILL_FILE"
+}
+
+@test "SKILL.md surface block documents Refs and In flight sections" {
+    grep -qF 'In flight at handoff' "$SKILL_FILE" || return 1
+    grep -qF '  Refs:' "$SKILL_FILE"
 }

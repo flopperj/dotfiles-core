@@ -94,13 +94,13 @@ _entry_lines() {
 @test "negative control: malformed line (missing em-dash field) fails the grammar" {
     # Same repo/ticket vocabulary, but only one em-dash separator — a parser
     # that accepted this would be vacuous.
-    malformed='1. [ ] omni-agent — PROJ-1235 https://github.com/acme-corp/omni-agent/pull/42'
+    malformed='1. [ ] example-api — PROJ-1235 https://github.com/acme-corp/example-api/pull/42'
     run bash -c "printf '%s\n' \"\$1\" | grep -qE \"\$2\"" _ "$malformed" "$ENTRY_REGEX"
     [ "$status" -ne 0 ]
 }
 
 @test "negative control: hyphen instead of em-dash fails the grammar" {
-    malformed='1. [ ] omni-agent - PROJ-1235 - this PR'
+    malformed='1. [ ] example-api - PROJ-1235 - this PR'
     run bash -c "printf '%s\n' \"\$1\" | grep -qE \"\$2\"" _ "$malformed" "$ENTRY_REGEX"
     [ "$status" -ne 0 ]
 }

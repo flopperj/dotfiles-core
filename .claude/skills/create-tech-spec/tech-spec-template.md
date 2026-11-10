@@ -95,7 +95,7 @@ The purpose of this document is to ...
 
 # 7 Operational Excellence
 
-<!-- Include a table of operational excellence considerations for the proposed solution. Some common considerations are: Splunk dashboards (logging) and alerting, Bugsnag filters and alerting, Wavefront dashboards, Fullstory segments, etc. -->
+<!-- Include a table of operational excellence considerations for the proposed solution. Some common considerations are: logging dashboards and alerting, error-monitoring filters and alerting, metrics dashboards, session-replay segments, etc. -->
 
 # 8 Rollout plan
 

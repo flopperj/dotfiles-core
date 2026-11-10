@@ -165,7 +165,7 @@ Ticket Swarm: N tickets ready
 
 #  Ticket      Priority  Complexity  Points  Summary                        Pipeline
 1  PROJ-1001   P1        Simple      1*      NPE in RefundProcessor         Cyrus direct
-2  PROJ-998    P2        Medium      3       Campaign preview 404s          Optimus -> Cyrus
+2  PROJ-998    P2        Medium      3       Invoice preview 404s           Optimus -> Cyrus
 3  PROJ-1015   P1        Complex     8*      Auth token race condition      Aristotle -> Optimus -> Cyrus
 4  PROJ-1020   P3        Simple      -       Typo in error message          Cyrus direct
 5  PROJ-1003   P2        Medium      3*      Flag check missing             Optimus -> Cyrus
@@ -191,13 +191,17 @@ explicit input. Do not proceed without approval.
 After the user approves the triage table, group the approved tickets by
 domain based on their codebase references from enrichment:
 
-- **Backend**: References in `app/controllers/`, `app/lib/`, `app/models/`,
-  `tests_phpunit/`
-- **Frontend**: References in `web/js/src/`, `web/css/`, frontend test files
+- **Backend**: References in the project's backend source, model and backend
+  test directories
+- **Frontend**: References in the project's frontend source, style and
+  frontend test directories
 - **Infra/Cross-Boundary**: References span both backend and frontend, or
-  touch `proto/`, `config/`, `data/schemas/`, or cross-service boundaries
+  touch schema, proto or config directories, or cross-service boundaries
 - **Unknown**: No codebase references found — falls back to Jira component
   field, or groups with the largest existing cluster
+
+Take the directory layout from the repo registry entry, the project CLAUDE.md
+or the repo itself.
 
 If a ticket touches both backend and frontend, it goes to Infra.
 

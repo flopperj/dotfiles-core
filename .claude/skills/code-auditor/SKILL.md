@@ -177,8 +177,8 @@ For each changed function/method in the diff:
 For each changed file:
 - `rg` for imports/usages of changed symbols across the codebase
 - Count direct consumers (files that import from changed files)
-- Flag if security-sensitive paths are touched (`app/views/`,
-  `data/schemas/`, `app/lib-grpc/`)
+- Flag if security-sensitive paths are touched (views and templates,
+  data schemas, generated RPC code)
 - Score: 0-100 based on consumer count and sensitivity
 - End your report with `<<task-complete>>`
 

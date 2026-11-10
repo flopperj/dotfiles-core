@@ -15,13 +15,13 @@ gather evidence.
 version: 1
 
 fiscal_year:
-  anchor_month: 8        # fiscal year starts in this month (1-12). 8 = August.
+  anchor_month: 1        # fiscal year starts in this month (1-12). 1 = January.
                          # year-end = full FY; mid-year = first ~6 months.
   label_style: short     # "short" -> FY26 ; "long" -> FY2026
 
 jira:
   cloud_id: ""           # Atlassian cloudId for searchJiraIssuesUsingJql
-  project_keys: []       # e.g. ["EEE", "FREDDIE"] — restricts/orders the search
+  project_keys: []       # e.g. ["PROJ", "OPS"] — restricts/orders the search
   issue_browse_base: ""  # e.g. https://your-org.atlassian.net/browse/
 
 github:
@@ -35,10 +35,10 @@ template:
   quota_project: ""      # X-Goog-User-Project value for the Docs/Drive API
 
 rating_ladder:           # year-end self-rating tiers, lowest to highest
-  - "Does Not Meet Expectations"
-  - "Meets Expectations"
-  - "Exceeds Expectations"
-  - "Trajectory-Changing"
+  - "Below"
+  - "Meets"
+  - "Exceeds"
+  - "Outstanding"
 
 tooling_repos: []        # your own repos to check for peer adoption
                          #   (e.g. ["you/dotfiles", "you/dotfiles-core"])
@@ -46,7 +46,7 @@ tooling_repos: []        # your own repos to check for peer adoption
 
 ## Built-in defaults (used when config is missing)
 
-- `fiscal_year.anchor_month`: **8** (August) — fiscal year August 1 → July 31.
+- `fiscal_year.anchor_month`: **1** (January) — calendar year, January 1 → December 31.
 - `fiscal_year.label_style`: **short** (FY26).
 - `jira.cloud_id`: **none** — if empty, ask the user for it (or skip Jira and
   tell the user Jira evidence is unavailable without it).

@@ -11,3 +11,4 @@
 ## Repo registry
 ## Demo recording targets
 ## Slack reaction vocabulary
+## Domain conventions

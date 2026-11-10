@@ -194,8 +194,8 @@ entries in this shape instead of the TODO stub:
 ```markdown
 ## Repo registry
 
-- mc-omni-agent-ui: /Users/me/Development/mc-omni-agent-ui | components=Omni UI,Editor | prefixes=web/js/,src/ | depends_on=omni-agent
-- omni-agent: /Users/me/Development/omni-agent
+- example-web: /Users/me/Development/example-web | components=Web UI,Editor | prefixes=web/js/,src/ | depends_on=example-api
+- example-api: /Users/me/Development/example-api
 ```
 
 Grammar: entries are `- <name>: <absolute-path>` optionally followed by

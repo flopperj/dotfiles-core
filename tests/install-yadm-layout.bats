@@ -3,7 +3,7 @@
 #
 # Two layouts (PROTOCOL.md § Path ownership under ~/.claude):
 #   local — repo in its own directory; core symlinks into ~/.claude/.
-#   yadm  — overlay checked out straight into $HOME (yadm on a cloud workspace); the
+#   yadm  — overlay checked out straight into $HOME (yadm on a remote workstation); the
 #           overlay's tracked files are real entries under ~/.claude/ and core
 #           must merge around them, never back them up or replace them.
 

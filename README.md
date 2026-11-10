@@ -305,6 +305,20 @@ make check-export  TARGET=/path/to/team-skills-repo EXPORT_ARGS='…'   # exit 1
 bash scripts/check-portable-refs.sh /path/to/team-skills-repo/skills   # self-containment
 ```
 
+`check-portable-refs.sh` also flags ticket keys whose project prefix is listed
+in `~/.config/dotfiles-guard/portable-ticket-prefixes.txt` (one prefix per
+line: letters, digits and underscores; `PORTABLE_TICKET_PREFIXES_FILE`
+overrides the path). The list is local guard data, never committed; without it
+that check is skipped with a notice. `make test` checks rendered bundles
+against a fixture list only, so run the real-list check by hand before
+publishing an export:
+
+```bash
+OUT="$(mktemp -d)" && bash scripts/export-skills.sh "$OUT" \
+  --owner-team my-team --owner-slack '#my-channel' \
+  && bash scripts/check-portable-refs.sh "$OUT/skills"; rm -rf "$OUT"
+```
+
 dotfiles-core stays canonical. `scripts/export-skills.sh` regenerates the nine
 managed skill directories in the target (unmanaged skills are untouched) and
 maintains a README table between `REASONING PIPELINE TABLE` sentinels. Each

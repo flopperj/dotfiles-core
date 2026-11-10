@@ -117,7 +117,7 @@ Misclassifications detected: 2
 
   PROJ-1003 (classified: Simple, actual: Medium)
     Evidence: Blocked on test failure, needed retry. 4m duration (avg Simple: 1.5m).
-    Suggestion: Tickets touching MC/Billing should default to Medium.
+    Suggestion: Tickets touching src/billing/ should default to Medium.
 
   PROJ-1015 (classified: Complex, actual: Medium)
     Evidence: Completed in 5m (avg Complex: 11m). Ranger found 0 issues.
@@ -280,14 +280,14 @@ gate (4d) — no new gates.
 Proposed heuristic updates:
 
   1. [CLASSIFICATION] Tickets mentioning "RefundProcessor" or touching
-     app/lib/MC/Billing/ should default to Medium (not Simple).
+     src/billing/ should default to Medium (not Simple).
      Evidence: 2 of 3 Simple tickets in this area blocked.
 
   2. [CLASSIFICATION] Single-file fixes for known race conditions can
      stay Medium (skip Aristotle) if the fix pattern is well-established.
      Evidence: PROJ-1015 over-classified, both best-of-N identical.
 
-  3. [FLAKY TEST] MC_CampaignTest::testPreviewTimeout is flaky.
+  3. [FLAKY TEST] InvoicePreviewTest::testPreviewTimeout is flaky.
      Evidence: Failed on first attempt, succeeded on retry. No code changes.
      Action: Add to known flaky test list in agent memory.
 ```
@@ -409,10 +409,10 @@ For approved heuristic updates, write to
 # Classification Heuristics (learned from swarm retros)
 
 ## Component-based overrides
-- Tickets touching app/lib/MC/Billing/ → default Medium (learned: 2026-04-10)
+- Tickets touching src/billing/ → default Medium (learned: 2026-04-10)
 
 ## Known flaky tests
-- MC_CampaignTest::testPreviewTimeout (learned: 2026-04-10)
+- InvoicePreviewTest::testPreviewTimeout (learned: 2026-04-10)
 
 ## Complexity calibration
 - Single-file race condition fixes with known patterns → Medium not Complex (learned: 2026-04-10)

@@ -22,6 +22,15 @@ load 'test_helper'
     [[ "$output" == *"content withheld"* ]]
 }
 
+@test "in-tree portable-ticket-prefixes.txt is flagged" {
+    mkdir -p "$SCRATCH/bad/scripts"
+    echo "ZZQ" > "$SCRATCH/bad/scripts/portable-ticket-prefixes.txt"
+    run bash "$CORE_DIR/scripts/check-leakage-shapes.sh" "$SCRATCH/bad"
+    [ "$status" -eq 1 ] || return 1
+    [[ "$output" == *"portable-ticket-prefixes.txt"* ]] || return 1
+    [[ "$output" != *"ZZQ"* ]]
+}
+
 @test "dotfiles-guard material in tree is flagged" {
     mkdir -p "$SCRATCH/bad/dotfiles-guard"
     echo "marker" > "$SCRATCH/bad/dotfiles-guard/company-context"
@@ -68,4 +77,98 @@ load 'test_helper'
     [[ "$output" == *"skills/demo/scripts/y.sh"* ]] || return 1
     [[ "$output" == *"_shared/portable/notes.txt"* ]] || return 1
     [[ "$output" != *"acme-corp.com"* ]] || return 1
+}
+
+# Inside a git work tree only committable files are scanned (tracked plus
+# untracked-but-not-ignored); a plain directory is scanned in full.
+_git_scan_fixture() {
+    SCAN="$SCRATCH/scan"
+    mkdir -p "$SCAN"
+    git -C "$SCAN" init -q
+    git -C "$SCAN" config user.email "dev@example.com"
+    git -C "$SCAN" config user.name "Dev"
+    printf 'vendored/\n' > "$SCAN/.gitignore"
+    git -C "$SCAN" add .gitignore
+    git -C "$SCAN" commit -qm seed
+}
+
+_bad_skill() {   # _bad_skill <skill-dir>
+    mkdir -p "$1"
+    printf '%s\n' '---' 'name: demo' '---' 'Escalate to owner@acme-corp.com.' > "$1/SKILL.md"
+}
+
+@test "work tree: gitignored denylist file and corporate email are not reported" {
+    _git_scan_fixture
+    mkdir -p "$SCAN/vendored"
+    echo "xyzzy" > "$SCAN/vendored/leakage-tokens.txt"
+    printf 'vendored/\n.claude/skills/ignored/\n' > "$SCAN/.gitignore"
+    _bad_skill "$SCAN/.claude/skills/ignored"
+    run bash "$CORE_DIR/scripts/check-leakage-shapes.sh" "$SCAN"
+    [ "$status" -eq 0 ]
+}
+
+@test "work tree: untracked, non-ignored denylist file and corporate email are reported" {
+    _git_scan_fixture
+    mkdir -p "$SCAN/scripts"
+    echo "xyzzy" > "$SCAN/scripts/leakage-tokens.txt"
+    _bad_skill "$SCAN/.claude/skills/demo"
+    run bash "$CORE_DIR/scripts/check-leakage-shapes.sh" "$SCAN"
+    [ "$status" -eq 1 ] || return 1
+    [[ "$output" == *"$SCAN/scripts/leakage-tokens.txt"* ]] || return 1
+    [[ "$output" == *"$SCAN/.claude/skills/demo/SKILL.md"* ]]
+}
+
+@test "work tree: tracked corporate email is reported" {
+    _git_scan_fixture
+    _bad_skill "$SCAN/.claude/skills/demo"
+    git -C "$SCAN" add -A
+    git -C "$SCAN" commit -qm demo
+    run bash "$CORE_DIR/scripts/check-leakage-shapes.sh" "$SCAN"
+    [ "$status" -eq 1 ] || return 1
+    [[ "$output" == *"$SCAN/.claude/skills/demo/SKILL.md"* ]]
+}
+
+@test "non-git directory: a .gitignore has no effect, every file is scanned" {
+    SCAN="$SCRATCH/plain"
+    mkdir -p "$SCAN/vendored"
+    printf 'vendored/\n.claude/\n' > "$SCAN/.gitignore"
+    echo "xyzzy" > "$SCAN/vendored/leakage-tokens.txt"
+    _bad_skill "$SCAN/.claude/skills/demo"
+    run bash "$CORE_DIR/scripts/check-leakage-shapes.sh" "$SCAN"
+    [ "$status" -eq 1 ] || return 1
+    [[ "$output" == *"$SCAN/vendored/leakage-tokens.txt"* ]] || return 1
+    [[ "$output" == *"$SCAN/.claude/skills/demo/SKILL.md"* ]]
+}
+
+@test "work tree: paths with spaces are scanned and reported whole" {
+    _git_scan_fixture
+    mkdir -p "$SCAN/dir with space"
+    echo "xyzzy" > "$SCAN/dir with space/leakage-tokens.txt"
+    _bad_skill "$SCAN/.claude/skills/my skill"
+    run bash "$CORE_DIR/scripts/check-leakage-shapes.sh" "$SCAN"
+    [ "$status" -eq 1 ] || return 1
+    [[ "$output" == *"$SCAN/dir with space/leakage-tokens.txt"* ]] || return 1
+    [[ "$output" == *"$SCAN/.claude/skills/my skill/SKILL.md"* ]]
+}
+
+@test "work tree: scanning a sub-directory applies both shapes under that directory" {
+    _git_scan_fixture
+    mkdir -p "$SCAN/sub/scripts"
+    echo "xyzzy" > "$SCAN/sub/scripts/leakage-tokens.txt"
+    _bad_skill "$SCAN/sub/.claude/skills/demo"
+    _bad_skill "$SCAN/.claude/skills/outside"
+    run bash "$CORE_DIR/scripts/check-leakage-shapes.sh" "$SCAN/sub"
+    [ "$status" -eq 1 ] || return 1
+    [[ "$output" == *"$SCAN/sub/scripts/leakage-tokens.txt"* ]] || return 1
+    [[ "$output" == *"$SCAN/sub/.claude/skills/demo/SKILL.md"* ]] || return 1
+    [[ "$output" != *"outside"* ]]
+}
+
+@test "work tree: a trailing slash on the scan dir reports clean paths" {
+    _git_scan_fixture
+    _bad_skill "$SCAN/.claude/skills/demo"
+    run bash "$CORE_DIR/scripts/check-leakage-shapes.sh" "$SCAN/"
+    [ "$status" -eq 1 ] || return 1
+    [[ "$output" == *"$SCAN/.claude/skills/demo/SKILL.md"* ]] || return 1
+    [[ "$output" != *"//"* ]]
 }

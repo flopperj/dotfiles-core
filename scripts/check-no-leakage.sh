@@ -9,6 +9,8 @@
 #
 # Usage:
 #   bash scripts/check-no-leakage.sh [DIR]      # scan a directory tree (default ".")
+#       # inside a git work tree only committable files are scanned (tracked
+#       # plus untracked-but-not-ignored); elsewhere every file under DIR
 #   ... | bash scripts/check-no-leakage.sh --commits
 #       # read commit SHAs (one per line) from stdin; scan each commit's full
 #       # tree plus its metadata (author/committer identity, commit message)
@@ -27,6 +29,10 @@
 # treated as non-word characters (so token_suffix and prefix-token are caught).
 
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=_lib.sh
+source "$SCRIPT_DIR/_lib.sh"
 
 GUARD_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles-guard"
 TOKENS_FILE="${LEAKAGE_TOKENS_FILE:-$GUARD_DIR/leakage-tokens.txt}"
@@ -96,11 +102,7 @@ if [ "$MODE" = "dir" ]; then
             FOUND=1
             echo "LEAKAGE: $file — line(s): ${lines}(content withheld)" >&2
         fi
-    done < <(find "$SCAN_DIR" \
-        -not -path "*/.git/*" \
-        -not -name ".git" \
-        -type f \
-        -print0 2>/dev/null)
+    done < <(_scan_files "$SCAN_DIR")
 else
     for sha in "${SHAS[@]:-}"; do
         [ -n "$sha" ] || continue

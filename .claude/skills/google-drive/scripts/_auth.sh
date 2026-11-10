@@ -2,12 +2,12 @@
 # Shared authentication helper for Google API scripts
 # This file is sourced by other scripts, not executed directly
 
-# Detect environment: "cws" for Cloud Workspace, "local" for local dev
+# Detect environment: "remote" for a remote workstation, "local" for local dev
 detect_environment() {
     if [[ -d "/workspace/google-cloud-sdk" && -d "/home/coder" ]]; then
-        echo "cws"
+        echo "remote"
     elif [[ -d "/home/coder" && -d "/workspace" ]]; then
-        echo "cws"
+        echo "remote"
     else
         echo "local"
     fi
@@ -16,7 +16,7 @@ detect_environment() {
 SKILL_ENV=$(detect_environment)
 
 get_gcloud_cmd() {
-    if [[ "$SKILL_ENV" == "cws" ]]; then
+    if [[ "$SKILL_ENV" == "remote" ]]; then
         if [[ -x "/workspace/google-cloud-sdk/bin/gcloud" ]]; then
             echo "/workspace/google-cloud-sdk/bin/gcloud"
             return 0
@@ -30,7 +30,7 @@ get_gcloud_cmd() {
     
     echo "ERROR: gcloud CLI not found" >&2
     echo "" >&2
-    if [[ "$SKILL_ENV" == "cws" ]]; then
+    if [[ "$SKILL_ENV" == "remote" ]]; then
         echo "Expected at: /workspace/google-cloud-sdk/bin/gcloud" >&2
     else
         echo "Install gcloud CLI: https://cloud.google.com/sdk/docs/install" >&2
@@ -39,7 +39,7 @@ get_gcloud_cmd() {
 }
 
 get_skills_dir() {
-    if [[ "$SKILL_ENV" == "cws" ]]; then
+    if [[ "$SKILL_ENV" == "remote" ]]; then
         echo "/home/coder/.cursor/skills"
     else
         echo "$HOME/.cursor/skills"
@@ -47,7 +47,7 @@ get_skills_dir() {
 }
 
 get_gcloud_config_dir() {
-    if [[ "$SKILL_ENV" == "cws" ]]; then
+    if [[ "$SKILL_ENV" == "remote" ]]; then
         echo "/home/coder/.config/gcloud"
     else
         echo "$HOME/.config/gcloud"
@@ -69,7 +69,7 @@ get_access_token() {
         echo "Run the following command to authenticate:" >&2
         echo "" >&2
         
-        if [[ "$SKILL_ENV" == "cws" ]]; then
+        if [[ "$SKILL_ENV" == "remote" ]]; then
             cat >&2 <<'EOF'
   /workspace/google-cloud-sdk/bin/gcloud auth application-default login \
     --scopes="https://www.googleapis.com/auth/cloud-platform,https://www.googleapis.com/auth/drive,https://www.googleapis.com/auth/documents"
@@ -102,8 +102,8 @@ check_dependencies() {
     
     if [[ ${#missing[@]} -gt 0 ]]; then
         echo "ERROR: Missing required tools: ${missing[*]}" >&2
-        if [[ "$SKILL_ENV" == "cws" ]]; then
-            echo "These should be pre-installed in Cloud Workspace. Contact support if missing." >&2
+        if [[ "$SKILL_ENV" == "remote" ]]; then
+            echo "These should be pre-installed on the remote workstation. Contact support if missing." >&2
         else
             echo "Install them with your package manager (brew, apt, etc.)" >&2
         fi

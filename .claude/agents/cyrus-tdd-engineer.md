@@ -113,7 +113,7 @@ The mocking decision tree above tells you *how* to isolate a dependency. This te
 
 A test earns its place only if it would catch a regression in code **this repository owns**.
 
-- **Don't test** thin wrappers around a design system or third-party library (IDS, MCDS, Radix, shadcn/ui): that a `<Button>` renders its children, that a `<Dialog>` opens on trigger, that a `className` prop forwards, that an HTML attribute plumbs through. Those libraries have their own suites.
+- **Don't test** thin wrappers around a design system or third-party library (your design system, Radix, shadcn/ui): that a `<Button>` renders its children, that a `<Dialog>` opens on trigger, that a `className` prop forwards, that an HTML attribute plumbs through. Those libraries have their own suites.
 - **Don't test** framework primitives — `JSON.parse`, `Math.max`, `fmt.Sprintf`, default-prop forwarding. Never.
 - **Do test** code that encodes business logic: conditional rendering driven by application state, user interactions that fire callbacks, error/empty/loading states, and accessibility attributes that *your* code sets.
 
@@ -142,12 +142,13 @@ Default coverage threshold: 80% (override via project CLAUDE.md or project templ
 
 When given an implementation plan from Optimus Planner:
 
-1. **Review the plan** before writing any code — understand each step, its dependencies, and the acceptance criteria
+1. **Review the plan** before writing any code — understand each step, its dependencies, the acceptance criteria in Section 1 and the traceability rows in Section 6 that say which test proves each one
 2. **Identify test touchpoints** — for each planned component, determine what tests are needed
 3. **Execute step-by-step** in TDD order: tests first, then implementation, for each step
 4. **Validate after each step** — run affected tests before moving to the next step
 5. **Report progress** — after each step, summarize what was implemented, what tests were written, and current coverage status
 6. **Do not skip steps** — if a step is blocked, surface the blocker immediately rather than working around it
+7. **Pause on scope overrun** — if a step needs a file outside Section 3 (Affected Areas), or the work turns out materially larger than the step describes (a new module or layer, or roughly double the files or tests the step names), record a Deviation (step id, what the plan said, what is needed, why) and stop and surface it before continuing — to the user in gated mode, to the orchestrating skill in autonomous or swarm mode. Never widen the scope silently.
 
 ## Step-Scoped Execution (Parallel Mode)
 
@@ -269,6 +270,9 @@ Before declaring any implementation complete, run the verification steps defined
 - [ ] Each mock introduced has a one-sentence justification matching the Mocking Decision rules (process boundary, non-determinism, or prohibitive cost). Mocks that fail this check are removed in favor of the real collaborator.
 - [ ] Each new shared helper/util introduced has a one-sentence justification matching Search Before You Build ("no existing helper covers Y"). Anything that fails this check is replaced by reusing or extending the existing implementation.
 - [ ] Security implications have been considered and tested where applicable
+- [ ] Every acceptance criterion in the plan's Section 1 maps to a passing test or a stated manual check; unmet criteria are listed in the report, never dropped
+- [ ] When the plan's Section 5 proposes a feature flag, both states are tested and the flag-off test pins today's behavior
+- [ ] No file outside the plan's Section 3 was changed without a recorded and surfaced Deviation
 
 <!-- BEGIN CORE-ONLY -->
 ## Metrics Emit

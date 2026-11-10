@@ -53,7 +53,7 @@ Procedure:
    - Plugins enabled in settings but not in declared-set → "Not tracked"
    - Plugins in both → "OK"
 
-When listing OK plugins, annotate the source: `frontend-design@claude-plugins-official (core)`, `mcds-web-plugin@devassist-plugins-registry (overlay)`. This makes it obvious which file to edit if the user wants to remove or change a plugin.
+When listing OK plugins, annotate the source: `frontend-design@claude-plugins-official (core)`, `example-plugin@your-plugins-registry (overlay)`. This makes it obvious which file to edit if the user wants to remove or change a plugin.
 
 ### Step 4 — Settings template drift check
 
@@ -78,7 +78,6 @@ Check for external tools required by optional skills. Report as INFO-level (not 
 | `gcloud` ADC | google-docs, google-drive | `test -f ~/.config/gcloud/application_default_credentials.json` |
 | `mmdc` | mermaid-diagrams | `command -v mmdc` |
 | `ffmpeg` | record-demo (listed in `brew.txt`; `install.sh` installs it with brew) | `command -v ffmpeg` |
-| `python3` | mc-lint | `command -v python3` |
 | `uv` | jenkins-mcp | `command -v uv` |
 | `jenkins-mcp` config | briefing, ranger, scout, cyrus (CI diagnosis) | Check `~/.claude.json` for `mcpServers.jenkins-mcp` key |
 | Google Calendar MCP | briefing (SCHEDULE section) | Check if `mcp__claude_ai_Google_Calendar__list_events` appears in available tools (cloud MCP — cannot be checked via file; report INFO only) |

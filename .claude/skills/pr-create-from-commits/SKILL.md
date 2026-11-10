@@ -17,7 +17,7 @@ Create a PR from recent commits. Detects the repo's PR template and its conventi
 - Run `git diff origin/{default_branch}` for a full diff overview
 - Understand the purpose and scope of the changes
 - Extract the Jira ticket number from the branch name (format: `ABC-1234`). If it isn't in the branch name, resolve the ticket question after Step 2: if the repo's conventions put a ticket in the title or body, ask the user; if no ticket exists yet, offer to create one via `/create-jira-ticket`. If the conventions never reference a ticket, don't ask.
-- **Check for flag-only changes:** if the only changed file is `config/flags.ini`, suggest using `/mc-pr-flag` instead for a specialized flag PR template with proper rollout metadata.
+- **Check for flag-only changes:** if the only changed file is the project's feature-flag config and the team has a flag-PR skill in the available-skills list, suggest it instead for a specialized flag PR template with proper rollout metadata.
 - **Check for mixed changes:** if commits contain clearly unrelated concerns, WARN the user and suggest splitting into multiple PRs. Only proceed if the user confirms.
 
 ### 2. Detect the repo's PR template and conventions
@@ -76,7 +76,7 @@ All Jira operations are best-effort — never block PR creation on a Jira failur
 1. Check for uncommitted changes (`git status`):
    - If YES: ask the user if they want to stage and commit them before creating the PR. If confirmed, stage relevant files and commit.
 2. Check current branch:
-   - If on `main` or `master`: create a new branch and check it out. Name it `{ticket-prefix}-{ticket-num}-{feature-summary}` (e.g. `EEE-1234-add-campaign-preview`), or the repo's branch convention if Step 2 found one. Without a ticket, name it `{feature-summary}`.
+   - If on `main` or `master`: create a new branch and check it out. Name it `{ticket-prefix}-{ticket-num}-{feature-summary}` (e.g. `PROJ-1234-add-invoice-preview`), or the repo's branch convention if Step 2 found one. Without a ticket, name it `{feature-summary}`.
 3. Push the branch to origin if not already pushed: `git push -u origin {branch}`.
 
 ### 6. Create the PR
@@ -97,8 +97,8 @@ All Jira operations are best-effort — never block PR creation on a Jira failur
 ## Merge order
 
 <!-- merge-order:v1 -->
-1. [ ] omni-agent — PROJ-1235 — https://github.com/acme-corp/omni-agent/pull/42
-2. [ ] mc-omni-agent-ui — PROJ-1236 — this PR
+1. [ ] example-api — PROJ-1235 — https://github.com/acme-corp/example-api/pull/42
+2. [ ] example-web — PROJ-1236 — this PR
 
 Built against the unmerged changes in the PR above — merge that one first.
 <!-- /merge-order:v1 -->
@@ -124,7 +124,7 @@ Built against the unmerged changes in the PR above — merge that one first.
 
    **5b. Parent-ticket comment (repo-split tickets only, best-effort).** For the same trigger as item 2b (either shape), after the PR is created, post a comment via `addCommentToJiraIssue` on the **parent** ticket — plain language with the 🤖 prefix, stating which repo's PR this is, the full merge order, and that later PRs are built against earlier unmerged changes. Example:
 
-   > 🤖 Opened the omni-agent half of this ticket: https://github.com/acme-corp/omni-agent/pull/42. This work spans two repositories — merge order: 1) omni-agent (this PR), 2) mc-omni-agent-ui (PR pending). The second PR is being built against the first one's unmerged changes.
+   > 🤖 Opened the example-api half of this ticket: https://github.com/acme-corp/example-api/pull/42. This work spans two repositories — merge order: 1) example-api (this PR), 2) example-web (PR pending). The second PR is being built against the first one's unmerged changes.
 
    If a comment from a previous sub-task PR already states the merge order, post an updated comment rather than editing the old one. Like all Jira operations in this skill, this is best-effort: if the comment fails, log it and continue — never block PR creation on it.
 

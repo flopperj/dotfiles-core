@@ -14,11 +14,24 @@ Branch name is the universal task key. The artifact survives a context boundary 
 
 ## A. Resolve project and task-key
 
-Resolve `<project>` as:
+Resolve `<project>` from the main checkout, so a handoff written inside a linked worktree is filed with the repo it belongs to:
 
 ```
-basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+toplevel="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 1
+git_dir="$(git rev-parse --path-format=absolute --git-dir)"
+common_dir="$(git rev-parse --path-format=absolute --git-common-dir)"
+if [ "$git_dir" = "$common_dir" ]; then
+  project="$(basename "$toplevel")"
+else
+  core_wt="$(git config --file "$common_dir/config" --get core.worktree 2>/dev/null || true)"
+  if [ -n "$core_wt" ]; then project="$(basename "$(cd "$common_dir/$core_wt" && pwd -P)")"
+  elif [ "$(git config --file "$common_dir/config" --bool --get core.bare 2>/dev/null)" = "true" ]; then
+    project="$(basename "$common_dir" .git)"
+  else project="$(basename "$(dirname "$common_dir")")"; fi
+fi
 ```
+
+In a normal checkout or a submodule this equals `basename "$(git rev-parse --show-toplevel)"`, the convention the rest of `~/.claude/tasks/<project>` uses. Only a linked worktree (`--git-dir` differs from `--git-common-dir`) is keyed differently; the `core.worktree` branch covers a worktree created from a submodule, whose common dir sits under the superproject's `.git/modules/`, and the `core.bare` branch covers a worktree of a bare repository (`myproj.git` with its worktrees beside it), keyed by the bare directory name without `.git`.
 
 Resolve `<task-key>` as the current branch name:
 
@@ -93,7 +106,26 @@ For each rejection the user wants to record:
 6. Author the `fallback` field — default: `"drop and surface to user"`.
 7. Run the **write-time validator** (Section G): predicate non-empty, kind recognized, anchor non-empty, untyped-fraction check. Warn on findings; do not block.
 
-### Step 6 — Approval gate
+### Step 6 — Running-work shutdown
+
+Inventory everything *this session* started that is still running: background shells (in Claude Code, Bash tasks started with `run_in_background`), running subagents, monitors and watchers, dev servers spawned from this session. Stop each one — in Claude Code via `TaskStop` with its task id; for a process spawned with a recorded PID, `kill <pid>`.
+
+**Never stop a process this session did not start** (a dev server the user launched in another terminal, a teammate's watcher). Record it with `stopped: false` so the next session knows it may still be running.
+
+For each item write an `in_flight` entry (schema in Section K): `what`, `kind` (`background-shell | subagent | other`), `stopped`, `cwd` (absolute), `restart` (the exact command, or `null`), and for a subagent a `brief` that stands on its own — goal, inputs, files, done-condition — so a fresh session can relaunch it without this session's context. Nothing running → omit `in_flight`.
+
+Stopping happens before the approval gate so the artifact can list what was stopped. If the user aborts at the gate (`x`), print every stopped item's `restart` command so nothing is lost.
+
+### Step 7 — Refs proposal
+
+Propose `refs` entries and let the user accept each (y/n) or add more:
+
+- The PR for this branch: `gh pr view --json url --jq .url` (non-zero exit means no PR — skip silently).
+- Active plan files under `~/.claude/tasks/<project>/plans/*.md`, excluding `archive/`, whose frontmatter `status:` is `planned` or `in_progress`, or that carry a todo with `status: pending` or `in_progress`. If none match, offer the most recently modified non-archive plan as a suggestion.
+
+Record plan paths in `~/…` form. No accepted entries → omit `refs`.
+
+### Step 8 — Approval gate
 
 Render the proposed handoff artifact in full. Gate on user approval:
 
@@ -101,15 +133,15 @@ Render the proposed handoff artifact in full. Gate on user approval:
 - `e` — edit a field
 - `x` — abort without writing
 
-### Step 7 — Atomic write
+### Step 9 — Atomic write
 
 On approval, write the artifact atomically: write to `<task-key>.md.tmp`, then rename to `<task-key>.md`. This prevents a half-written artifact from being read by a concurrent session.
 
-### Step 8 — Paired obligation (optional)
+### Step 10 — Paired obligation (optional)
 
 Offer to create a **paired obligation** that watches the branch/PR for external motion. The user opts in explicitly. If yes, invoke the existing obligations create flow with a sensible default (`gh_query` on the PR if one exists, otherwise a time-based reminder).
 
-### Step 9 — Completion summary and auto-clear
+### Step 11 — Completion summary and auto-clear
 
 Print:
 
@@ -135,7 +167,7 @@ Six rejection kinds form a closed enumeration. Each kind has an anchor (what is 
 |---|---|---|---|---|
 | 1 | **structural** | A type, invariant, or schema declaration at a specific file:line | `"<invariant statement> still holds in <anchor-path>"` | `"grep -q 'final class Foo' src/Foo.php"` ; `"the Bar interface still exposes execute(): void at lib/Bar.ts"` |
 | 2 | **contractual** | A function signature, API spec, or interface declaration | `"<signature> unchanged at <anchor>"` | `"grep -qF 'function render(Context $ctx): string' src/Renderer.php"` ; `"the GET /v1/items endpoint still accepts &filter[status] per docs/api.md"` |
-| 3 | **empirical-local** | A specific file's behavior at a location (test outcome, observable output, error string) | `"<observable> at <anchor> still <expected>"` | `"grep -q 'throws NullPointerException' tests/RendererTest.php"` ; `"the line 'preview returns null' in CampaignPreviewController.php:142 is still present"` |
+| 3 | **empirical-local** | A specific file's behavior at a location (test outcome, observable output, error string) | `"<observable> at <anchor> still <expected>"` | `"grep -q 'throws NullPointerException' tests/RendererTest.php"` ; `"the line 'preview returns null' in InvoicePreviewController.php:142 is still present"` |
 | 4 | **empirical-external** | A dependency at a pinned version, or an external service contract | `"<dep> still at version <V>"` or `"<external-system> still <contract>"` | `"grep -q '\"react\": \"18\\.' package.json"` ; `"composer.lock pins guzzlehttp/guzzle to 7.5.x"` |
 | 5 | **goal-conditional** | The user's stated goal at write-time | `"user still wants <P>"` | `"user still prefers the smaller blast-radius approach"` ; `"user still wants to avoid touching the legacy Foo subsystem"` |
 | 6 | **untyped** | None — the producer could not classify | `"<freeform claim>"` | `"approach X felt wrong but I can't articulate why"` |
@@ -176,7 +208,7 @@ The read half is **not** user-invocable. It runs at session start (including aft
 
 **Trigger:** On every new session, resolve `<project>` and `<task-key>` via the same git convention as the write half (Section A), then check `~/.claude/tasks/<project>/handoff/<task-key>.md`. If present, run the read flow (Section H) and prepend the surfaced result to the first agent response.
 
-**Implementation:** [`.claude/hooks/handoff-read.py`](../../hooks/handoff-read.py), installed by `install.sh` as a symlink at `~/.claude/hooks/handoff-read.py`. The script reads the JSON hook payload from stdin (for `cwd`), executes the read flow, and prints the Section I surface block to stdout — Claude Code captures stdout as session context.
+**Implementation:** [`.claude/hooks/handoff-read.py`](../../hooks/handoff-read.py), installed by `install.sh` as a symlink at `~/.claude/hooks/handoff-read.py`. The script reads the JSON hook payload from stdin (for `cwd`), executes the read flow, and prints the Section I surface block to stdout — Claude Code captures stdout as session context. The hook parses the block-style frontmatter subset in Section K itself, with no third-party module. It also computes the working-tree line from `git status --porcelain` and `git rev-list --count @{u}..HEAD`, each bounded by a 2-second timeout. Every git call and predicate draws on one 4-second budget, so the hook finishes inside the 5-second `SessionStart` timeout below; once the budget is spent, the remaining predicates are `cannot-evaluate` and the working-tree line is omitted.
 
 **Required `~/.claude/settings.json` entry.** Overlays may ship this in their `.claude/settings.json.template` for fresh-install convenience, but `lib-mcp-config.sh` only copies the template when `~/.claude/settings.json` does not already exist, so pre-existing installs (including any overlay's main user) must add the block manually:
 
@@ -207,6 +239,8 @@ The matcher deliberately omits `compact` — surfacing a handoff mid-task is int
 
 Use Section A. If either fails (not in a git repo, detached HEAD), **no-op silently**. Detached HEAD is treated the same as no branch.
 
+If no handoff exists under the resolved project but one exists under the legacy key (the linked worktree's folder name, where earlier versions filed it), print one line naming the legacy path and the path to move it to, then stop. Nothing is moved automatically.
+
 ### Step 2 — Parse the handoff file
 
 Read the handoff file. Parse the YAML frontmatter. If parse fails → surface a warning:
@@ -217,11 +251,15 @@ Handoff file at <path> is malformed; skipping. Inspect manually.
 
 Continue with no gating set.
 
+### Step 2b — Compute working-tree state (derived, never authored)
+
+Run `git status --porcelain` and count the non-empty lines (uncommitted files), then `git rev-list --count @{u}..HEAD` (unpushed commits). When the second command fails because there is no upstream, report `no upstream`. When `git status` itself fails or times out, omit the line and note it on stderr. The result is never written to the artifact, so it cannot go stale.
+
 ### Step 3 — Evaluate predicates (bounded)
 
 For each rejection in the frontmatter `rejections:` list, evaluate the predicate with these bounds:
 
-- **Time budget**: 2 seconds per predicate. If exceeded → `cannot-evaluate`.
+- **Time budget**: 2 seconds per predicate, within the hook's shared 4-second budget (Section G). If either is exceeded → `cannot-evaluate`.
 - **Tool budget**: at most 1 file read, 1 grep, or 1 `gh`/`git` shell call per predicate. If a predicate requires more → `cannot-evaluate`.
 - Predicates that require running tests, building, or executing arbitrary code → `cannot-evaluate` immediately.
 - `goal-conditional` predicates → always `cannot-evaluate` (surface to user by design).
@@ -243,12 +281,21 @@ Print the following before any agent response (Section I for format).
 
 ```
 Open handoff detected for <task-key> (written <timestamp>).
+  Working tree: <N> uncommitted file(s); <M> unpushed commit(s) | no upstream
 
   Immediate next intent:
     <intent>
 
   Active goal:
     <goal — or "(omitted; recoverable from PR/ticket)">
+
+  Refs:
+    [<kind>] <value>
+
+  In flight at handoff (restart to resume):
+    <what> — stopped | left running; cwd <absolute path>
+      restart: <command>
+      brief: <first line of the brief> (full brief in the handoff file)
 
   Holding (these gate this session — do not re-try without a stated reason):
     [<kind>] <claim>
@@ -258,12 +305,15 @@ Open handoff detected for <task-key> (written <timestamp>).
   Ground may have shifted (you may want to reconsider):
     [<kind>] <claim>
       reason: predicate failed — <one-line evaluator note>
+
+  Cannot evaluate (surface to user):
     [<kind>] <claim>
       reason: cannot-evaluate — <one-line: timeout / out-of-budget / untyped>
-    ... (M surfaced)
 
   -> Proceeding. To re-examine the handoff later, read ~/.claude/tasks/<project>/handoff/<task-key>.md
 ```
+
+The `Working tree:` line is omitted when git fails. `Refs:`, `In flight at handoff` and each of the three rejection headings are omitted when empty. `restart` is only displayed; the hook never runs it, and never fetches a ref.
 
 ---
 
@@ -307,7 +357,29 @@ rejections:
     anchor: null
     predicate: user still wants <P>
     fallback: drop and surface to user
+in_flight:
+  - what: dev server (npm run dev)
+    kind: background-shell
+    stopped: true
+    cwd: /abs/path/to/repo
+    restart: npm run dev
+  - what: review subagent
+    kind: subagent
+    stopped: true
+    cwd: /abs/path/to/repo
+    restart: null
+    brief: |
+      Relaunch prompt that stands on its own: goal, inputs, files, done-condition.
+refs:
+  - kind: pr
+    value: https://github.com/example/repo/pull/12
+  - kind: plan
+    value: ~/.claude/tasks/<project>/plans/<slug>.md
 ---
 
 <!-- Narrative scratch — not consumed by the evaluator -->
 ```
+
+`in_flight` and `refs` are optional; omit each when empty. `kind` under `in_flight` is one of `background-shell | subagent | other`; `stopped: false` marks a process this session did not start; `restart` is the exact command or `null`. A `refs` item may also be a plain string. Do not put `#` comments after a value — the hook keeps them as part of the value. Quote a value that starts with `[`, `{`, `*` or `&` (for example `claim: "[structural] keep X"`): unquoted, it reads as a flow collection or anchor and the whole handoff is reported as malformed. Inside double quotes only `\"`, `\\` and `\n` are decoded; any other backslash is kept as written.
+
+The read hook parses this block-style subset only — no flow collections (`[a, b]`), anchors or multi-document files.

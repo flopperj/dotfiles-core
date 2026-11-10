@@ -96,7 +96,7 @@ Cluster: Backend (4 tickets)
     PROJ-1007 (Simple) — Config change, independent
 
   Wave 2 (parallel, depends on Wave 1):
-    PROJ-1001 (Medium) — API update, depends on PROJ-1003 [shared: app/lib/MC/Billing.php]
+    PROJ-1001 (Medium) — API update, depends on PROJ-1003 [shared: src/billing/Account.php]
     PROJ-1009 (Simple) — Error handler fix, independent
 
   Wave 3 (sequential, depends on Wave 2):
@@ -112,45 +112,45 @@ If no dependencies exist, all tickets can run in parallel (single wave).
 Based on the domain tag, prepare domain-specific context to pass to each
 pipeline. This context supplements the enriched ticket brief.
 
+For the team's per-domain facts (source layout, test locations and mocking
+library, validation commands, security rules, migration windows, flag config),
+consult `## Domain conventions` in `~/.claude/overlay-context.md`. If that file or section is absent, fill the placeholders below from the project CLAUDE.md and the repo itself, and drop any line you cannot confirm.
+
 ### Backend domain context
 
 ```
-Domain: Backend (PHP / Avesta MVC)
+Domain: Backend (<language / framework>)
 
 Conventions:
-- Controllers in app/controllers/, business logic in app/lib/MC/
-- Models in app/models/, gRPC via Autolyse in app/lib/Autolyse/
-- Tests in tests_phpunit/ using Phake for mocking
-- snake_case variables, camelCase methods, PascalCase classes
-- No abstract classes — favor composition
-- No named arrays for structured data — always use a class
-- Alphabetically sort imports, methods, and properties
+- <where controllers, business logic and models live>
+- Tests in <test directory> using <mocking library>
+- <naming, style and structure rules from the project CLAUDE.md>
 
 Validation:
-- PHPStan and Phan must pass after changes
-- Run devenv test for PHPUnit tests
+- <static analysis that must pass after changes>
+- <test command>
 
 Security:
 - XSS protection for any view/template changes
-- CSRF protection for controller actions and Autolyse services
+- CSRF protection for state-changing endpoints
 - SQL injection protection for any database queries
 ```
 
 ### Frontend domain context
 
 ```
-Domain: Frontend (React / TypeScript)
+Domain: Frontend (<framework / language>)
 
 Conventions:
-- Components in web/js/src/
-- Routes in web/js/src/Main/routes/
-- Always use IDS/MCDS design tokens — no hardcoded colors, spacing, or typography
+- Components in <frontend source directory>
+- Routes in <routes directory>
+- Always use the design system's tokens — no hardcoded colors, spacing, or typography
 - Check Figma alignment when available
 - Invoke the frontend-design skill for any visual changes
 
 Validation:
-- ESLint and TypeScript checks must pass
-- Jest tests for components
+- <lint and type checks that must pass>
+- <component test runner>
 ```
 
 ### Infra / Cross-Boundary domain context
@@ -159,10 +159,9 @@ Validation:
 Domain: Infrastructure / Cross-Boundary
 
 Conventions:
-- Proto changes go in proto/, never edit app/lib-grpc/ directly
-- gRPC code is auto-generated from protos
-- Database migrations are Tuesdays only — if a migration is needed, flag prominently
-- Feature flags in config/flags.ini, always start at enabled = 0.00
+- Schema and proto sources go in <schema directory>; never edit generated code directly
+- <migration windows or release restrictions> — if a migration is needed, flag prominently
+- Feature flags in <flag config file>, starting at <default rollout value>
 - Observability: traces around entry points, logging context through call chains
 
 Special rules:
@@ -194,9 +193,9 @@ built, beyond just the files on disk.
 
 ```
 Wave 1 results:
-  PROJ-1003: Created app/lib/MC/Billing/AccountId.php (new value object)
-             Modified app/models/Invoice.php (added billing_account_id column)
-  PROJ-1007: Modified config/flags.ini (added mc_billing_multi_account flag)
+  PROJ-1003: Created src/billing/AccountId.php (new value object)
+             Modified src/billing/Invoice.php (added billing_account_id column)
+  PROJ-1007: Modified feature_flags.ini (added billing_multi_account flag)
 ```
 
 **Inject** the accumulated context into each subsequent wave's pipeline
@@ -428,8 +427,8 @@ All smart recovery actions are included in the cluster report and the
 swarm run log for post-mortem analysis by swarm-retro:
 ```
 Smart Recovery Actions:
-  PROJ-1003: [auto-retry: suspected flaky test — MC_CampaignTest::testTimeout] (succeeded)
-  PROJ-1009: [auto-resequence: dependency on PROJ-1001 — MC_Billing::processRefund] (moved to Wave 3)
+  PROJ-1003: [auto-retry: suspected flaky test — PreviewTest::testTimeout] (succeeded)
+  PROJ-1009: [auto-resequence: dependency on PROJ-1001 — Billing::processRefund] (moved to Wave 3)
 ```
 
 ---

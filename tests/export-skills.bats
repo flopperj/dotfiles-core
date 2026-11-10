@@ -243,8 +243,11 @@ _scratch_core() {
 
 @test "portable refs: rendered bundle passes check-portable-refs" {
     _render_target
+    _hermetic_guard
     run bash "$REFS" "$TARGET/skills" $EXPORT_SET
-    [ "$status" -eq 0 ] && [[ "$output" == *"clean (9 skills)"* ]]
+    [ "$status" -eq 0 ] || return 1
+    [[ "$output" != *"ticket-key check skipped"* ]] || return 1
+    [[ "$output" == *"clean (9 skills)"* ]]
 }
 
 @test "portable refs: checker catches a core-only path and a dangling skill reference" {
@@ -256,24 +259,86 @@ _scratch_core() {
         && [[ "$output" == *"unresolved skill reference /not-a-bundle-skill"* ]]
 }
 
-@test "render: no company overlay skills or company Jira keys survive export" {
+@test "render: the Optimus skill catalog exports unchanged" {
     _render_target
-    # the Optimus skill catalog keeps its generic rows once the /mc-* rows are dropped
-    grep -q '^  | `/create-jira-ticket` |' "$TARGET/skills/optimus-planner/agent.md" || return 1
-    grep -q '^  | `frontend-design` |' "$TARGET/skills/optimus-planner/agent.md" || return 1
-    grep -q 'feature-flag skill in the available-skills list' "$TARGET/skills/optimus-planner/agent.md" || return 1
-    run grep -rE '/mc-|(EEE|AORG|FREDDIE|MUL)-[0-9]' "$TARGET/skills"
-    [ "$status" -eq 1 ] && [ -z "$output" ]
+    local src="$CORE_DIR/.claude/agents/optimus-planner.md" out="$TARGET/skills/optimus-planner/agent.md"
+    grep -q '^  | `/create-jira-ticket` |' "$out" || return 1
+    grep -q 'feature-flag skill in the available-skills list' "$out" || return 1
+    diff <(grep '^  | ' "$src") <(grep '^  | ' "$out")
 }
 
-@test "portable refs: checker flags a company Jira key and an un-excused /mc- skill" {
+# Point the default guard-list path at a fixture under a scratch HOME and
+# XDG_CONFIG_HOME, so a developer's real prefix list never decides the result.
+_hermetic_guard() {
+    unset PORTABLE_TICKET_PREFIXES_FILE
+    export HOME="$SCRATCH/home" XDG_CONFIG_HOME="$SCRATCH/xdg"
+    mkdir -p "$HOME" "$XDG_CONFIG_HOME/dotfiles-guard"
+    printf 'ZZQ\nQXV\n' > "$XDG_CONFIG_HOME/dotfiles-guard/portable-ticket-prefixes.txt"
+}
+
+_prefix_file() {
+    PORTABLE_TICKET_PREFIXES_FILE="$SCRATCH/portable-ticket-prefixes.txt"
+    export PORTABLE_TICKET_PREFIXES_FILE
+    printf '# guarded ticket prefixes\nZZQ\n\n  QXV  \n' > "$PORTABLE_TICKET_PREFIXES_FILE"
+}
+
+@test "portable refs: checker flags a guarded ticket key without echoing it, and an un-excused /zz- skill" {
     _render_target
-    printf '\nSee AORG-123 and run /mc-lint first.\n' >> "$TARGET/skills/to-prd/SKILL.md"
+    _prefix_file
+    printf '\nSee QXV-123 and run /zz-lint first.\n' >> "$TARGET/skills/to-prd/SKILL.md"
     run bash "$REFS" "$TARGET/skills" to-prd
-    [ "$status" -eq 1 ] \
-        && [[ "$output" == *"forbidden reference"* ]] \
-        && [[ "$output" == *"AORG-123"* ]] \
-        && [[ "$output" == *"unresolved skill reference /mc-lint"* ]]
+    [ "$status" -eq 1 ] || return 1
+    [[ "$output" == *"to-prd/SKILL.md: guarded ticket key on line(s) "*"(content withheld)"* ]] || return 1
+    [[ "$output" != *"QXV"* ]] || return 1
+    [[ "$output" == *"unresolved skill reference /zz-lint"* ]]
+}
+
+@test "portable refs: every listed prefix is guarded, comments and blanks are ignored" {
+    _render_target
+    _prefix_file
+    printf '\nSee ZZQ-9.\n' >> "$TARGET/skills/to-prd/SKILL.md"
+    run bash "$REFS" "$TARGET/skills" to-prd
+    [ "$status" -eq 1 ] || return 1
+    [[ "$output" == *"guarded ticket key"* ]]
+}
+
+@test "portable refs: a guarded prefix inside a longer key or without a number is not flagged" {
+    _render_target
+    _prefix_file
+    printf '\nSee AZZQ-9, X_ZZQ-9, ZZQ9 and QXV- here.\n' >> "$TARGET/skills/to-prd/SKILL.md"
+    run bash "$REFS" "$TARGET/skills" to-prd
+    [ "$status" -eq 0 ] || return 1
+    [[ "$output" == *"clean (1 skills)"* ]]
+}
+
+@test "portable refs: without a prefix list the ticket-key check is skipped with a notice" {
+    _render_target
+    PORTABLE_TICKET_PREFIXES_FILE="$SCRATCH/absent.txt" run bash "$REFS" "$TARGET/skills" to-prd
+    [ "$status" -eq 0 ] || return 1
+    [[ "$output" == *"ticket-key check skipped"* ]] || return 1
+    [[ "$output" == *"clean (1 skills)"* ]]
+}
+
+@test "portable refs: a prefix with an underscore is accepted and guarded" {
+    _render_target
+    PORTABLE_TICKET_PREFIXES_FILE="$SCRATCH/underscore.txt"
+    export PORTABLE_TICKET_PREFIXES_FILE
+    printf 'ZZ_Q\n' > "$PORTABLE_TICKET_PREFIXES_FILE"
+    printf '\nSee ZZ_Q-12.\n' >> "$TARGET/skills/to-prd/SKILL.md"
+    run bash "$REFS" "$TARGET/skills" to-prd
+    [ "$status" -eq 1 ] || return 1
+    [[ "$output" == *"guarded ticket key"* ]] || return 1
+    [[ "$output" != *"ZZ_Q"* ]]
+}
+
+@test "portable refs: a prefix list entry that is not alphanumeric is a usage error" {
+    _render_target
+    PORTABLE_TICKET_PREFIXES_FILE="$SCRATCH/bad.txt"
+    export PORTABLE_TICKET_PREFIXES_FILE
+    printf 'ZZQ|.*\n' > "$PORTABLE_TICKET_PREFIXES_FILE"
+    run bash "$REFS" "$TARGET/skills" to-prd
+    [ "$status" -eq 2 ] || return 1
+    [[ "$output" == *"invalid ticket prefix on line 1"* ]]
 }
 
 @test "portable refs: checker catches a broken relative markdown link" {
@@ -296,16 +361,16 @@ _scratch_core() {
 
 @test "portable refs: optional-paragraph excuse requires the exact token or its namespace wildcard, not mere paragraph presence" {
     mkdir -p "$SCRATCH/refs/to-prd"
-    printf -- '---\nname: to-prd\ndescription: x\n---\n\nOptional external skills: /pr-create-from-commits is optional.\n\nAlso try /mc-totally-made-up.\n' \
+    printf -- '---\nname: to-prd\ndescription: x\n---\n\nOptional external skills: /pr-create-from-commits is optional.\n\nAlso try /zz-totally-made-up.\n' \
         > "$SCRATCH/refs/to-prd/SKILL.md"
     run bash "$REFS" "$SCRATCH/refs" to-prd
     [ "$status" -eq 1 ] || return 1
-    [[ "$output" == *"unresolved skill reference /mc-totally-made-up"* ]] || return 1
+    [[ "$output" == *"unresolved skill reference /zz-totally-made-up"* ]] || return 1
 
-    mkdir -p "$SCRATCH/refs2/mc-lint"
-    printf -- '---\nname: mc-lint\ndescription: x\n---\n\nOptional external skills: /mc-* skills are optional.\n\nAlso try /mc-lint.\n' \
-        > "$SCRATCH/refs2/mc-lint/SKILL.md"
-    run bash "$REFS" "$SCRATCH/refs2" mc-lint
+    mkdir -p "$SCRATCH/refs2/zz-lint"
+    printf -- '---\nname: zz-lint\ndescription: x\n---\n\nOptional external skills: /zz-* skills are optional.\n\nAlso try /zz-lint.\n' \
+        > "$SCRATCH/refs2/zz-lint/SKILL.md"
+    run bash "$REFS" "$SCRATCH/refs2" zz-lint
     [ "$status" -eq 0 ]
 }
 
@@ -669,8 +734,11 @@ _scratch_core() {
         grep -q 'Follow CLAUDE.md error-handling defaults when defined (otherwise: surface the failure and stop, never retry silently)' "$f" \
             || { echo "qualified phrase missing in $s"; return 1; }
     done
+    _hermetic_guard
     run bash "$REFS" "$TARGET/skills" $EXPORT_SET
-    [ "$status" -eq 0 ] && [[ "$output" == *"clean (9 skills)"* ]]
+    [ "$status" -eq 0 ] || return 1
+    [[ "$output" != *"ticket-key check skipped"* ]] || return 1
+    [[ "$output" == *"clean (9 skills)"* ]]
 }
 
 @test "portable refs: checker flags an unqualified 'Follow CLAUDE.md error handling defaults' phrase" {

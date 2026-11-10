@@ -59,21 +59,25 @@ making, not the **tool or server** that provides the data.
 
 Rule: `## <Capability>` (good) vs `## <Provider> MCP server` (bad).
 
-| Current name | Post-Cohort-2 name | Status | Notes |
-|---|---|---|---|
-| `## Jira fallback (DAST-Orch MCP)` | `## Jira fallback` | renamed in Cohort 2 | Provider suffix dropped; capability retained |
-| `## Jenkins MCP clone URL` | `## Jenkins MCP clone URL` | no change | Already capability-named (the capability is "where to clone Jenkins MCP") |
+| Section | Consulted by | Notes |
+|---|---|---|
+| `## Jira fallback` | `briefing`, `obligations`, `pr-create-from-commits`, `ticket-pickup`, `ticket-swarm` | Renamed in Cohort 2: provider suffix dropped, capability retained |
+| `## Jenkins MCP clone URL` | `doctor` | Capability-named: the capability is "where to clone Jenkins MCP" |
+| `## Repo registry` | `ticket-pickup` | Which other repos have a local checkout for cross-repo ticket splits |
+| `## Demo recording targets` | `record-demo` | Company-specific demo targets |
+| `## Slack reaction vocabulary` | `babysit-prs` | Which reaction names claim or settle a shared PR |
+| `## Domain conventions` | `team-lead` | Per-domain source layout, test and validation tooling, migration windows and flag config |
 
 The machine-readable canonical list lives at `scripts/consult-vocabulary.txt`.
 
-**Audit 2026-05-14:** Confirmed these are the only two consult-instruction sections in core. Both capability-named. Command used: `grep -hoE "consult \`## [^\`]+\`" .claude/skills/*/SKILL.md | sort -u`.
+**Audit 2026-11-10:** Confirmed these six are the only consult-instruction sections in core, all capability-named (`overlay-init` also shows the grammar with a `## <Section>` placeholder). Command used: `grep -hoE "consult \`## [^\`]+\`" .claude/skills/*/SKILL.md | sort -u`.
 
 **Capability-naming rule:** A section name is capability-named when it describes
 what the consulting skill *decides* or *falls back to*, not which MCP server or
 provider supplies the data. Examples:
 - `## Jira fallback` — correct (capability)
 - `## Jenkins MCP clone URL` — correct (the capability is "where to clone Jenkins MCP"; the URL is the decision output)
-- `## DAST-Orch MCP server` — incorrect (provider name, not capability)
+- `## <internal-mcp> server` — incorrect (provider name, not capability)
 
 **Shared iteration helper:** `scripts/lib-core-symlinks.sh` and `scripts/core-check.sh`
 both iterate over `.claude/skills/*/` subdirectories. Decision (Step 3): a shared
@@ -92,8 +96,8 @@ the repo must never contain — and is gone as of Cohort 3.
 
 Weakness: the denylist approach is structurally fragile (see §Why denylist is
 structurally weak). For consult-instructions specifically, the section name
-`## Jira fallback (DAST-Orch MCP)` contains `DAST-Orch`, a denylist token, which
-causes false positives.
+`## Jira fallback (<internal-mcp>)` contains the internal server name, a denylist
+token, which causes false positives.
 
 ### Cohort 1 (denylist + allowlist exemption — SUPERSEDED)
 
@@ -102,7 +106,7 @@ any line matching the consult-instruction grammar (`consult \`## …\`` in
 `~/.claude/overlay-context.md`) was excluded from token scanning.
 
 This was a band-aid while Cohort 2 built positive enforcement. The allowlist
-and the `DAST-Orch` token have both been removed in Cohort 2.
+and the server-name token have both been removed in Cohort 2.
 
 ### Cohort 2 (positive grammar — canonical)
 
@@ -119,8 +123,9 @@ with positive grammar enforcement for consult-instructions:
 **D3 decision (Cohort 2, amended in Cohort 3):** the denylist is kept as
 belt-and-suspenders for free-prose leakage of company-specific tokens. The list
 itself is overlay-owned and lives outside every repo working tree (see Cohort 3);
-this document deliberately does not enumerate its contents. `DAST-Orch` was
-removed from the denylist; the grammar check is its primary enforcement. The
+this document deliberately does not enumerate its contents. The server-name
+token was dropped from the denylist while the section still carried it; the
+grammar check is the primary enforcement for consult-instructions. The
 PROVISIONAL allowlist sed-pipe is removed.
 
 ### Cohort 3 (externalized token data + publication-set gate — current)
@@ -161,9 +166,9 @@ The token file format is unchanged: one token per line, `#` comments.
 
 ## Why denylist is structurally weak
 
-**Adversarial token order.** A denylist token like `DAST-Orch` is matched regardless
-of context. A legitimate consult-instruction (`consult \`## Jira fallback (DAST-Orch MCP)\``)
-triggers the same match as an accidental leakage (`Use the DAST-Orch MCP for Jira`).
+**Adversarial token order.** A denylist token like `<internal-mcp>` is matched regardless
+of context. A legitimate consult-instruction (`consult \`## Jira fallback (<internal-mcp>)\``)
+triggers the same match as an accidental leakage (`Use the <internal-mcp> server for Jira`).
 The denylist cannot tell these apart without the allowlist band-aid.
 
 **Partial-token near-miss.** A short token appears inside longer words (`corp`
@@ -185,7 +190,7 @@ the other's files. It applies in both layouts:
 - **local** — the repo (core clone, or overlay with core as a submodule) lives
   in its own directory and installers symlink into `~/.claude/`.
 - **yadm** — the overlay is checked out directly into `$HOME` (yadm on a
-  cloud workspace). Every overlay-tracked path under `~/.claude/` is then a real file or
+  remote workstation). Every overlay-tracked path under `~/.claude/` is then a real file or
   directory owned by the overlay. `install.sh` detects this layout with
   `_detect_layout` (`scripts/_lib.sh`) from a yadm repo answering for `$HOME`
   or a tracked `$HOME/.gitmodules` that declares the `dotfiles-core`
@@ -245,8 +250,8 @@ re-link `~/.claude/_shared` or `~/.claude/evals` wholesale, and do not back up a
 real entry under `~/.claude/` in the yadm layout. Core v1.21.0 keeps those two
 directories merged and refuses to collapse them, so an overlay that still links
 them whole flips each one between symlink and merged directory on alternate
-installs — the `jarama/dotfiles` overlay needs its PR #43 (branch
-`fix/cws-copied-tree-install`) or later. Core runs as a child process, so its
+installs — such an overlay must stop linking them whole before it runs with
+this core. Core runs as a child process, so its
 `DOTFILES_LAYOUT` export does not reach the overlay: source core's
 `scripts/_lib.sh` and call `_detect_layout`, or use your own
 `DOTFILES_DIR == $HOME` check.

@@ -1,14 +1,14 @@
 ---
 name: dotfiles-sync
-description: "Check for and pull dotfiles updates, then re-run install.sh. Use when the user types /dotfiles-sync, starts a prompt with 'Sync', or asks to 'update my dotfiles', 'sync dotfiles', 'pull latest dotfiles', or 'are my dotfiles up to date'. Environment-aware for CWS (yadm) and local (git + symlinks)."
+description: "Check for and pull dotfiles updates, then re-run install.sh. Use when the user types /dotfiles-sync, starts a prompt with 'Sync', or asks to 'update my dotfiles', 'sync dotfiles', 'pull latest dotfiles', or 'are my dotfiles up to date'. Environment-aware for a remote workstation (yadm) and local (git + symlinks)."
 user-invocable: true
 ---
 
 # Dotfiles Sync
 
 Check for dotfiles updates, show what changed, pull with user approval,
-and re-run `install.sh` to apply. Environment-aware for CWS (yadm) and
-local (git + symlinks).
+and re-run `install.sh` to apply. Environment-aware for a remote workstation (yadm)
+and local (git + symlinks).
 
 ---
 
@@ -17,7 +17,7 @@ local (git + symlinks).
 Determine the layout the same way `/doctor` Step 1 does (`_detect_layout`
 in core's `scripts/_lib.sh`; see `PROTOCOL.md` § Path ownership):
 
-1. **CWS (yadm layout)** — `yadm rev-parse --show-toplevel` succeeds: that
+1. **Remote workstation (yadm layout)** — `yadm rev-parse --show-toplevel` succeeds: that
    is the repo root (normally `$HOME`). If yadm is absent but
    `$HOME/.gitmodules` declares `dotfiles-core`, the root is `$HOME` (a tree
    copied into `$HOME` without its yadm repo; use `git -C $HOME`).
@@ -31,7 +31,7 @@ in core's `scripts/_lib.sh`; see `PROTOCOL.md` § Path ownership):
    ```
    Fall back to `~/dotfiles` if the symlink doesn't exist.
 
-**CWS path**: Use `yadm` commands (or `git -C $HOME`) for all git operations.
+**Remote-workstation path**: Use `yadm` commands (or `git -C $HOME`) for all git operations.
 
 **Local path**: Use `git` commands in `{dotfiles-dir}`.
 
@@ -42,7 +42,7 @@ in core's `scripts/_lib.sh`; see `PROTOCOL.md` § Path ownership):
 Fetch the latest from origin (with a 10-second timeout to avoid hanging
 on network issues):
 
-**CWS:**
+**Remote workstation:**
 ```bash
 cd $HOME && timeout 10 yadm fetch origin
 ```
@@ -134,7 +134,7 @@ Then re-show the gate menu.
 
 ## Step 5: Pull and install
 
-**CWS:**
+**Remote workstation:**
 ```bash
 cd $HOME && yadm pull origin master && bash $HOME/install.sh
 ```
@@ -171,20 +171,20 @@ surface them prominently.
 
 ## Edge cases
 
-- **Merge conflicts or dirty working tree (CWS)**: In CWS environments,
+- **Merge conflicts or dirty working tree (remote workstation)**: On remote workstations,
   always discard local changes in favor of what's latest on master.
-  Local dotfiles edits in CWS are ephemeral — the source of truth is
+  Local dotfiles edits on a remote workstation are ephemeral — the source of truth is
   the repo. Run:
   ```bash
   yadm checkout -- .   # or git -C $HOME checkout -- .
   yadm pull origin master
   ```
   Inform the user that local changes were discarded, but do not gate
-  on approval — CWS local changes are never authoritative.
+  on approval — remote-workstation local changes are never authoritative.
 - **Merge conflicts or dirty working tree (local)**: On local machines,
   warn the user and suggest stashing or committing first. Do not
   auto-discard — local machines may have intentional uncommitted work.
-- **yadm not installed** (CWS without yadm binary): Fall back to plain
+- **yadm not installed** (remote workstation without the yadm binary): Fall back to plain
   git if the yadm repo is at `$HOME`. Use `git -C $HOME` commands.
 - **Branch mismatch**: If the local branch is not `master`, note this
   and ask which branch to pull from.
@@ -194,8 +194,8 @@ surface them prominently.
 ## Gate rules
 
 - **Never auto-pull on local machines.** Always show changes and wait for approval.
-- **CWS environments auto-discard local changes.** The remote master is
-  always authoritative in CWS. Discard local modifications and pull
+- **Remote workstations auto-discard local changes.** The remote master is
+  always authoritative on a remote workstation. Discard local modifications and pull
   without gating on dirty-tree approval (still show what was pulled).
 - **Never modify dotfiles content.** This skill pulls and installs;
   it does not edit skill files, agents, or CLAUDE.md.
@@ -235,7 +235,7 @@ checked_out=$(git -C {dotfiles-dir}/.claude/dotfiles-core rev-parse HEAD)
 if [ "$recorded" != "$checked_out" ]; then
   git -C {dotfiles-dir} submodule update --init --recursive .claude/dotfiles-core
 fi
-# (or the yadm equivalents on CWS)
+# (or the yadm equivalents on a remote workstation)
 ```
 
 If the two differed, report:

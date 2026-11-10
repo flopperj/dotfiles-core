@@ -56,12 +56,14 @@ rough self-pre-read), which changes how much context each accomplishment needs:
 a manager who knows your work doesn't need the setup; a skip-level does. See
 honesty-bar rule 4.
 
-**Window.** Compute from today + the fiscal anchor month (default: August).
-Determine the current fiscal year: if today's month ≥ the anchor month, the FY
-label is *next* calendar year; otherwise it's the *current* calendar year.
+**Window.** Compute from today + the fiscal anchor month (default: January).
+The FY label is the calendar year in which the fiscal year ends. With anchor
+month 1 that is the current calendar year; otherwise it is the *next* calendar
+year if today's month ≥ the anchor month, and the *current* one if not.
 
-- year-end window: anchor-month/year-1 → (anchor-month − 1 day)/year (full FY).
-- mid-year window: anchor-month/year-1 → ~6 months later (first half).
+- year-end window: the 1st of the anchor month → the day before the next
+  anchor-month 1st (full FY, twelve months).
+- mid-year window: the 1st of the anchor month → ~6 months later (first half).
 
 **Always state the inferred mode, FY label, exact date window, role/level, and
 assumed audience back to the user and get confirmation before gathering.** A

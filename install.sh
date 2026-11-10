@@ -8,7 +8,7 @@
 # core skills need (ffmpeg for record-demo) are declared in brew.txt and
 # installed via scripts/lib-brew.sh when brew is present.
 # Layout-aware: in the local layout (repo in its own directory) it symlinks
-# into ~/.claude/; in the yadm/CWS layout (overlay checked out into $HOME) it
+# into ~/.claude/; in the yadm layout (overlay checked out into $HOME) it
 # merges around overlay-owned entries instead of backing them up. See
 # PROTOCOL.md § Path ownership under ~/.claude. Jenkins MCP, Cursor
 # mirroring, and company-specific plugins belong in the overlay installer.

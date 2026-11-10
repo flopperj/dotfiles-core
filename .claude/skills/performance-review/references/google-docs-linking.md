@@ -35,12 +35,12 @@ merge into one run.** This breaks naive in-run linking in two ways:
    bled, clear the link on just the bleed-prefix range and re-apply.
 
 2. **Per-key updates on bundles fail.** A slash-bundle like
-   `(EEE-1 / EEE-2 / EEE-3)` is often a few coalesced runs. Trying to drop or
+   `(PROJ-1 / PROJ-2 / PROJ-3)` is often a few coalesced runs. Trying to drop or
    relink one key with `updateTextStyle` against computed offsets fights the
    coalescing and mislands.
 
    **Fix:** rewrite the whole bundle as plain text with `replaceAllText`
-   (`"(EEE-1 / EEE-2 / EEE-3)"` → `"(EEE-1 / EEE-3)"`), which strips links on the
+   (`"(PROJ-1 / PROJ-2 / PROJ-3)"` → `"(PROJ-1 / PROJ-3)"`), which strips links on the
    *survivors* too — then re-apply links to each surviving key at fresh offsets
    read from a new snapshot. One bundle at a time, re-fetching between bundles.
 

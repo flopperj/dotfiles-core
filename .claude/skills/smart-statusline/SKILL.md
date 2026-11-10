@@ -1,6 +1,6 @@
 ---
 name: smart-statusline
-description: "Install a Claude Code statusline that shows model name, session cost, a 10-block context usage bar, and color-coded warnings (/compact prompts at 30%, urgency at 90%). Use when the user types /smart-statusline, asks to set up a statusline, wants to see context usage in their terminal, asks how full their context window is, wants cost tracking in Claude Code, or says things like 'show me context percentage', 'set up my statusline', or 'I want to see how much context I have left'."
+description: "Install a Claude Code statusline that shows model name, session cost, a 10-block context usage bar, and color-coded warnings (/compact prompts at 50%, urgency at 70%, new-session warning at 90%). Use when the user types /smart-statusline, asks to set up a statusline, wants to see context usage in their terminal, asks how full their context window is, wants cost tracking in Claude Code, or says things like 'show me context percentage', 'set up my statusline', or 'I want to see how much context I have left'."
 user-invocable: true
 ---
 
@@ -12,19 +12,20 @@ user-invocable: true
 
 Installs a statusline script for Claude Code that shows at a glance:
 - **Model name** — which Claude model is active
-- **Session cost** — running USD total for the session
+- **Session cost** — estimated session cost (client-side list price; resets to $0 on /clear; not the billed amount), shown as `~$`
 - **Context bar** — 10-block progress bar (each block = 10% of context window)
-- **Color-coded warnings** — green → orange → red as context fills up
+- **Color-coded warnings** — green → yellow → orange → red as context fills up
+- **Branch and lines changed** — on a second line; lines changed are counted against the merge-base with `origin/<default branch>`, so upstream commits are not attributed to the session; the default branch comes from `origin/HEAD`, falling back to `origin/main` then `origin/master` when it is unset, and the segment is omitted when none of them exists
 
 Example output:
 ```
-Sonnet 4.6  $0.42  ████░░░░░░  38% — run /compact now
+🤖 Sonnet 4.6 | 💰 ~$0.42 | CTX ███████░░░ 72% — run /compact now
 ```
 
 Color thresholds:
-- **Green** (0–29%) — plenty of room
-- **Yellow** (30%) — consider `/compact`
-- **Orange** (31–89%) — run `/compact` now
+- **Green** (0–49%) — plenty of room
+- **Yellow** (50–69%) — consider `/compact`
+- **Orange** (70–89%) — run `/compact` now
 - **Red** (90%+) — start a new session
 
 ## Installation
@@ -40,7 +41,7 @@ cp <skill-dir>/scripts/statusline-command.sh ~/.claude/statusline-command.sh
 chmod +x ~/.claude/statusline-command.sh
 ```
 
-If you're installing via `npx @dev-devsuccess/skills`, the skill directory will be at `~/.claude/skills/smart-statusline/` (global) or `.claude/skills/smart-statusline/` (project).
+The skill directory is usually `~/.claude/skills/smart-statusline/` (global) or `.claude/skills/smart-statusline/` (project).
 
 ### Step 2: Add to settings.json
 

@@ -14,17 +14,25 @@
 #      ../../workflows/, ../skills/), overlay plumbing (overlay-context,
 #      .cursor/hooks.json, parity-ignore, "managed via dotfiles"), and the
 #      export markers themselves (CORE-ONLY, PORTABLE-ONLY).
-#      Company-specific tokens are forbidden too: the maintainer's Jira
-#      project keys (EEE-, AORG-, FREDDIE-, MUL-) — examples must use
-#      PROJ-#### — and company overlay skills (/mc-*), which are not excused
-#      by the optional paragraph because it no longer names them.
+#      Overlay-only skills (/zz-*) are not excused by the optional paragraph
+#      because it no longer names them.
+#   1a. Ticket keys whose project prefix is on the local guard list
+#      (PREFIX-<digits>) are absent; examples must use PROJ-####. The list is
+#      guard data kept outside every repo, like the leakage token list, so a
+#      hit is reported by file and line with the content withheld. Without
+#      the list (public CI) this check is skipped with a notice.
 #   2. Every `/skill-name` token resolves to a bundle skill, or the file
 #      carries the "Optional external skills" / "Skills are optional" paragraph that declares
 #      everything else optional.
 #   3. Every markdown link to a relative path resolves to a file that exists
 #      (inside this skill or a sibling skill directory).
 #
-# Exit codes: 0 clean; 1 violations; 2 usage.
+# Environment:
+#   PORTABLE_TICKET_PREFIXES_FILE  default ${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles-guard/portable-ticket-prefixes.txt
+#       one project prefix per line (letters, digits, underscores); blank lines and
+#       #-comments ignored
+#
+# Exit codes: 0 clean; 1 violations; 2 usage or an invalid prefix list.
 set -euo pipefail
 
 SKILLS_DIR="${1:-}"
@@ -53,10 +61,30 @@ if [ -z "$(echo "$CHECK_SKILLS" | tr -d '[:space:]')" ]; then
 fi
 
 # shellcheck disable=SC2088 # literal tilde is the pattern we search for
-FORBIDDEN='~/\.claude/_shared|~/\.claude/evals|~/\.claude/workflows|~/\.claude/skills/|\.\./\.\./agents/|\.\./\.\./workflows/|\.\./skills/|overlay-context|\.cursor/hooks\.json|parity-ignore|managed via dotfiles|CORE-ONLY|PORTABLE-ONLY|metrics-emit|ob-[0-9]|(^|[^A-Za-z])(EEE|AORG|FREDDIE|MUL)-[0-9]'
+FORBIDDEN='~/\.claude/_shared|~/\.claude/evals|~/\.claude/workflows|~/\.claude/skills/|\.\./\.\./agents/|\.\./\.\./workflows/|\.\./skills/|overlay-context|\.cursor/hooks\.json|parity-ignore|managed via dotfiles|CORE-ONLY|PORTABLE-ONLY|metrics-emit|ob-[0-9]'
 
 # Slash tokens that are paths or prose, never skill names.
 ALLOW_SLASH='skill|plans|prds|archive|dev|tmp|llms|repos|metrics|wrong|api|users|app|data|src|test|tests|lib|bin|etc|usr|home|var|opt|Users|claude|cursor|agents|skills|workflows|schemas|references|scripts|or|and|to|from|the|a|an|in|on|by|per|of|with|then|else|ip|i|r|p|x|n|y|g|s|d|c|e|f|dist|node_modules|build|docs|components|styles|pages|hooks|utils|mv|rm'
+
+PREFIXES_FILE="${PORTABLE_TICKET_PREFIXES_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles-guard/portable-ticket-prefixes.txt}"
+TICKET_PREFIXES=""
+if [ -f "$PREFIXES_FILE" ]; then
+    n=0
+    while IFS= read -r prefix || [ -n "$prefix" ]; do
+        n=$((n + 1))
+        prefix="$(printf '%s' "$prefix" | tr -d '[:space:]')"
+        case "$prefix" in ''|'#'*) continue ;; esac
+        if ! printf '%s' "$prefix" | grep -qE '^[A-Za-z][A-Za-z0-9_]*$'; then
+            echo "check-portable-refs: invalid ticket prefix on line $n of $PREFIXES_FILE (letters, digits and underscores only)" >&2
+            exit 2
+        fi
+        TICKET_PREFIXES="${TICKET_PREFIXES:+$TICKET_PREFIXES|}$prefix"
+    done < "$PREFIXES_FILE"
+fi
+if [ -z "$TICKET_PREFIXES" ]; then
+    echo "check-portable-refs: ticket-key check skipped (no prefixes listed at $PREFIXES_FILE)" >&2
+fi
+TICKET_RE="(^|[^A-Za-z0-9_])(${TICKET_PREFIXES})-[0-9]"
 
 fail=0
 _violation() { echo "FAIL  $1"; fail=1; }
@@ -82,6 +110,12 @@ for skill in $CHECK_SKILLS; do
             fail=1
         fi
 
+        # 1a. guarded ticket keys, reported without their content
+        if [ -n "$TICKET_PREFIXES" ]; then
+            key_lines="$(grep -nE -- "$TICKET_RE" "$md" | cut -d: -f1 | tr '\n' ' ')" || true
+            [ -z "$key_lines" ] || _violation "$rel: guarded ticket key on line(s) ${key_lines}(content withheld)"
+        fi
+
         # 1b. the unqualified "Follow CLAUDE.md error handling defaults"
         # phrase must not survive export un-rewritten (grep lacks
         # lookahead, so check the qualified form's absence directly on any
@@ -94,7 +128,7 @@ for skill in $CHECK_SKILLS; do
         done < <(grep -noE 'Follow CLAUDE\.md error.handling defaults[^,.]*' "$md" || true)
 
         # 2. slash tokens must be bundle skills, or the exact token (or its
-        # namespace wildcard, e.g. `/mc-*`) must literally appear in an
+        # namespace wildcard, e.g. `/zz-*`) must literally appear in an
         # "Optional external skills" / "Skills are optional" paragraph.
         # Extract that paragraph's text once so the excuse can only match
         # what it actually names, not merely that such a paragraph exists.
@@ -113,7 +147,7 @@ for skill in $CHECK_SKILLS; do
             if [ -n "$optional_para" ]; then
                 # exact token named literally
                 echo "$optional_para" | grep -qF -- "/$tok" && excused=1
-                # or its namespace wildcard, e.g. token mc-lint -> /mc-*
+                # or its namespace wildcard, e.g. token zz-lint -> /zz-*
                 ns="${tok%%-*}"
                 if [ "$excused" -eq 0 ] && [ "$ns" != "$tok" ]; then
                     echo "$optional_para" | grep -qF -- "/$ns-*" && excused=1

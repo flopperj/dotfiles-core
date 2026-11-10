@@ -7,6 +7,8 @@
 # company-specific token values.
 #
 # Usage: bash scripts/check-leakage-shapes.sh [DIR]   (default ".")
+#   Inside a git work tree only committable files are scanned (tracked plus
+#   untracked-but-not-ignored); elsewhere every file under DIR.
 #
 # Exit codes:
 #   0 — clean
@@ -14,7 +16,12 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=_lib.sh
+source "$SCRIPT_DIR/_lib.sh"
+
 SCAN_DIR="${1:-.}"
+[ "$SCAN_DIR" = "/" ] || SCAN_DIR="${SCAN_DIR%/}"
 
 # Domains that are safe fixtures in docs and tests — not publication risks.
 SAFE_EMAIL_DOMAINS='example\.com|example\.org|test\.com|localhost|users\.noreply\.github\.com'
@@ -29,21 +36,21 @@ _report() {
 # --- Shape 1: in-tree denylist or guard material must never be committed ---
 while IFS= read -r -d '' path; do
     case "$path" in
-        */leakage-tokens.txt|*/dotfiles-guard/*) ;;
+        */leakage-tokens.txt|*/portable-ticket-prefixes.txt|*/dotfiles-guard/*) ;;
         *) continue ;;
     esac
     _report "$path" "entire file "
-done < <(find "$SCAN_DIR" \
-    \( -name 'leakage-tokens.txt' -o -path '*/dotfiles-guard/*' \) \
-    -not -path '*/.git/*' \
-    -type f \
-    -print0 2>/dev/null)
+done < <(_scan_files "$SCAN_DIR")
 
 # --- Shape 2: corporate email addresses in Claude publication surfaces ---
 # Scan agent markdown, every markdown file and every scripts/ file inside a
 # skill, and everything under _shared; withhold matched content in output.
 EMAIL_PATTERN='[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}'
 while IFS= read -r -d '' file; do
+    case "$file" in
+        */agents/*.md|*/skills/*/*.md|*/skills/*/scripts/*|*/_shared/*) ;;
+        *) continue ;;
+    esac
     grep -qI '' "$file" 2>/dev/null || continue
     while IFS= read -r line; do
         [ -n "$line" ] || continue
@@ -56,10 +63,7 @@ while IFS= read -r -d '' file; do
         fi
         _report "$file" "${lineno} "
     done < <(grep -inE "$EMAIL_PATTERN" "$file" 2>/dev/null || true)
-done < <(find "$SCAN_DIR/.claude" \
-    \( -path '*/agents/*.md' -o -path '*/skills/*/*.md' -o -path '*/skills/*/scripts/*' -o -path '*/_shared/*' \) \
-    -type f \
-    -print0 2>/dev/null)
+done < <(_scan_files "$SCAN_DIR/.claude")
 
 if [ "$FOUND" -ne 0 ]; then
     echo "" >&2

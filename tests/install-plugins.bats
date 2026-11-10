@@ -66,8 +66,10 @@ _run_install_with_mock_claude() {
     grep -q "^playwright@claude-plugins-official$" "$CORE_DIR/plugins.txt"
 }
 
-@test "core plugins.txt has no company-specific content (no devassist-plugins-registry)" {
-    ! grep -q "devassist-plugins-registry" "$CORE_DIR/plugins.txt"
+@test "core plugins.txt lists only claude-plugins-official entries" {
+    run grep -vE '^[[:space:]]*(#|$)|@claude-plugins-official$' "$CORE_DIR/plugins.txt"
+    [ "$status" -eq 1 ]
+    [ -z "$output" ]
 }
 
 # ---------------------------------------------------------------------------

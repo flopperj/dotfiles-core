@@ -27,12 +27,12 @@ setup() {
     export REG
 
     # Two valid git checkouts to resolve against.
-    GOOD_REPO="$SCRATCH/checkouts/omni-agent"
+    GOOD_REPO="$SCRATCH/checkouts/example-api"
     export GOOD_REPO
     mkdir -p "$GOOD_REPO"
     git -C "$GOOD_REPO" init --quiet
 
-    GOOD_REPO2="$SCRATCH/checkouts/mc-omni-agent-ui"
+    GOOD_REPO2="$SCRATCH/checkouts/example-web"
     export GOOD_REPO2
     mkdir -p "$GOOD_REPO2"
     git -C "$GOOD_REPO2" init --quiet
@@ -73,16 +73,16 @@ EOF
 # --- resolve: happy path ---
 
 @test "resolve prints the absolute path and exits 0 for a valid entry" {
-    _write_registry "- omni-agent: $GOOD_REPO"
-    run bash "$REG" resolve omni-agent
+    _write_registry "- example-api: $GOOD_REPO"
+    run bash "$REG" resolve example-api
     [ "$status" -eq 0 ]
     [ "$output" = "$GOOD_REPO" ]
 }
 
 @test "resolve works for an entry with all optional fields" {
-    _write_registry "- mc-omni-agent-ui: $GOOD_REPO2 | components=Omni UI,Editor | prefixes=web/js/,src/ | depends_on=omni-agent
-- omni-agent: $GOOD_REPO"
-    run bash "$REG" resolve mc-omni-agent-ui
+    _write_registry "- example-web: $GOOD_REPO2 | components=Web UI,Editor | prefixes=web/js/,src/ | depends_on=example-api
+- example-api: $GOOD_REPO"
+    run bash "$REG" resolve example-web
     [ "$status" -eq 0 ]
     [ "$output" = "$GOOD_REPO2" ]
 }
@@ -90,13 +90,13 @@ EOF
 # --- resolve: exit 1 (not found) ---
 
 @test "resolve exits 1 for a name not in the registry" {
-    _write_registry "- omni-agent: $GOOD_REPO"
+    _write_registry "- example-api: $GOOD_REPO"
     run bash "$REG" resolve no-such-repo
     [ "$status" -eq 1 ]
 }
 
 @test "resolve does not match entries outside the registry section" {
-    _write_registry "- omni-agent: $GOOD_REPO"
+    _write_registry "- example-api: $GOOD_REPO"
     run bash "$REG" resolve this-looks-like-an-entry
     [ "$status" -eq 1 ]
 }
@@ -121,7 +121,7 @@ EOF
 
 @test "resolve exits 3 when the context file is absent" {
     export OVERLAY_CONTEXT_FILE="$SCRATCH/does-not-exist.md"
-    run bash "$REG" resolve omni-agent
+    run bash "$REG" resolve example-api
     [ "$status" -eq 3 ]
 }
 
@@ -131,9 +131,9 @@ EOF
 
 ## Some other section
 
-- omni-agent: $GOOD_REPO
+- example-api: $GOOD_REPO
 EOF
-    run bash "$REG" resolve omni-agent
+    run bash "$REG" resolve example-api
     [ "$status" -eq 3 ]
 }
 
@@ -146,46 +146,46 @@ EOF
 # --- exit 4 (malformed entry) ---
 
 @test "relative path exits 4 and the message names the line" {
-    _write_registry "- omni-agent: Development/omni-agent"
-    run bash "$REG" resolve omni-agent
+    _write_registry "- example-api: Development/example-api"
+    run bash "$REG" resolve example-api
     [ "$status" -eq 4 ]
-    [[ "$output" == *"- omni-agent: Development/omni-agent"* ]]
+    [[ "$output" == *"- example-api: Development/example-api"* ]]
 }
 
 @test "entry line without 'name: path' exits 4 and names the line" {
-    _write_registry "- omni-agent has no colon separator"
+    _write_registry "- example-api has no colon separator"
     run bash "$REG" list
     [ "$status" -eq 4 ]
-    [[ "$output" == *"- omni-agent has no colon separator"* ]]
+    [[ "$output" == *"- example-api has no colon separator"* ]]
 }
 
 # --- list ---
 
 @test "list emits TSV with empty optional fields for a minimal entry" {
-    _write_registry "- omni-agent: $GOOD_REPO"
+    _write_registry "- example-api: $GOOD_REPO"
     run bash "$REG" list
     [ "$status" -eq 0 ]
-    [ "$output" = "$(printf 'omni-agent\t%s\t\t\t' "$GOOD_REPO")" ]
+    [ "$output" = "$(printf 'example-api\t%s\t\t\t' "$GOOD_REPO")" ]
 }
 
 @test "list round-trips an entry with all optional fields" {
-    _write_registry "- mc-omni-agent-ui: $GOOD_REPO2 | components=Omni UI,Editor | prefixes=web/js/,src/ | depends_on=omni-agent
-- omni-agent: $GOOD_REPO"
+    _write_registry "- example-web: $GOOD_REPO2 | components=Web UI,Editor | prefixes=web/js/,src/ | depends_on=example-api
+- example-api: $GOOD_REPO"
     run bash "$REG" list
     [ "$status" -eq 0 ]
-    expected="$(printf 'mc-omni-agent-ui\t%s\tOmni UI,Editor\tweb/js/,src/\tomni-agent\nomni-agent\t%s\t\t\t' "$GOOD_REPO2" "$GOOD_REPO")"
+    expected="$(printf 'example-web\t%s\tWeb UI,Editor\tweb/js/,src/\texample-api\nexample-api\t%s\t\t\t' "$GOOD_REPO2" "$GOOD_REPO")"
     [ "$output" = "$expected" ]
 }
 
 @test "list ignores prose and blank lines inside the section" {
     _write_registry "some human prose
 
-- omni-agent: $GOOD_REPO
+- example-api: $GOOD_REPO
 
 more prose"
     run bash "$REG" list
     [ "$status" -eq 0 ]
-    [ "$output" = "$(printf 'omni-agent\t%s\t\t\t' "$GOOD_REPO")" ]
+    [ "$output" = "$(printf 'example-api\t%s\t\t\t' "$GOOD_REPO")" ]
 }
 
 @test "list does not validate paths (validation is resolve-time only)" {
@@ -219,16 +219,16 @@ more prose"
 # --- unknown keys ---
 
 @test "unknown key warns on stderr but the command succeeds" {
-    _write_registry "- omni-agent: $GOOD_REPO | flavor=vanilla"
+    _write_registry "- example-api: $GOOD_REPO | flavor=vanilla"
     run --separate-stderr bash "$REG" list
     [ "$status" -eq 0 ]
-    [ "$output" = "$(printf 'omni-agent\t%s\t\t\t' "$GOOD_REPO")" ]
+    [ "$output" = "$(printf 'example-api\t%s\t\t\t' "$GOOD_REPO")" ]
     [[ "$stderr" == *"flavor"* ]]
 }
 
 @test "unknown key does not break resolve" {
-    _write_registry "- omni-agent: $GOOD_REPO | flavor=vanilla"
-    run --separate-stderr bash "$REG" resolve omni-agent
+    _write_registry "- example-api: $GOOD_REPO | flavor=vanilla"
+    run --separate-stderr bash "$REG" resolve example-api
     [ "$status" -eq 0 ]
     [ "$output" = "$GOOD_REPO" ]
     [[ "$stderr" == *"flavor"* ]]

@@ -56,7 +56,7 @@ For each check, output one line:
 | # | Check | DoD section | What it asks |
 |---|---|---|---|
 | 1 | **Reversibility** | §9 | Does every step that touches shared state have a documented rollback (revert, flag flip, migration reversal)? |
-| 2 | **Test strategy specificity** | §7 | For each step adding production code, is the test approach (unit/integration/contract/e2e) named *and* the boundary (mock vs real) decided? |
+| 2 | **Test strategy specificity** | §7 | For each step adding production code, is the test approach (unit/integration/contract/e2e) named *and* the boundary (mock vs real) decided, and does the §6 traceability table map every §1 acceptance criterion? |
 | 3 | **Failure mode coverage** | §1 | Have at least two non-happy-path failure modes been identified per change? (partial write, concurrent caller, downstream timeout, migration rollback during traffic) |
 | 4 | **Boundary fit & reuse** | §2 | Does the plan respect existing layer/package structure, and reuse existing helpers where they cover the need (§4a)? Every *new* utility/abstraction must justify why no existing code covers it — an unjustified new helper is a ❌, since it becomes the duplicate Cyrus ships. |
 | 5 | **Observability gap** | §8 | At what step does logging/metrics/tracing get added? If nowhere, why? |
@@ -109,6 +109,8 @@ Produce all sections that are relevant. For trivial changes (1-3 steps, single f
 
 ### 1. Problem Summary
 Restate the problem in your own words. Identify the core goal, the scope, and what success looks like.
+
+**Acceptance criteria** — a numbered list (AC-1, AC-2, …) of testable statements derived from the ticket or the user's ask: what must be true for the work to be done. Each criterion is phrased so a test (or a named manual check) can prove it. Section 6 maps every criterion to the Section 4 step(s) that deliver it and the test that proves it.
 
 ### 2. Assumptions & Clarifications
 List any assumptions you're making. Flag anything that requires human confirmation before work begins. If a Jira ticket number is mentioned, reference it throughout.
@@ -175,30 +177,29 @@ If the change should be flag-gated (default: yes for any user-facing or risky ch
 - Flag placement per project conventions in project CLAUDE.md
 - Rollout sequence: 0% → 1% → 5% → 10% → 25% → 50% → 100%
 - Which code paths are gated
-<!-- BEGIN CORE-ONLY -->
-- **Execution skill**: Assign `/mc-pr-flag` as the execution step for flag creation and release PRs
-<!-- END CORE-ONLY -->
-<!-- PORTABLE-ONLY
+- **Off:** what the system does with the flag off — must equal today's behavior unless the plan says otherwise, and says so explicitly when it differs
+- **On:** what the system does with the flag on, per gated path
 - **Execution skill**: If the team has a feature-flag skill in the available-skills list, assign it as the execution step for flag creation and release PRs
--->
 
 ### 6. Testing Plan
 - List each new test file to create (per project conventions from project CLAUDE.md or inferred from the repo)
 - Describe what each test covers (happy path, error cases, flag variations)
 - Identify any existing tests that need updating
 - Include the exact test commands to run (from project CLAUDE.md or discovered in the repo)
+- When Section 5 proposes a flag: at least one test runs with the flag off and asserts today's behavior (the regression guard), and at least one runs with the flag on
+- **Acceptance-criteria traceability** — one row per Section 1 criterion. A criterion with no test and no manual check is a gap the plan states, never one it omits:
+
+| AC | Delivered by (Section 4 step ids) | Proven by (test, or MANUAL: <check>) |
+|---|---|---|
+| AC-1 | step-2-foo, step-3-bar | `tests/foo.bats` "renders the thing" |
+| AC-2 | step-4-baz | MANUAL: open the page and confirm the banner |
 
 ### 7. Observability Plan
 - Where to add traces (entry points, major methods)
 - Which IO calls (HTTP, database, external services) need instrumentation
 - Logging context to carry through the call chain
 - Where to check logs (per project conventions)
-<!-- BEGIN CORE-ONLY -->
-- **Available skills**: Use `/mc-create-logging-plan` to generate a comprehensive logging plan with constraint validation, and `/mc-create-splunk-dashboard` to generate monitoring dashboards from the logging plan
-<!-- END CORE-ONLY -->
-<!-- PORTABLE-ONLY
 - **Available skills**: If the team has logging-plan or monitoring-dashboard skills in the available-skills list, use them to generate the logging plan and its dashboards
--->
 
 ### 8. Static Analysis Plan
 - List the static analysis commands to run per project CLAUDE.md or discovered from the repo
@@ -359,11 +360,7 @@ For problems large enough to warrant formal documentation (especially those orig
   | Skill | Assign when the step involves... |
   |---|---|
   | `frontend-design` | Creating or modifying UI components, styles, layout, visual properties |
-  | `/mc-pr-flag` | Creating, releasing, or rolling out feature flags |
-  | `/mc-lint` | Validating changed lines against CI linting rules |
-  | `/mc-create-logging-plan` | Adding structured logging, Splunk channels, BugSnag patterns |
-  | `/mc-create-splunk-dashboard` | Creating monitoring dashboards from logging plans |
-  | `/mc-create-optimizely-experiment` | Setting up A/B experiments |
+  | Team skills in the available-skills list | Flag rollout, changed-line linting, logging plans, monitoring dashboards, or experiments, when the team ships a skill for it |
   | `/create-jira-ticket` | Creating sub-tickets or follow-up work items |
   | `/create-tech-spec` | Formal documentation of the solution approach |
   | `/mermaid-diagrams` | Exporting diagrams as PNGs for docs |

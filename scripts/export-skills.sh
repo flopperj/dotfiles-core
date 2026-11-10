@@ -313,13 +313,6 @@ _sed_program() {
         # qualifier so a fallback run does not treat it as required.
         echo 's|^\*\*Step C — Check agent memory\.\*\* Consult|**Step C — Check agent memory (registered-subagent mode only).** Consult|'
     fi
-    # --- project-agnostic bundle: company overlay skills never ship ---
-    # The Optimus skill catalog lists the maintainer's /mc-* overlay skills
-    # in table rows (a comment marker inside a markdown table would break
-    # the table in core, so this is a generator rule, not a marker).
-    if [ "$skill" = "optimus-planner" ] && [ "$kind" = "agent" ]; then
-        echo '/^  | `\/mc-[a-z-]*` |/d'
-    fi
     # --- core-only housekeeping ---
     echo '/^# parity-ignore:/d'
     echo 's|propose the change and ask me to confirm before saving it\.|propose it against the canonical source: this copy is generated from the maintainer'"'"'s dotfiles-core repository and is overwritten on the next export.|'

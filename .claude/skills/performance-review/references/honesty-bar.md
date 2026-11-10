@@ -78,7 +78,7 @@ Replace code identifiers and acronyms with plain English:
 |---|---|
 | component/class names (e.g. `FloatingPopover`) | "a reusable popover component" |
 | framework internals (`CKEditor iframe`, `window.editor`) | "the rich-text editor" |
-| acronyms (AST, NLS, i18n, WCAG, HEIC, ESLint, MCDS) | spell out the *user-facing* effect |
+| acronyms (AST, NLS, i18n, WCAG, HEIC, ESLint, JWT) | spell out the *user-facing* effect |
 | `STUB_THEMES`, internal constants | describe what it does |
 
 Keep altitude **consistent** — a doc that's plain in Section 1 but jargon-heavy
@@ -97,7 +97,7 @@ genuinely had no owner and wasn't assigned.
 ## 6. Self-rating guidance (year-end only)
 
 Map the evidence to the company rating ladder (from config; default ladder:
-Does Not Meet / Meets / Exceeds / Trajectory-Changing) and recommend the honest
+Below / Meets / Exceeds / Outstanding) and recommend the honest
 tier. **The rating is relative to the user's current level (from Step 0), not
 absolute** — the same body of work earns a different rating at different levels.
 
@@ -105,7 +105,7 @@ absolute** — the same body of work earns a different rating at different level
   work, ships reliably, little oversight needed.
 - **Exceeds** — clearly above the expectations of their *current* level on
   multiple axes.
-- **Trajectory-Changing** — performing at the *next* level already, with
+- **Outstanding** — performing at the *next* level already, with
   landed, org-visible impact that outlasts them.
 
 **Calibrate to level — this is the pivot.** The exact same work reads
@@ -125,7 +125,7 @@ differently up the ladder:
   the user honestly which one their evidence shows, and against which level.
 
 Key honesty checks (apply at any level):
-- **Don't recommend Trajectory-Changing if the biggest bet hasn't reached
+- **Don't recommend Outstanding if the biggest bet hasn't reached
   customers** — readiness isn't a landed outcome. Recommend **Exceeds with a
   stated line-of-sight** instead. Let the evidence make a reviewer reach for the
   higher word; don't self-declare it and hand them an easy markdown.
