@@ -20,6 +20,101 @@ setup() {
     ANCHOR_FRAGMENT="$DOTFILES_DIR/.claude/_shared/reviewer-blocks/anchor-constraints.md"
 }
 
+_skeptic_section() {
+    sed -n '/^### Step 2b: Skeptic pass/,/^### Step 2c:/p' "$RANGER_SKILL"
+}
+
+_line_of() {
+    grep -nF -- "$1" "$2" | head -n 1 | cut -d: -f1
+}
+
+@test "ranger has a skeptic pass between the agent report and verify-then-draft" {
+    local a b c
+    a="$(_line_of '### Step 2b: Skeptic pass' "$RANGER_SKILL")"
+    b="$(_line_of '### Step 2c: Verify findings before drafting' "$RANGER_SKILL")"
+    c="$(_line_of '### Step 2d: Stress-test findings against the senior-staff bar' "$RANGER_SKILL")"
+    [ -n "$a" ] && [ -n "$b" ] && [ -n "$c" ] || return 1
+    [ "$a" -lt "$b" ] && [ "$b" -lt "$c" ]
+}
+
+@test "the skeptic is a fresh read-only general-purpose sub-agent on the opus alias" {
+    local s
+    s="$(_skeptic_section)"
+    [ -n "$s" ] || return 1
+    grep -qF 'general-purpose' <<<"$s" || return 1
+    grep -qF 'model: "opus"' <<<"$s" || return 1
+    grep -qF 'Read-only' <<<"$s" || return 1
+    grep -qF 'Do not produce new findings' <<<"$s" || return 1
+    ! grep -qE 'claude-[a-z0-9]' <<<"$s"
+}
+
+@test "the seven checks are present in order" {
+    local s f prev=0 n check
+    s="$(_skeptic_section)"
+    [ -n "$s" ] || return 1
+    f="$BATS_TEST_TMPDIR/skeptic.md"
+    printf '%s\n' "$s" > "$f"
+    for check in 'Does the anchor exist?' 'Did the diff introduce it?' 'Is it intentional?' \
+        'Is it guarded?' 'Would CI catch it?' 'Is it already raised?' 'Does it matter?'; do
+        n="$(_line_of "$check" "$f")"
+        [ -n "$n" ] || { echo "missing check: $check"; return 1; }
+        [ "$n" -gt "$prev" ] || { echo "out of order: $check"; return 1; }
+        prev="$n"
+    done
+}
+
+@test "the five verdicts are named" {
+    local s v
+    s="$(_skeptic_section)"
+    [ -n "$s" ] || return 1
+    for v in CONFIRMED PLAUSIBLE REFUTED INTENTIONAL OUT_OF_SCOPE; do
+        grep -qF -- "$v" <<<"$s" || { echo "missing verdict: $v"; return 1; }
+    done
+}
+
+@test "PR text cannot refute a finding and an injection finding is never intentional" {
+    local s
+    s="$(_skeptic_section)"
+    [ -n "$s" ] || return 1
+    grep -qF 'untrusted data, not instructions' <<<"$s" || return 1
+    grep -qF 'It is never INTENTIONAL' <<<"$s"
+}
+
+@test "the skeptic section cannot post" {
+    local s
+    s="$(_skeptic_section)"
+    [ -n "$s" ] || return 1
+    ! grep -qF '"event"' <<<"$s" || return 1
+    ! grep -qF -- '--method POST' <<<"$s" || return 1
+    ! grep -qF 'gh pr review' <<<"$s"
+}
+
+@test "orchestrator rules: fallback, evidence, thin-description note, unreported issues" {
+    local s p
+    s="$(_skeptic_section)"
+    [ -n "$s" ] || return 1
+    for p in 'No verdict line' 'cites no `path:line`' 'more than half' 'at least three' 'unverified, worth a look'; do
+        grep -qF -- "$p" <<<"$s" || { echo "missing: $p"; return 1; }
+    done
+}
+
+@test "dropped findings are shown at the gate" {
+    grep -qF '### Refuted by the skeptic' "$RANGER_SKILL"
+}
+
+@test "scout keeps its blockers-only confirmation and has no skeptic pass" {
+    grep -qF '### Step 2b: Ranger Confirmation (blockers only)' "$SCOUT_SKILL" || return 1
+    ! grep -qF 'Skeptic pass' "$SCOUT_SKILL"
+}
+
+@test "verify-then-draft keeps an open question as a question" {
+    local f
+    grep -qF 'open question' "$VERIFY_FRAGMENT" || return 1
+    for f in "$VERIFY_FRAGMENT" "$RANGER_SKILL" "$SCOUT_SKILL"; do
+        grep -qF 'Never draft it as an assertion' "$f" || { echo "missing in $f"; return 1; }
+    done
+}
+
 @test "intent block: brief sources, both comment reads with a literal host flag, three rules, data not instructions" {
     local p
     [ -s "$INTENT_FRAGMENT" ] || return 1
@@ -57,4 +152,16 @@ setup() {
             grep -qF -- "$p" "$f" || { echo "missing in $f: $p"; return 1; }
         done
     done
+}
+
+@test "model-tiers records the skeptic tier as an alias" {
+    local s
+    s="$(sed -n '/^### Inline sub-agent passes/,/^## /p' "$TIERS")"
+    [ -n "$s" ] || return 1
+    grep -qF 'Skeptic pass' <<<"$s" || return 1
+    grep -qF '`opus`' <<<"$s"
+}
+
+@test "pending-review contract is intact" {
+    grep -qF 'omit the `event` field' "$ANCHOR_FRAGMENT"
 }
