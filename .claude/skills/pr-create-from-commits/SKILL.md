@@ -79,9 +79,39 @@ All Jira operations are best-effort — never block PR creation on a Jira failur
    - If on `main` or `master`: create a new branch and check it out. Name it `{ticket-prefix}-{ticket-num}-{feature-summary}` (e.g. `PROJ-1234-add-invoice-preview`), or the repo's branch convention if Step 2 found one. Without a ticket, name it `{feature-summary}`.
 3. Push the branch to origin if not already pushed: `git push -u origin {branch}`.
 
+### 5b. Prove it works
+
+Before writing the body, decide from the diff what evidence a reviewer needs to believe the change works. Decide it yourself; do not wait for the user to list it.
+
+| Change | Evidence | How |
+|---|---|---|
+| UI or interaction | One demo video per PR; a before/after pair counts as one | `/record-demo`, when it is installed and the app can be run here |
+| Traces, logs, UI states | Screenshots with the changed part marked (a box or an arrow) and a one-line caption | any capture tool |
+| Service-to-service flow | A rendered sequence diagram of the hops | `/mermaid-diagrams`, or a `mermaid` block where the host renders it |
+| Service-only change | A request and response, or a log excerpt, with secrets and tokens removed | the real call |
+| Tests, evals, scripts | The command and its real output, excerpted inside `<details>` | run it |
+| Docs or config only | None needed; say so | — |
+
+Rules:
+
+- **Never fabricate evidence.** Output is pasted from a command that ran in this session at this head. A screenshot or video shows this branch. No invented output, no output from another branch, no "should pass".
+- **Say what was not tested.** When something was not run or could not be (no local environment, needs production data), write `Not tested: <what> — <why>` in the same section. In an autonomous run, never stop to ask for evidence: attach what the pipeline already produced (the test command and its output) and list the rest as not tested.
+- **Tick a checkbox only for something that was done** in this session, or that the user confirmed. Leave the others unticked and say why on the same line. Never pre-tick a template's checklist.
+- **A behaviour or UI change gets a Before/After table in exactly this shape**, one row per pair, more rows as needed. A cell holds an image, a demo link, or the real text or snippet. Say what a row shows in the image `alt` or on a line above the table, never in extra columns. "Before" is the base branch; "After" is this branch.
+
+  ```md
+  | Before | After |
+  |--------|-------|
+  | <img width="600" alt="…" src="…"> | <img width="600" alt="…" src="…"> |
+  ```
+
+- Long evidence goes in `<details>` with a one-line `<summary>`. What changed and why are never collapsed.
+
+Like the Merge order section, this does not conflict with "do not impose a fixed format": the evidence goes inside the template's own section, and the table shape applies only within it.
+
 ### 6. Create the PR
 
-1. Write the title to the conventions summary from Step 2: its pattern, types, scope, ticket placement, case and length limit. Populate every section of the detected template (or, with no template, the body sections the conventions name) based on code analysis. Let the template and conventions drive the write-up — do not impose a fixed format. Be specific and accurate; ask rather than guess. Only use "N/A" when information genuinely cannot be determined.
+1. Write the title to the conventions summary from Step 2: its pattern, types, scope, ticket placement, case and length limit. Populate every section of the detected template (or, with no template, the body sections the conventions name) based on code analysis. Let the template and conventions drive the write-up — do not impose a fixed format. Put the evidence from Step 5b in the template's own demo, testing, verification or evidence section. Be specific and accurate; ask rather than guess. Only use "N/A" when information genuinely cannot be determined.
 2. For each placeholder or table row in the template, fill it in using:
    - Code diff analysis for technical content (what changed, how to test, risk areas)
    - User-provided answers from Step 3 for anything that required asking (e.g. Slack channel)
@@ -116,6 +146,12 @@ Built against the unmerged changes in the PR above — merge that one first.
    - Wait for the user to provide an expanded body (or confirm `skip_body_validation`). Re-check after the expansion. Only proceed when the body passes both checks.
 
    **3b. Validate the title and body against the conventions** (always; `skip_body_validation` does not skip it). Check the title against every rule in the conventions summary — pattern, allowed type, scope, ticket placement and case, length limit — and check that the body has the required sections in order and the required footer lines. If a rule is a regex or a commitlint config, test the title against it; when the repo ships a checker that is already installed locally (a binary in `node_modules/.bin`, or `npx --no-install commitlint` over the title, the same rule CI runs), run it. Never fetch a checker from the registry; if none is installed, test against the parsed rules. On a mismatch, fix the title or body and re-check; never create a PR that the repo's own hooks or CI would reject for its title.
+
+   **3c. Hygiene check** (always; `skip_body_validation` does not skip it). Search the body file, and the added lines of the diff (`git diff origin/{default_branch}...HEAD`, lines starting with `+`), for:
+   - **local paths**: `/Users/`, `/home/<name>/`, `C:\Users\`, `/private/tmp`, `scratchpad`, and any other path that exists only on this machine;
+   - **review-history narration**: "per review", "per reviewer", "as the reviewer asked", "addressed feedback", "fast-follow", "review round", and finding ids. A PR body and a code comment say what the code does and why, not how the review went.
+
+   A hit is a prompt to look, not an automatic failure: a fixture about paths, or a feature that is about reviewers, is fine. Fix every real hit in the body (use a repo-relative path; say what the code does). For a real hit in the diff, show the file and line and ask before changing committed code; in an autonomous run, list the hits in the report returned with the PR URL instead of asking.
 4. Create the PR as a **draft by default**, with the title and body that passed 3b:
    ```
    gh pr create --draft --title "{title}" --body-file "{body_file}"
