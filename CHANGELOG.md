@@ -2,7 +2,7 @@
 
 > **How to update:** The pre-commit hook (`scripts/pre-commit.sh`) is auto-installed by `install.sh`. It runs a fast leakage check (`scripts/check-no-leakage.sh`) and re-renders the generated `CLAUDE.md.generated` and `AGENTS.md.generated` files on every commit. A pre-push gate (`scripts/pre-push.sh`, also auto-installed) scans every outgoing commit's tree and metadata before it leaves the machine. CI runs lint, consult-grammar, and the test suite (including synthetic-token leakage mechanism tests) on every PR; the company-token scan is a separate step that runs only when guard data is present on the runner. If you bypass the hooks or work in a context where hooks cannot run, keep this file current manually. Each release heading links to the diff on the public mirror.
 
-## v1.28.0 — 2026-11-21 (reviewer skeptic, rollout and intent rules, PR evidence)
+## v1.28.0 — 2026-11-23 (reviewer skeptic, rollout and intent rules, PR evidence)
 
 Ranger's findings were filtered only by Ranger's own confidence score and the orchestrator's checks, so nothing independent tried to disprove one before it reached the gate. Ranger now runs a fresh-context skeptic pass that tries to refute each finding, and both reviewers read the PR's stated motivation and the comments already on it before judging, and apply a rollout and operations checklist. `/pr-create-from-commits` now decides what evidence a reviewer needs from the diff and checks the body and added lines for local paths and review-history narration.
 
