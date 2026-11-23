@@ -165,7 +165,7 @@ Built against the unmerged changes in the PR above — merge that one first.
 
    If a comment from a previous sub-task PR already states the merge order, post an updated comment rather than editing the old one. Like all Jira operations in this skill, this is best-effort: if the comment fails, log it and continue — never block PR creation on it.
 
-   If Step 5b left a pending upload, do it now (`/record-demo` uploads the video and replaces the placeholder in the PR body; attach a screenshot to the PR the same way), then return the URL. In an autonomous run, leave the `Pending upload:` line in place and list it in the report returned with the PR URL.
+   If Step 5b left a pending upload, do it now, then return the URL. For a video, `/record-demo` uploads it and replaces the placeholder in the PR body. For a screenshot, upload the image through the comment box on the PR page, which hosts it and returns a URL, then put that URL in the body with `gh pr edit <url> --body-file`. If the upload cannot be done here or the user declines it, leave the `Pending upload:` line in place and say so when returning the PR URL. In an autonomous run, leave the `Pending upload:` line in place and list it in the report returned with the PR URL.
 
 6. Return the PR URL to the user.
 

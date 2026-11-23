@@ -8,7 +8,7 @@ A screenshot or demo video cannot be hosted before its PR exists, but v1.28.0 as
 
 ### Fixed
 
-- `/pr-create-from-commits` Step 5b: an image or video is captured before the PR is created, marked `Pending upload: <what>` in its cell or demo section, and embedded once Step 6 has created the PR (`/record-demo` replaces the placeholder in the body). An autonomous run leaves the line in place and lists it in its report.
+- `/pr-create-from-commits` Step 5b: an image or video is captured before the PR is created, marked `Pending upload: <what>` in its cell or demo section, and embedded once Step 6 has created the PR (`/record-demo` replaces the placeholder in the body; a screenshot goes up through the PR's comment box). When the upload cannot be done or is declined, the line stays and the user is told; an autonomous run leaves the line in place and lists it in its report.
 - Ranger Step 2b: a PLAUSIBLE finding Ranger rated Blocker is never dropped for being a Suggestion; it stays at Important and is drafted as a question.
 - `tests/pr-create-conventions.bats` (9 → 10) and `tests/reviewer-skeptic-intent.bats` (19 → 20) pin both rules.
 
