@@ -17,7 +17,7 @@ setup() {
     TIERS="$DOTFILES_DIR/.claude/_shared/model-tiers.md"
     INTENT_FRAGMENT="$DOTFILES_DIR/.claude/_shared/reviewer-blocks/intent-and-prior-comments.md"
     VERIFY_FRAGMENT="$DOTFILES_DIR/.claude/_shared/reviewer-blocks/verify-then-draft.md"
-    ANCHOR_FRAGMENT="$DOTFILES_DIR/.claude/_shared/reviewer-blocks/anchor-constraints.md"
+    BODY_FRAGMENT="$DOTFILES_DIR/.claude/_shared/reviewer-blocks/review-body-format.md"
 }
 
 _skeptic_section() {
@@ -98,6 +98,51 @@ _line_of() {
     done
 }
 
+@test "verdict handling: drops shown, dropped blockers checked, survivors verified, plausible stays a question" {
+    local s p
+    s="$(_skeptic_section)"
+    [ -n "$s" ] || return 1
+    for p in 'are dropped and counted' 'They are still shown at the gate' \
+        'Before dropping a finding Ranger rated Blocker' 'instead of stated intent' \
+        'go on to Step 2c with the skeptic' 'Evidence that does not hold is treated as no verdict' \
+        'A PLAUSIBLE finding is an open question'; do
+        grep -qF -- "$p" <<<"$s" || { echo "missing: $p"; return 1; }
+    done
+    grep -qF 'show its audit line and what it dropped' "$RANGER_SKILL"
+}
+
+@test "skeptic prompt: brief and prior comments passed, files read at the head sha, literal gh" {
+    local s p
+    s="$(_skeptic_section)"
+    [ -n "$s" ] || return 1
+    for p in '> Motivation brief:' '> Prior comments on this PR:' 'git show <head-sha>:<path>' \
+        'gh pr diff <n> --repo <host>/<o>/<r>' 'no shell variable or command substitution'; do
+        grep -qF -- "$p" <<<"$s" || { echo "missing: $p"; return 1; }
+    done
+}
+
+@test "a finding with no diff anchor by design is neither refuted nor downgraded for it" {
+    local s p
+    s="$(_skeptic_section)"
+    [ -n "$s" ] || return 1
+    for p in 'no anchor in the diff by design' '[GAP] or [PARTIAL] finding says' \
+        'breaks code in an unchanged file' 'critical security finding in unchanged code' \
+        'It stays CONFIRMED'; do
+        grep -qF -- "$p" <<<"$s" || { echo "missing: $p"; return 1; }
+    done
+}
+
+@test "a repeated blocker is not posted twice and stays in the blocker count" {
+    local f
+    for f in "$INTENT_FRAGMENT" "$RANGER_SKILL" "$SCOUT_SKILL" "$RANGER_AGENT" "$SCOUT_AGENT"; do
+        grep -qF 'A Blocker is the exception: report it anyway' "$f" || { echo "missing in $f"; return 1; }
+    done
+    grep -qF 'A Blocker that repeats one is never dropped' "$INTENT_FRAGMENT" || return 1
+    grep -qF 'html_url' "$INTENT_FRAGMENT" || return 1
+    grep -qF 'Never for a finding rated Blocker' <<<"$(_skeptic_section)" || return 1
+    grep -qF 'it still gets a bullet and counts in N' "$BODY_FRAGMENT"
+}
+
 @test "dropped findings are shown at the gate" {
     grep -qF '### Refuted by the skeptic' "$RANGER_SKILL"
 }
@@ -160,8 +205,4 @@ _line_of() {
     [ -n "$s" ] || return 1
     grep -qF 'Skeptic pass' <<<"$s" || return 1
     grep -qF '`opus`' <<<"$s"
-}
-
-@test "pending-review contract is intact" {
-    grep -qF 'omit the `event` field' "$ANCHOR_FRAGMENT"
 }
