@@ -111,6 +111,13 @@ _line_of() {
     grep -qF 'show its audit line and what it dropped' "$RANGER_SKILL"
 }
 
+@test "a plausible blocker is never dropped as a suggestion" {
+    local s
+    s="$(_skeptic_section)"
+    [ -n "$s" ] || return 1
+    grep -qF 'never dropped for being a Suggestion: keep it at Important' <<<"$s"
+}
+
 @test "skeptic prompt: brief and prior comments passed, files read at the head sha, literal gh" {
     local s p
     s="$(_skeptic_section)"

@@ -42,6 +42,13 @@ PR_CREATE="$DOTFILES_DIR/.claude/skills/pr-create-from-commits/SKILL.md"
     grep -qF 'Not tested:' "$PR_CREATE"
 }
 
+@test "image and video evidence is embedded after the PR exists" {
+    grep -qF 'can only be hosted once the PR exists' "$PR_CREATE" || return 1
+    grep -qF 'Pending upload:' "$PR_CREATE" || return 1
+    grep -qF 'If Step 5b left a pending upload' "$PR_CREATE" || return 1
+    grep -qF 'say so when returning the PR URL' "$PR_CREATE"
+}
+
 @test "a checkbox is ticked only for something done" {
     grep -qF 'Tick a checkbox only' "$PR_CREATE"
 }
