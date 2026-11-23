@@ -95,6 +95,7 @@ Before writing the body, decide from the diff what evidence a reviewer needs to 
 Rules:
 
 - **Never fabricate evidence.** Output is pasted from a command that ran in this session at this head. A screenshot or video shows this branch. No invented output, no output from another branch, no "should pass".
+- **An image or video can only be hosted once the PR exists.** Capture it before creating the PR, write `Pending upload: <what>` in its cell or demo section, and embed it after Step 6 creates the PR.
 - **Say what was not tested.** When something was not run or could not be (no local environment, needs production data), write `Not tested: <what> — <why>` in the same section. In an autonomous run, never stop to ask for evidence: attach what the pipeline already produced (the test command and its output) and list the rest as not tested.
 - **Tick a checkbox only for something that was done** in this session, or that the user confirmed. Leave the others unticked and say why on the same line. Never pre-tick a template's checklist.
 - **A behaviour or UI change gets a Before/After table in exactly this shape**, one row per pair, more rows as needed. A cell holds an image, a demo link, or the real text or snippet. Say what a row shows in the image `alt` or on a line above the table, never in extra columns. "Before" is the base branch; "After" is this branch.
@@ -163,6 +164,8 @@ Built against the unmerged changes in the PR above — merge that one first.
    > 🤖 Opened the example-api half of this ticket: https://github.com/acme-corp/example-api/pull/42. This work spans two repositories — merge order: 1) example-api (this PR), 2) example-web (PR pending). The second PR is being built against the first one's unmerged changes.
 
    If a comment from a previous sub-task PR already states the merge order, post an updated comment rather than editing the old one. Like all Jira operations in this skill, this is best-effort: if the comment fails, log it and continue — never block PR creation on it.
+
+   If Step 5b left a pending upload, do it now (`/record-demo` uploads the video and replaces the placeholder in the PR body; attach a screenshot to the PR the same way), then return the URL. In an autonomous run, leave the `Pending upload:` line in place and list it in the report returned with the PR URL.
 
 6. Return the PR URL to the user.
 

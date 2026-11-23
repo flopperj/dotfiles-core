@@ -2,6 +2,16 @@
 
 > **How to update:** The pre-commit hook (`scripts/pre-commit.sh`) is auto-installed by `install.sh`. It runs a fast leakage check (`scripts/check-no-leakage.sh`) and re-renders the generated `CLAUDE.md.generated` and `AGENTS.md.generated` files on every commit. A pre-push gate (`scripts/pre-push.sh`, also auto-installed) scans every outgoing commit's tree and metadata before it leaves the machine. CI runs lint, consult-grammar, and the test suite (including synthetic-token leakage mechanism tests) on every PR; the company-token scan is a separate step that runs only when guard data is present on the runner. If you bypass the hooks or work in a context where hooks cannot run, keep this file current manually. Each release heading links to the diff on the public mirror.
 
+## v1.28.1 — 2026-11-23 (PR evidence upload order, plausible blocker floor)
+
+A screenshot or demo video cannot be hosted before its PR exists, but v1.28.0 asked for it in the body that creates the PR. And a Blocker the skeptic rated PLAUSIBLE could be recalibrated to a Suggestion and silently dropped.
+
+### Fixed
+
+- `/pr-create-from-commits` Step 5b: an image or video is captured before the PR is created, marked `Pending upload: <what>` in its cell or demo section, and embedded once Step 6 has created the PR (`/record-demo` replaces the placeholder in the body). An autonomous run leaves the line in place and lists it in its report.
+- Ranger Step 2b: a PLAUSIBLE finding Ranger rated Blocker is never dropped for being a Suggestion; it stays at Important and is drafted as a question.
+- `tests/pr-create-conventions.bats` (9 → 10) and `tests/reviewer-skeptic-intent.bats` (19 → 20) pin both rules.
+
 ## v1.28.0 — 2026-11-23 (reviewer skeptic, rollout and intent rules, PR evidence)
 
 Ranger's findings were filtered only by Ranger's own confidence score and the orchestrator's checks, so nothing independent tried to disprove one before it reached the gate. Ranger now runs a fresh-context skeptic pass that tries to refute each finding, and both reviewers read the PR's stated motivation and the comments already on it before judging, and apply a rollout and operations checklist. `/pr-create-from-commits` now decides what evidence a reviewer needs from the diff and checks the body and added lines for local paths and review-history narration.
