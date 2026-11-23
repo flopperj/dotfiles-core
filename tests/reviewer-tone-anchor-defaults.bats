@@ -144,3 +144,7 @@ SCOUT_AGENT="$DOTFILES_DIR/.claude/agents/scout-reviewer.md"
         && grep -Fq '**`side` must be consistent.**' "$ANCHOR_FRAGMENT" \
         && grep -Fq 'returns HTTP 422 and the entire review (not just the offending comment) fails to post' "$ANCHOR_FRAGMENT"
 }
+
+@test "anchor: a pending review omits the event field" {
+    [ -f "$ANCHOR_FRAGMENT" ] && grep -Fq 'omit the `event` field' "$ANCHOR_FRAGMENT"
+}

@@ -10,6 +10,12 @@ Canonical tier assignments for `.claude/agents/*.md`. All agents use aliases (`o
 | Cyrus | `sonnet` | High-throughput TDD loops. Volume and latency sensitivity make Opus uneconomic; Sonnet is sufficient for executing a well-specified Optimus plan. |
 | Scout | `sonnet` | Scout's entire differentiation from Ranger is the speed tier. Moving Scout to Opus collapses the `/code-auditor` routing decision into a meaningless choice. |
 
+### Inline sub-agent passes
+
+Some review passes are launched by a skill as a `general-purpose` sub-agent, not from an agent file. They have no frontmatter, so `/doctor` Step 6c does not check them; their tier is the `model` argument of the launch.
+
+- **Skeptic pass** (`/ranger-reviewer` Step 2b) — `opus`. It decides which of Ranger's findings a human ever sees, and wrongly refuting a real blocker is the most expensive mistake in a review, so it gets Ranger's tier. Volume is bounded: one launch per review (more only above eight findings), unlike per-finding confidence scoring, which stays on `haiku`. It is an alias, never a pinned ID, for the reasons under [Why aliases, not pinned IDs](#why-aliases-not-pinned-ids). Scout has no skeptic pass: its blockers-only Ranger confirmation already plays that role, and a full pass would cost Scout the speed that separates it from Ranger.
+
 ## Expected alias resolution (as of 2026-06-22)
 
 - `opus` → `claude-opus-4-8` (1M context available; "most capable for complex work")
